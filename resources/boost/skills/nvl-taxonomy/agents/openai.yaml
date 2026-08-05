@@ -1,0 +1,4 @@
+interface:
+  display_name: "NVL Taxonomy"
+  short_description: "Build translated hierarchical vocabularies"
+  default_prompt: "Use $nvl-taxonomy to implement or review vocabularies, hierarchy, translated terms, attachments, and maintenance."
