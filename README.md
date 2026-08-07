@@ -9,7 +9,7 @@ The package depends only on `nvl/data` and `nvl/translatable` inside the NVL fam
 ## Requirements and installation
 
 ```bash
-composer require nvl/taxonomy:^1.0
+composer require nvl/laravel-suite:^1.0
 php artisan migrate
 ```
 
