@@ -665,33 +665,43 @@ it('loads localized trees without per-node translation queries', function () {
         'slug' => 'query-root',
         'translations' => ['en' => ['name' => 'Query root']],
     ]));
-    $child = $create->execute(MutateTermPayload::from([
-        'taxonomy' => 'category',
-        'slug' => 'query-child',
-        'parentId' => $root->id,
-        'translations' => ['en' => ['name' => 'Query child']],
-    ]));
-    $create->execute(MutateTermPayload::from([
-        'taxonomy' => 'category',
-        'slug' => 'query-leaf',
-        'parentId' => $child->id,
-        'translations' => ['en' => ['name' => 'Query leaf']],
-    ]));
+    $measure = static function (): array {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
 
-    DB::flushQueryLog();
-    DB::enableQueryLog();
+        $tree = app(TaxonomyTree::class)->for('category', 'en');
+        $queryCount = count(DB::getQueryLog());
+        $names = $tree
+            ->flatMap(static fn (Term $term): array => [
+                $term->displayName('en'),
+                ...$term->children
+                    ->map(static fn (Term $child): string => $child->displayName('en'))
+                    ->all(),
+            ])
+            ->all();
 
-    $tree = app(TaxonomyTree::class)->for('category', 'en');
-    $names = [
-        $tree->sole()->displayName('en'),
-        $tree->sole()->children->sole()->displayName('en'),
-        $tree->sole()->children->sole()->children->sole()->displayName('en'),
-    ];
-    $queryCount = count(DB::getQueryLog());
-    DB::disableQueryLog();
+        expect(DB::getQueryLog())->toHaveCount($queryCount);
+        DB::disableQueryLog();
 
-    expect($names)->toBe(['Query root', 'Query child', 'Query leaf'])
-        ->and($queryCount)->toBeLessThanOrEqual(2);
+        return [$queryCount, $names];
+    };
+    [$singleQueryCount] = $measure();
+
+    foreach (range(1, 24) as $index) {
+        $create->execute(MutateTermPayload::from([
+            'taxonomy' => 'category',
+            'slug' => "query-child-{$index}",
+            'parentId' => $root->id,
+            'translations' => ['en' => ['name' => "Query child {$index}"]],
+        ]));
+    }
+
+    [$populatedQueryCount, $names] = $measure();
+
+    expect($names)->toHaveCount(25)
+        ->and($names[0])->toBe('Query root')
+        ->and($singleQueryCount)->toBeLessThanOrEqual(2)
+        ->and($populatedQueryCount)->toBe($singleQueryCount);
 });
 
 it('discards term events when an outer transaction rolls back', function () {
