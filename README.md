@@ -35,6 +35,13 @@ php artisan vendor:publish --tag=taxonomy-skills
 
 Clean-install migrations use UUID term identifiers, nullable UUID parent identifiers, dedicated term translations, and string-compatible owner identifiers. Set `taxonomy.migrations.enabled=false` during controlled adoption of existing tables.
 
+Choose exactly one migration owner. For automatic vendor loading, leave
+`taxonomy.migrations.enabled=true` and do not publish `taxonomy-migrations`.
+For host-owned migrations, publish `taxonomy-migrations`, set
+`taxonomy.migrations.enabled=false` before the first migration, and maintain
+the copied files as application migrations. Never run both sources; Laravel
+retimestamps published migrations.
+
 ## Register vocabularies and owners
 
 Declare stable vocabulary rules in `config/taxonomy.php`:
