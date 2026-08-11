@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Data\TaxonomyDoctorCheckData;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
@@ -38,14 +39,14 @@ final readonly class TaxonomyDoctor
     {
         $schema = Schema::connection(TaxonomyConfiguration::connection());
         $tables = [
-            TaxonomyConfiguration::table('terms', 'terms') => [
+            TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms) => [
                 'id', 'taxonomy', 'parent_id', 'parent_key', 'slug', 'position', 'meta',
                 'revision', 'created_at', 'updated_at',
             ],
-            TaxonomyConfiguration::table('terms_i18n', 'terms_i18n') => [
+            TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n) => [
                 'id', 'term_id', 'locale', 'name', 'description', 'created_at', 'updated_at',
             ],
-            TaxonomyConfiguration::table('termables', 'termables') => [
+            TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables) => [
                 'id', 'term_id', 'termable_type', 'termable_id', 'taxonomy', 'position',
                 'created_at', 'updated_at',
             ],
@@ -73,41 +74,41 @@ final readonly class TaxonomyDoctor
         }
 
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table('terms', 'terms'),
+            TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
             [
                 ['taxonomy', 'id'],
                 ['taxonomy', 'parent_key', 'slug'],
             ],
         );
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table('terms_i18n', 'terms_i18n'),
+            TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n),
             [['term_id', 'locale']],
         );
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table('termables', 'termables'),
+            TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables),
             [['term_id', 'termable_type', 'termable_id']],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table('terms', 'terms'),
+            TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
             [[
                 'columns' => ['taxonomy', 'parent_id'],
-                'foreign_table' => TaxonomyConfiguration::table('terms', 'terms'),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
                 'foreign_columns' => ['taxonomy', 'id'],
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table('terms_i18n', 'terms_i18n'),
+            TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n),
             [[
                 'columns' => ['term_id'],
-                'foreign_table' => TaxonomyConfiguration::table('terms', 'terms'),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
                 'foreign_columns' => ['id'],
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table('termables', 'termables'),
+            TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables),
             [[
                 'columns' => ['taxonomy', 'term_id'],
-                'foreign_table' => TaxonomyConfiguration::table('terms', 'terms'),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
                 'foreign_columns' => ['taxonomy', 'id'],
             ]],
         );

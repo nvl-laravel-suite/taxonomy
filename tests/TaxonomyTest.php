@@ -17,6 +17,7 @@ use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
 use Nvl\Taxonomy\Actions\UpdateTermAction;
 use Nvl\Taxonomy\Actions\ValidateTermMergeAction;
 use Nvl\Taxonomy\Data\MutateTermPayload;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
@@ -404,7 +405,7 @@ it('isolates attachment mutations by owner and vocabulary', function () {
     expect($firstPost->fresh()?->tags)->toHaveCount(0)
         ->and($firstPost->fresh()?->categories)->toHaveCount(1)
         ->and($secondPost->fresh()?->tags)->toHaveCount(1)
-        ->and(DB::table('termables')->count())->toBe(2);
+        ->and(DB::table(TaxonomyTables::Termables)->count())->toBe(2);
 });
 
 it('reparents children and cascades complete subtrees through explicit delete strategies', function () {
@@ -760,7 +761,7 @@ it('does not swallow non-unique database failures while creating open terms', fu
             ['must-rollback'],
         ))->toThrow(QueryException::class)
             ->and(Tag::query()->where('slug', 'must-rollback')->exists())->toBeFalse()
-            ->and(DB::table('termables')->count())->toBe(0);
+            ->and(DB::table(TaxonomyTables::Termables)->count())->toBe(0);
     } finally {
         config()->set('taxonomy.table_names.terms_i18n', $translationTable);
     }
@@ -776,7 +777,7 @@ it('rejects stale term and owner instances before writing attachments', function
         'tag',
         [$staleTerm],
     ))->toThrow(InvalidArgumentException::class)
-        ->and(DB::table('termables')->count())->toBe(0);
+        ->and(DB::table(TaxonomyTables::Termables)->count())->toBe(0);
 
     $staleOwner = Post::create(['title' => 'Stale owner']);
     Post::query()->whereKey($staleOwner->getKey())->delete();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 
 return new class extends Migration
 {
@@ -13,10 +14,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        $tableNames = config('taxonomy.table_names', ['terms' => 'terms', 'termables' => 'termables']);
+        $tableNames = config('taxonomy.table_names', [TaxonomyTables::Terms => TaxonomyTables::Terms, TaxonomyTables::Termables => TaxonomyTables::Termables]);
 
         $schema = Schema::connection(config('taxonomy.storage.connection'));
-        $tableName = (string) $tableNames['terms'];
+        $tableName = (string) $tableNames[TaxonomyTables::Terms];
 
         if ($schema->hasTable($tableName)) {
             return;
@@ -39,7 +40,7 @@ return new class extends Migration
             $table->index(['taxonomy', 'parent_id', 'position']);
             $table->foreign(['taxonomy', 'parent_id'], 'terms_taxonomy_parent_foreign')
                 ->references(['taxonomy', 'id'])
-                ->on((string) config('taxonomy.table_names.terms', 'terms'))
+                ->on((string) config('taxonomy.table_names.terms', TaxonomyTables::Terms))
                 ->restrictOnDelete();
         });
     }
@@ -49,8 +50,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        $tableNames = config('taxonomy.table_names', ['terms' => 'terms', 'termables' => 'termables']);
+        $tableNames = config('taxonomy.table_names', [TaxonomyTables::Terms => TaxonomyTables::Terms, TaxonomyTables::Termables => TaxonomyTables::Termables]);
         Schema::connection(config('taxonomy.storage.connection'))
-            ->dropIfExists((string) $tableNames['terms']);
+            ->dropIfExists((string) $tableNames[TaxonomyTables::Terms]);
     }
 };

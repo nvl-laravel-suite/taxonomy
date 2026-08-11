@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Carbon;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Translatable\Contracts\TranslatableModel;
@@ -73,7 +74,7 @@ class Term extends Model implements TranslatableModel
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table('terms', 'terms');
+        return TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms);
     }
 
     /**
@@ -165,7 +166,7 @@ class Term extends Model implements TranslatableModel
             $related->newQuery(),
             $this,
             'termable',
-            TaxonomyConfiguration::table('termables', 'termables'),
+            TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables),
             'term_id',
             'termable_id',
             $this->getKeyName(),

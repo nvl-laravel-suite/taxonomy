@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -38,7 +39,7 @@ final class TermTranslation extends Model
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table('terms_i18n', 'terms_i18n');
+        return TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n);
     }
 
     /**

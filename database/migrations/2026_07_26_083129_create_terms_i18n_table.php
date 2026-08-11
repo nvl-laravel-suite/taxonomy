@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 
 return new class extends Migration
 {
@@ -14,12 +15,12 @@ return new class extends Migration
     public function up(): void
     {
         $tableNames = config('taxonomy.table_names', [
-            'terms' => 'terms',
-            'terms_i18n' => 'terms_i18n',
+            TaxonomyTables::Terms => TaxonomyTables::Terms,
+            TaxonomyTables::I18n => TaxonomyTables::I18n,
         ]);
 
         $schema = Schema::connection(config('taxonomy.storage.connection'));
-        $tableName = (string) $tableNames['terms_i18n'];
+        $tableName = (string) $tableNames[TaxonomyTables::I18n];
 
         if ($schema->hasTable($tableName)) {
             return;
@@ -36,7 +37,7 @@ return new class extends Migration
             $table->unique(['term_id', 'locale'], 'terms_i18n_owner_locale_unique');
             $table->foreign('term_id')
                 ->references('id')
-                ->on($tableNames['terms'])
+                ->on($tableNames[TaxonomyTables::Terms])
                 ->cascadeOnDelete();
         });
     }
@@ -47,10 +48,10 @@ return new class extends Migration
     public function down(): void
     {
         $tableNames = config('taxonomy.table_names', [
-            'terms_i18n' => 'terms_i18n',
+            TaxonomyTables::I18n => TaxonomyTables::I18n,
         ]);
 
         Schema::connection(config('taxonomy.storage.connection'))
-            ->dropIfExists((string) $tableNames['terms_i18n']);
+            ->dropIfExists((string) $tableNames[TaxonomyTables::I18n]);
     }
 };

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermablePivot;
@@ -41,7 +42,7 @@ trait HasTaxonomies
                         $related->newQuery(),
                         $model,
                         'termable',
-                        TaxonomyConfiguration::table('termables', 'termables'),
+                        TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables),
                         'termable_id',
                         'term_id',
                         $model->getKeyName(),

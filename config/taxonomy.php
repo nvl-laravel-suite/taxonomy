@@ -1,6 +1,8 @@
 <?php
 
 declare(strict_types=1);
+
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Support\SlugGenerator;
@@ -37,9 +39,9 @@ return [
     ],
 
     'table_names' => [
-        'terms' => 'terms',
-        'terms_i18n' => 'terms_i18n',
-        'termables' => 'termables',
+        TaxonomyTables::Terms => TaxonomyTables::Terms,
+        TaxonomyTables::I18n => TaxonomyTables::I18n,
+        TaxonomyTables::Termables => TaxonomyTables::Termables,
     ],
 
     'storage' => [

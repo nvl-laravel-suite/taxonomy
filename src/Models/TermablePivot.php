@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -42,7 +43,7 @@ final class TermablePivot extends MorphPivot
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table('termables', 'termables');
+        return TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables);
     }
 
     /**
