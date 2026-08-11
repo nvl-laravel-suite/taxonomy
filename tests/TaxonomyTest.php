@@ -42,11 +42,6 @@ use Nvl\Translatable\Enums\TranslationSyncMode;
 use Nvl\Translatable\Exceptions\InvalidTranslatableFieldException;
 use Nvl\Translatable\Services\ContentLocale;
 
-beforeEach(function () {
-    CustomKeyPost::migrate();
-    Post::migrate();
-});
-
 it('preserves nested taxonomy defaults around consumer definitions', function () {
     config()->set('taxonomy', [
         'taxonomies' => [
@@ -847,6 +842,9 @@ it('validates multi-child merge hierarchy in a constant number of term reads', f
 
     DB::flushQueryLog();
     DB::enableQueryLog();
+    $termsTable = strtolower(
+        DB::connection()->getQueryGrammar()->wrapTable('terms'),
+    );
 
     app(ValidateTermMergeAction::class)->execute(
         $source,
@@ -858,7 +856,7 @@ it('validates multi-child merge hierarchy in a constant number of term reads', f
     $termReads = collect(DB::getQueryLog())
         ->filter(static fn (array $query): bool => str_contains(
             strtolower($query['query']),
-            'from "terms"',
+            'from '.$termsTable,
         ))
         ->count();
     DB::disableQueryLog();

@@ -53,4 +53,10 @@ abstract class TestCase extends Orchestra
             'posts' => Post::class,
         ]);
     }
+
+    protected function defineDatabaseMigrationsAfterDatabaseRefreshed(): void
+    {
+        CustomKeyPost::migrate();
+        Post::migrate();
+    }
 }

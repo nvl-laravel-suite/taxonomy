@@ -18,11 +18,6 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
 
-beforeEach(function () {
-    CustomKeyPost::migrate();
-    Post::migrate();
-});
-
 it('supports the public owner query and inspection workflow', function () {
     $categorized = Post::create(['title' => 'Categorized']);
     $uncategorized = Post::create(['title' => 'Uncategorized']);
