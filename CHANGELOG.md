@@ -4,6 +4,8 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-12
+
 - Added consumer contract coverage for owner queries, maintenance commands, registry validation, schema diagnostics, and distribution hygiene.
 - Consolidated hierarchy uniqueness and optimistic-concurrency columns into the clean-install term migration.
 - Standardized the localized-term table and configuration key as `terms_i18n`.
@@ -18,7 +20,7 @@ All notable changes to `nvl/taxonomy` are documented here.
 - Required exact concrete owner aliases, rechecked owner existence around writes, and made owner cleanup idempotent before and after deletion.
 - Reserved UUID-shaped slugs, bounded translated descriptions, and made doctor and prune maintenance paths resilient to malformed or changing state.
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-08-08
 
 - Added registered vocabularies and owners, UUID terms, nullable hierarchy, and typed metadata.
 - Added dedicated translated name and description rows with deterministic fallback.
