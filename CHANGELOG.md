@@ -4,6 +4,12 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-08-12
+
+### Changed
+
+- Released unchanged under the suite's shared version.
+
 ## [1.0.2] - 2026-08-12
 
 - Added consumer contract coverage for owner queries, maintenance commands, registry validation, schema diagnostics, and distribution hygiene.
