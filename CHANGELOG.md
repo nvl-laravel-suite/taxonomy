@@ -4,6 +4,13 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-08-22
+
+### Changed
+
+- Aligned the documented runtime requirement with the PHP 8.4+ package
+  baseline.
+
 ## [1.0.5] - 2026-08-12
 
 ### Changed
