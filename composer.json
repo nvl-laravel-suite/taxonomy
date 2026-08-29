@@ -7,17 +7,17 @@
     "require": {
         "php": "^8.3",
         "ext-ctype": "*",
-        "laravel/framework": "^12.0 || ^13.0",
-        "nvl/data": "^1.0",
-        "nvl/support": "^1.0",
-        "nvl/translatable": "^1.0",
+        "laravel/framework": "^13.0",
+        "nvl/data": "^2.0",
+        "nvl/support": "^2.0",
+        "nvl/translatable": "^2.0",
         "spatie/laravel-data": "^4.23",
         "spatie/typescript-transformer": "^3.3"
     },
     "require-dev": {
         "larastan/larastan": "^3.10",
         "laravel/pint": "^1.27",
-        "orchestra/testbench": "^10.0 || ^11.0",
+        "orchestra/testbench": "^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0"
     },
@@ -44,7 +44,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "1.x-dev"
+            "dev-main": "2.x-dev"
         },
         "laravel": {
             "providers": [

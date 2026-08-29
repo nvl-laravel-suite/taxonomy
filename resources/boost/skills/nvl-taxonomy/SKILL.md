@@ -1,6 +1,6 @@
 ---
 name: nvl-taxonomy
-description: Implement, integrate, test, or review nvl/taxonomy in Laravel 12–13. Use for registered vocabularies, UUID hierarchical terms, localized names and descriptions, owner attachment, moves, merges, pruning, cycle prevention, tree loading, metadata schemas, or taxonomy diagnostics.
+description: Implement, integrate, test, or review nvl/taxonomy in Laravel 13. Use for registered vocabularies, UUID hierarchical terms, localized names and descriptions, owner attachment, moves, merges, pruning, cycle prevention, tree loading, metadata schemas, or taxonomy diagnostics.
 ---
 
 # NVL Taxonomy
