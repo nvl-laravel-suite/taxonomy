@@ -8,6 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use Nvl\Data\Services\TypeScriptSourceRegistry;
+use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Taxonomy\Commands;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
@@ -20,12 +21,14 @@ use Nvl\Translatable\Services\TranslationResourceRegistry;
  */
 final class TaxonomyServiceProvider extends ServiceProvider
 {
+    use MergesPackageConfiguration;
+
     /**
      * Register merged configuration and package singletons.
      */
     public function register(): void
     {
-        $this->replaceConfigRecursivelyFrom(__DIR__.'/../../config/taxonomy.php', 'taxonomy');
+        $this->mergePackageConfiguration(__DIR__.'/../../config/taxonomy.php', 'taxonomy');
 
         $this->app->singleton(TaxonomyRegistry::class);
         $this->app->singleton(SlugGenerator::class, function (Container $app): SlugGenerator {
