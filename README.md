@@ -118,7 +118,19 @@ Attachment actions serialize each owner/vocabulary set with Laravel atomic locks
 
 ## Central translation management
 
-Taxonomy registers its term resource with `TranslationResourceRegistry`. Central gather, coverage, read, sync, and locale deletion therefore use the package field whitelist, query scope, authorization, and version hash.
+Taxonomy registers its term resource with `TranslationResourceRegistry` for
+central gathering, coverage, and reads using the package field whitelist, query
+scope, authorization, and version hash. Terms declare
+`TranslationMutationPolicy::DomainActionOnly`: generic central sync and locale
+deletion actions reject term writes.
+
+Write localized names and descriptions through `CreateTermAction` or
+`UpdateTermAction` using the `translations` field of `MutateTermPayload`.
+For updates, provide the expected term revision. Pass `mode: TranslationSyncMode::Replace` to
+`UpdateTermAction::execute()` with the retained locale map to remove omitted
+locales. This keeps localized changes inside Taxonomy's validation, revision,
+and event workflow. Consumer applications must authorize these domain actions
+before accepting user input.
 
 Generate TypeScript declarations under `Nvl.Taxonomy.*`:
 

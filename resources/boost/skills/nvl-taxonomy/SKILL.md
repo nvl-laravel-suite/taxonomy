@@ -16,6 +16,14 @@ Treat vocabulary, parent, slug, order, metadata, and attachments as structural d
 - Require expected revisions for updates, moves, deletes, and both sides of merges.
 - Pass a `DeleteTermStrategy` explicitly when a delete must handle attachments or children.
 - Keep canonical slugs locale-independent.
+- Terms declare `TranslationMutationPolicy::DomainActionOnly`. Central
+  translation gathering, coverage, and reads are available; generic central
+  sync and locale deletion reject term mutations. Write `translations` through
+  `CreateTermAction` or `UpdateTermAction` with `MutateTermPayload`. To remove
+  locales, pass `mode: TranslationSyncMode::Replace` to
+  `UpdateTermAction::execute()` with the retained locale map and the expected
+  term revision in the payload.
+- Consumer applications authorize domain Actions before accepting user input.
 
 ## Attach and query
 
