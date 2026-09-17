@@ -4,6 +4,9 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+- Documented immutable adoption mapping recovery, backup requirements, and
+  bounded tenant-graph cleanup for tenant-local taxonomy cutovers.
+
 ### Added
 
 - Added opt-in tenant-local term trees, translations, and owner attachments with

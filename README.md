@@ -180,6 +180,13 @@ and translations, rewrites owner attachments, and activates tenant-leading
 parent and attachment constraints. Vocabulary aliases remain global immutable
 configuration while every term, translation, and attachment is tenant-local.
 
+Take a pre-cutover backup and treat the reviewed split/destination mapping as
+immutable. An interrupted run may resume after source or schema repair that is
+consistent with that mapping. Changed tenant or destination assignments require
+restore and a new reviewed prepare; dropping tenant columns is not rollback once
+duplicate slugs and copied trees exist. Cleanup traverses one tenant-owned graph
+at a time and must not prune another tenant's attachments.
+
 Maintenance is explicit per tenant, for example:
 
 ```bash

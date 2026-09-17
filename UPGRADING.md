@@ -14,6 +14,13 @@ Enabled maintenance commands require `--tenant=<uuid>`. Existing vocabulary
 names remain global code configuration; terms and attachments never encode a
 tenant in the vocabulary alias.
 
+Take a pre-cutover backup. Source/schema repairs consistent with the prepared
+mapping may resume the same run; changed tenant assignments, split graphs, or
+destination UUIDs require restore and a new reviewed prepare. Do not describe
+dropping ownership columns as rollback after tenant-local duplicate slugs exist.
+Run cleanup as one bounded package-owned tenant graph and retain its adoption
+ledger until recovery policy permits removal.
+
 ## Upgrading to 1.0
 
 Version 1.0 uses UUID term and attachment-row identifiers, nullable root parents, canonical nonlocalized slugs, stable owner morph aliases, composite taxonomy foreign keys, and dedicated translation rows.

@@ -43,6 +43,13 @@ Treat vocabulary, parent, slug, order, metadata, and attachments as structural d
 
 ## Operate and verify
 
+- Keep tenancy opt-in, vocabulary declarations global, and every term,
+  translation, hierarchy edge, and owner attachment tenant-local.
+- Adopt configured tables and connections through the package adapter; never
+  create a generic tenancy pivot or infer an unknown owner partition.
+- Resume only source/schema repairs consistent with the immutable reviewed
+  mapping. Changed split/destination mappings require restore/new prepare.
+
 - Run `nvl:taxonomy:doctor --strict --format=json`.
 - Preview maintenance with `nvl:taxonomy:rebuild`, `nvl:taxonomy:merge`, and `nvl:taxonomy:prune` dry-run options.
 - Supply `--tenant=<uuid>` to every maintenance command when tenancy is enabled.
