@@ -55,3 +55,10 @@ Treat vocabulary, parent, slug, order, metadata, and attachments as structural d
 - Supply `--tenant=<uuid>` to every maintenance command when tenancy is enabled.
 - Default pruning to open vocabularies; require `--include-closed` before removing canonical closed-vocabulary terms.
 - Test UUID identifiers, stable aliases, locale fallback, subtree moves, cycles, merges, exclusive attachments, delete policies, configured connections, and legacy adoption.
+
+## Configurable-tenancy release discipline
+
+- Preserve disabled compatibility and package independence; tenant support never creates an undeclared Auth or Suite dependency.
+- Use registered package-owned resources, adoption adapters, Actions, and lifecycle APIs. Never add a generic tenant delete-all path or raw cross-package cleanup.
+- Treat mapping/configuration hashes, interruption checkpoints, conservation evidence, worker context, tenant-leading queries, and standalone consumption as release contracts.
+- The P2 implementation is present, but consolidated runtime verification is pending. Do not claim release readiness until the complete matrix passes.

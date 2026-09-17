@@ -62,3 +62,6 @@ All notable changes to `nvl/taxonomy` are documented here.
 - Added dedicated translated name and description rows with deterministic fallback.
 - Added create, update, move, attach, detach, sync, merge, prune, and delete Actions.
 - Added cycle, depth, uniqueness, deletion, concurrency, and query-count protections.
+
+<!-- tenancy-program-p2 -->
+Configurable-tenancy implementation and adoption documentation are present. The final consolidated verification matrix is pending; do not treat this package as release-ready until that gate passes.

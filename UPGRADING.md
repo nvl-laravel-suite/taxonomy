@@ -36,3 +36,6 @@ Version 1.0 uses UUID term and attachment-row identifiers, nullable root parents
 Register aliases for concrete owner classes rather than relying on inheritance, and rename any legacy UUID-shaped slugs because UUID syntax is reserved for term identifiers.
 
 Do not edit deployed package migrations or dual-write legacy columns in v1.
+
+<!-- tenancy-program-p2 -->
+Configurable-tenancy implementation and adoption documentation are present. The final consolidated verification matrix is pending; do not treat this package as release-ready until that gate passes.
