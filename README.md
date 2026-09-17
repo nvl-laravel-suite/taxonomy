@@ -170,6 +170,23 @@ Doctor verifies required columns and unique indexes plus registry, connection, p
 
 The schema indexes vocabulary/parent/slug, tree order, owner/type, term attachment, and locale lookups. Package migrations honor configured table names and connection where supported.
 
+## Tenant-local trees
+
+Installing Taxonomy also installs the inert `nvl/tenancy` library. With tenancy
+enabled, register every taxonomy owner as a canonical tenant resource and use
+`Nvl\Taxonomy\Models\Term` as each configured vocabulary model. Run reviewed
+adoption for the `taxonomy` package before tenant traffic; it copies split trees
+and translations, rewrites owner attachments, and activates tenant-leading
+parent and attachment constraints. Vocabulary aliases remain global immutable
+configuration while every term, translation, and attachment is tenant-local.
+
+Maintenance is explicit per tenant, for example:
+
+```bash
+php artisan nvl:taxonomy:rebuild category --tenant=<tenant-uuid> --dry-run
+php artisan nvl:taxonomy:prune tag --tenant=<tenant-uuid> --dry-run
+```
+
 Attachment Actions and owner-to-term lazy/eager relations support a dedicated taxonomy connection. Inverse `Term::entries()` joins and owner `with*Terms` / `inCategory` scopes require the owner and taxonomy connections to address the same physical database because Eloquent cannot execute a cross-database relationship subquery portably.
 
 For an existing schema, disable automatic migrations and run the doctor. Convert root sentinels to `null`, backfill dedicated translation rows, and resolve identifier differences in an application-owned reversible bridge. A table-name match is not schema compatibility.

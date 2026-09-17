@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Normalizes package configuration and polymorphic identifiers at infrastructure boundaries.
@@ -98,13 +99,13 @@ final class TaxonomyConfiguration
     /**
      * Return the stable distributed-lock key for one owner vocabulary set.
      */
-    public static function attachmentLockName(Model $owner, string $taxonomy): string
+    public static function attachmentLockName(TenantBoundary $boundary, Model $owner, string $taxonomy): string
     {
-        return 'taxonomy:attachments:'.hash('sha256', implode('|', [
+        return $boundary->key('taxonomy.terms', 'attachments:'.hash('sha256', implode('|', [
             $owner->getMorphClass(),
             self::modelIdentifier($owner),
             $taxonomy,
-        ]));
+        ])));
     }
 
     /**

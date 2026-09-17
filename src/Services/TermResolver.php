@@ -17,6 +17,7 @@ use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Translatable\Services\ContentLocale;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Resolves term references in batches and creates missing open-vocabulary roots.
@@ -31,6 +32,7 @@ final readonly class TermResolver
         private SlugGenerator $slugs,
         private ContentLocale $contentLocale,
         private TermWriter $writer,
+        private TenantBoundary $boundary,
     ) {}
 
     /**
@@ -44,16 +46,18 @@ final readonly class TermResolver
         $definition = $this->taxonomies->get($taxonomy);
         $modelReferenceIds = [];
         $stringReferences = [];
+        $normalizedReferences = [];
 
         foreach ($references as $reference) {
             if ($reference instanceof Term) {
-                if (! $reference->exists || $reference->taxonomy !== $taxonomy) {
-                    throw new InvalidArgumentException(
-                        "Term [{$reference->id}] does not belong to taxonomy [{$taxonomy}].",
-                    );
+                $identifier = $reference->getRawOriginal($reference->getKeyName());
+
+                if (! $reference->exists || ! is_string($identifier)) {
+                    throw new InvalidArgumentException('Taxonomy term references must be persisted canonical records.');
                 }
 
-                $modelReferenceIds[$reference->id] = true;
+                $modelReferenceIds[$identifier] = true;
+                $normalizedReferences[] = $identifier;
 
                 continue;
             }
@@ -65,6 +69,7 @@ final readonly class TermResolver
             }
 
             $stringReferences[] = $input;
+            $normalizedReferences[] = $input;
         }
 
         $identifiers = array_values(array_unique([
@@ -113,6 +118,10 @@ final readonly class TermResolver
                 );
             }
 
+            if ($candidate::class === Term::class) {
+                $this->boundary->assertRecord($candidate, 'taxonomy.terms');
+            }
+
             $resolved[$candidate->id] = $candidate;
         }
 
@@ -149,7 +158,7 @@ final readonly class TermResolver
         }
 
         if ($missing === [] || ! $createMissing) {
-            return $this->orderedResults($references, $resolved);
+            return $this->orderedResults($normalizedReferences, $resolved);
         }
 
         if (! $definition->open) {
@@ -197,7 +206,7 @@ final readonly class TermResolver
             }
         }
 
-        return $this->orderedResults($references, $resolved);
+        return $this->orderedResults($normalizedReferences, $resolved);
     }
 
     /**

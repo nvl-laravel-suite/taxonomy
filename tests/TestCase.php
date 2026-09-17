@@ -7,12 +7,14 @@ namespace Nvl\Taxonomy\Tests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Nvl\Data\Providers\DataServiceProvider;
+use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
+use Nvl\Tenancy\Providers\TenancyServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 /**
@@ -32,6 +34,8 @@ abstract class TestCase extends Orchestra
     {
         return [
             DataServiceProvider::class,
+            SupportServiceProvider::class,
+            TenancyServiceProvider::class,
             TranslatableServiceProvider::class,
             TaxonomyServiceProvider::class,
         ];

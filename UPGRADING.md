@@ -1,5 +1,19 @@
 # Upgrading NVL Taxonomy
 
+## Tenant ownership adoption
+
+Taxonomy tenancy is opt-in through `nvl/tenancy` and is inert while
+`tenancy.enabled=false`. Before enabling it, register every concrete owner as a
+Foundation tenant resource, configure tenant-enabled vocabularies with the
+canonical `Term` model, and run the reviewed adoption coordinator for the
+`taxonomy` package. The adapter expands nullable ownership, copies reviewed
+multi-tenant tree graphs, verifies canonical owners and locale rows, then
+activates composite constraints. Do not run the constrain migration directly.
+
+Enabled maintenance commands require `--tenant=<uuid>`. Existing vocabulary
+names remain global code configuration; terms and attachments never encode a
+tenant in the vocabulary alias.
+
 ## Upgrading to 1.0
 
 Version 1.0 uses UUID term and attachment-row identifiers, nullable root parents, canonical nonlocalized slugs, stable owner morph aliases, composite taxonomy foreign keys, and dedicated translation rows.

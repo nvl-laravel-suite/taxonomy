@@ -38,9 +38,7 @@ final readonly class DeleteTermAction
         DeleteTermStrategy $strategy = DeleteTermStrategy::Restrict,
         ?string $reparentTo = null,
     ): bool {
-        $connection = $term instanceof Term
-            ? $term->getConnectionName()
-            : (new Term)->getConnectionName();
+        $connection = (new Term)->getConnectionName();
 
         return DB::connection($connection)->transaction(function () use (
             $term,

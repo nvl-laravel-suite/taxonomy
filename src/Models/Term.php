@@ -13,17 +13,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Carbon;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
+use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Translatable\Contracts\TranslatableModel;
 use Nvl\Translatable\Enums\TranslationMutationPolicy;
 use Nvl\Translatable\RelatedTranslationDefinition;
 use Nvl\Translatable\Translatable;
+use Nvl\Tenancy\Contracts\TenantContext;
 
 /**
  * Structural taxonomy term whose display copy exists only in locale rows.
  *
  * @property string $id
+ * @property string|null $tenant_id Canonical tenant UUID.
  * @property string $taxonomy
  * @property string|null $parent_id
  * @property string $parent_key
@@ -40,6 +43,7 @@ use Nvl\Translatable\Translatable;
  */
 class Term extends Model implements TranslatableModel
 {
+    use GuardsTenantOwnership;
     use HasUuids;
     use Translatable;
 
@@ -66,6 +70,7 @@ class Term extends Model implements TranslatableModel
             foreignKey: 'term_id',
             fields: ['name', 'description'],
             mutationPolicy: TranslationMutationPolicy::DomainActionOnly,
+            ownershipResource: config('tenancy.enabled') === true ? 'taxonomy.terms' : null,
         );
     }
 
@@ -161,6 +166,11 @@ class Term extends Model implements TranslatableModel
     public function entries(string $type): MorphToMany
     {
         $related = new $type;
+        $pivotColumns = ['position', 'taxonomy'];
+
+        if (config('tenancy.enabled') === true) {
+            $pivotColumns[] = 'tenant_id';
+        }
 
         return (new StringMorphToMany(
             $related->newQuery(),
@@ -175,7 +185,11 @@ class Term extends Model implements TranslatableModel
             true,
         ))
             ->using(TermablePivot::class)
-            ->withPivot('position', 'taxonomy')
+            ->when(
+                config('tenancy.enabled') === true,
+                static fn (MorphToMany $relation) => $relation->wherePivot('tenant_id', app(TenantContext::class)->requireTenant()->value),
+            )
+            ->withPivot($pivotColumns)
             ->withTimestamps();
     }
 

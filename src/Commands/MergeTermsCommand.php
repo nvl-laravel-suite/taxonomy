@@ -11,6 +11,8 @@ use Nvl\Taxonomy\Actions\ValidateTermMergeAction;
 use Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
+use Nvl\Tenancy\Services\TenantRunner;
+use Nvl\Tenancy\ValueObjects\TenantId;
 
 /**
  * Executes a locked, rerunnable term merge with an inspect-only mode.
@@ -21,6 +23,7 @@ final class MergeTermsCommand extends Command
         {taxonomy : Registered vocabulary key}
         {source : Source UUID or slug}
         {destination : Destination UUID or slug}
+        {--tenant= : Canonical tenant UUID when tenancy is enabled}
         {--dry-run : Validate and report without mutation}
         {--force : Skip confirmation}';
 
@@ -30,6 +33,30 @@ final class MergeTermsCommand extends Command
      * Execute or preview one revision-checked term merge.
      */
     public function handle(
+        MergeTermsAction $merge,
+        ValidateTermMergeAction $validate,
+        TaxonomyRegistry $taxonomies,
+        TenantRunner $runner,
+    ): int {
+        $tenant = $this->option('tenant');
+        if (config('tenancy.enabled') === true) {
+            if (! is_string($tenant) || $tenant === '') {
+                $this->error('Enabled taxonomy maintenance requires --tenant.');
+
+                return self::FAILURE;
+            }
+
+            return $runner->run(
+                new TenantId($tenant),
+                fn (): int => $this->handleForTenant($merge, $validate, $taxonomies),
+            );
+        }
+
+        return $this->handleForTenant($merge, $validate, $taxonomies);
+    }
+
+    /** Execute the merge inside the already-established ownership boundary. */
+    private function handleForTenant(
         MergeTermsAction $merge,
         ValidateTermMergeAction $validate,
         TaxonomyRegistry $taxonomies,

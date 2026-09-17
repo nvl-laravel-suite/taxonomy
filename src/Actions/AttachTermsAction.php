@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermAttachmentWriter;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Appends terms while preserving existing attachment order.
@@ -19,7 +20,10 @@ final readonly class AttachTermsAction
     /**
      * Create the attachment append action.
      */
-    public function __construct(private TermAttachmentWriter $attachments) {}
+    public function __construct(
+        private TermAttachmentWriter $attachments,
+        private TenantBoundary $boundary,
+    ) {}
 
     /**
      * Append unique terms to one persisted owner's ordered vocabulary set.
@@ -30,7 +34,7 @@ final readonly class AttachTermsAction
     {
         $connection = (new Term)->getConnectionName();
         $lock = Cache::lock(
-            TaxonomyConfiguration::attachmentLockName($owner, $taxonomy),
+            TaxonomyConfiguration::attachmentLockName($this->boundary, $owner, $taxonomy),
             TaxonomyConfiguration::lockSeconds(),
         );
 

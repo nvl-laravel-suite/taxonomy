@@ -211,6 +211,7 @@ final readonly class TermHierarchy
 
         return $definition->model::query()
             ->where('taxonomy', $taxonomy)
+            ->orderBy('id')
             ->lockForUpdate()
             ->get()
             ->keyBy('id');

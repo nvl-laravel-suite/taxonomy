@@ -16,6 +16,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Translatable\Enums\TranslationSyncMode;
 use Nvl\Translatable\Services\TranslationWriter;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Persists validated term structure and dedicated translation rows.
@@ -30,6 +31,7 @@ final readonly class TermWriter
         private TaxonomyRegistry $taxonomies,
         private TermHierarchy $hierarchy,
         private SlugGenerator $slugs,
+        private TenantBoundary $boundary,
     ) {}
 
     /**
@@ -40,7 +42,10 @@ final readonly class TermWriter
         $definition = $this->taxonomies->get($data->taxonomy);
 
         $this->validate($data);
-        $term = new ($definition->model)($this->baseAttributes($data));
+        $term = new ($definition->model)([
+            ...$this->baseAttributes($data),
+            ...$this->boundary->attributes('taxonomy.terms'),
+        ]);
         $term->save();
         $this->translations->replace($term, $data->translations);
 
@@ -55,6 +60,9 @@ final readonly class TermWriter
         MutateTermPayload $data,
         TranslationSyncMode $mode = TranslationSyncMode::Patch,
     ): Term {
+        if ($term::class === Term::class) {
+            $this->boundary->assertRecord($term, 'taxonomy.terms');
+        }
         if ($data->expectedRevision === null || $term->revision !== $data->expectedRevision) {
             throw StaleTermVersionException::forTerm($term->id);
         }

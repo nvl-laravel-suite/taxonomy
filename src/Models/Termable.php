@@ -10,12 +10,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
+use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Represents one polymorphic attachment row in the configured termables table.
  *
  * @property string $id
+ * @property string|null $tenant_id Canonical tenant UUID inherited from the owner and term.
  * @property string $term_id
  * @property string $termable_type
  * @property int|string $termable_id
@@ -28,6 +30,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  */
 final class Termable extends Model
 {
+    use GuardsTenantOwnership;
     use HasUuids;
 
     /** @var list<string> */

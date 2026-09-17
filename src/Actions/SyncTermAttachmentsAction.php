@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermAttachmentWriter;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
+use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Atomically replaces one owner's ordered attachments for a vocabulary.
@@ -21,6 +22,7 @@ final readonly class SyncTermAttachmentsAction
      */
     public function __construct(
         private TermAttachmentWriter $attachments,
+        private TenantBoundary $boundary,
     ) {}
 
     /**
@@ -32,7 +34,7 @@ final readonly class SyncTermAttachmentsAction
     {
         $connection = (new Term)->getConnectionName();
         $lock = Cache::lock(
-            TaxonomyConfiguration::attachmentLockName($owner, $taxonomy),
+            TaxonomyConfiguration::attachmentLockName($this->boundary, $owner, $taxonomy),
             TaxonomyConfiguration::lockSeconds(),
         );
 

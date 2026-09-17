@@ -7,14 +7,26 @@ namespace Nvl\Taxonomy\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use InvalidArgumentException;
+use Nvl\Taxonomy\Models\Term;
+use Nvl\Tenancy\Contracts\TenantParentResolver;
+use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
+use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Tenancy\Services\TenantResourceRegistry;
 
 /**
  * Maps stable owner aliases to consumer model classes.
  */
-final class TaxonomyOwnerRegistry
+final class TaxonomyOwnerRegistry implements TenantParentResolver
 {
     /** @var array<string, class-string<Model>> */
     private array $owners = [];
+
+    /** Create the canonical owner registry. */
+    public function __construct(
+        private readonly TenantResourceRegistry $resources,
+        private readonly TenantBoundary $boundary,
+    ) {}
 
     /**
      * Register a stable polymorphic alias for one taxonomy owner model.
@@ -82,6 +94,54 @@ final class TaxonomyOwnerRegistry
         throw new InvalidArgumentException(
             'Model ['.$owner::class.'] is not registered as a taxonomy owner.',
         );
+    }
+
+    /** Reload one registered owner through its declared tenant resource. */
+    public function resolve(Model $owner, bool $lock = false): Model
+    {
+        $this->aliasFor($owner);
+        $modelClass = $owner::class;
+        $canonical = new $modelClass;
+
+        $identifier = $owner->getRawOriginal($owner->getKeyName());
+
+        if (! $owner->exists || (! is_string($identifier) && ! is_int($identifier))) {
+            throw new TenantBoundaryViolation('Taxonomy owners must be persisted canonical records.');
+        }
+
+        $query = $canonical->newQuery()->whereKey($identifier);
+        $resource = null;
+
+        if (config('tenancy.enabled') === true) {
+            if ($canonical->getConnection() !== (new Term)->getConnection()) {
+                throw new TenantConfigurationInvalid('Taxonomy owners must share the Taxonomy connection.');
+            }
+
+            $resource = $this->resources->forModel($owner);
+            $this->boundary->query($query, $resource->key);
+        }
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $resolved = $query->first();
+
+        if (! $resolved instanceof Model) {
+            throw new TenantBoundaryViolation('The canonical taxonomy owner is unavailable.');
+        }
+
+        if ($resource !== null) {
+            $this->boundary->assertRecord($resolved, $resource->key);
+        }
+
+        return $resolved;
+    }
+
+    /** Return explicitly registered morph identities for inherited ownership. */
+    public function types(): array
+    {
+        return $this->owners;
     }
 
     /**

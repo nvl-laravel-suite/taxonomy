@@ -13,6 +13,9 @@ use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
+use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Tenancy\Services\TenantRunner;
+use Nvl\Tenancy\ValueObjects\TenantId;
 
 /**
  * Prunes unattached leaf terms in locked chunks.
@@ -21,6 +24,7 @@ final class PruneOrphansCommand extends Command
 {
     protected $signature = 'nvl:taxonomy:prune
         {taxonomy? : Optional vocabulary key}
+        {--tenant= : Canonical tenant UUID when tenancy is enabled}
         {--dry-run : Report without deleting}
         {--include-closed : Also prune canonical terms from closed vocabularies}
         {--force : Skip confirmation}
@@ -31,8 +35,35 @@ final class PruneOrphansCommand extends Command
     /**
      * Safely prune eligible orphan leaves in bounded chunks.
      */
-    public function handle(DeleteTermAction $delete, TaxonomyRegistry $taxonomies): int
-    {
+    public function handle(
+        DeleteTermAction $delete,
+        TaxonomyRegistry $taxonomies,
+        TenantRunner $runner,
+        TenantBoundary $boundary,
+    ): int {
+        $tenant = $this->option('tenant');
+        if (config('tenancy.enabled') === true) {
+            if (! is_string($tenant) || $tenant === '') {
+                $this->error('Enabled taxonomy maintenance requires --tenant.');
+
+                return self::FAILURE;
+            }
+
+            return $runner->run(
+                new TenantId($tenant),
+                fn (): int => $this->handleForTenant($delete, $taxonomies, $boundary),
+            );
+        }
+
+        return $this->handleForTenant($delete, $taxonomies, $boundary);
+    }
+
+    /** Prune the current tenant without mistaking foreign attachments for absence. */
+    private function handleForTenant(
+        DeleteTermAction $delete,
+        TaxonomyRegistry $taxonomies,
+        TenantBoundary $boundary,
+    ): int {
         $query = Term::query()
             ->whereDoesntHave('attachments')
             ->whereDoesntHave('children');
@@ -72,7 +103,7 @@ final class PruneOrphansCommand extends Command
             return self::FAILURE;
         }
 
-        $lock = Cache::lock('nvl:taxonomy:prune', 3600);
+        $lock = Cache::lock($boundary->key('taxonomy.terms', 'prune:'.(is_string($taxonomy) ? $taxonomy : '*')), 3600);
 
         if (! $lock->get()) {
             $this->error('Another taxonomy prune owns the process lock.');

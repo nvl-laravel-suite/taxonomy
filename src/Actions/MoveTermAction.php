@@ -41,9 +41,7 @@ final readonly class MoveTermAction
             throw new InvalidArgumentException('Taxonomy term positions cannot be negative.');
         }
 
-        $connection = $term instanceof Term
-            ? $term->getConnectionName()
-            : (new Term)->getConnectionName();
+        $connection = (new Term)->getConnectionName();
 
         return DB::connection($connection)->transaction(function () use (
             $term,

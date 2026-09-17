@@ -15,5 +15,7 @@ final class TaxonomyTables
 
     public const string Termables = 'termables';
 
+    public const string TenantAdoptionCopies = 'term_tenant_adoption_copies';
+
     private function __construct() {}
 }

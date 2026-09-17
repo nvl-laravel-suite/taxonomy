@@ -14,6 +14,7 @@ use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
+use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 
 /**
  * Maintains one owner's ordered taxonomy attachment set inside caller transactions.
@@ -36,10 +37,9 @@ final readonly class TermAttachmentWriter
      */
     public function sync(Model $owner, string $taxonomy, array $references): void
     {
-        [$definition, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy);
+        [$definition, $ownerAlias, $ownerId, $tenant] = $this->context($owner, $taxonomy, lock: true);
         $this->assertBulkLimit($references);
         $resolved = $this->terms->resolve($taxonomy, $references);
-        $this->assertOwnerExists($owner);
 
         if ($definition->exclusive && count($resolved) > 1) {
             throw new InvalidArgumentException(
@@ -48,7 +48,7 @@ final readonly class TermAttachmentWriter
         }
 
         $ids = array_map(static fn (Term $term): string => $term->id, $resolved);
-        $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy);
+        $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy, $tenant);
         $query->lockForUpdate()->get();
         $query->delete();
 
@@ -62,6 +62,7 @@ final readonly class TermAttachmentWriter
         foreach ($ids as $position => $termId) {
             $rows[] = [
                 'id' => (string) Str::uuid(),
+                ...($tenant === null ? [] : ['tenant_id' => $tenant]),
                 'term_id' => $termId,
                 'termable_type' => $ownerAlias,
                 'termable_id' => $ownerId,
@@ -84,8 +85,8 @@ final readonly class TermAttachmentWriter
      */
     public function append(Model $owner, string $taxonomy, array $references): void
     {
-        [, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy);
-        $current = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy)
+        [, $ownerAlias, $ownerId, $tenant] = $this->context($owner, $taxonomy, lock: true);
+        $current = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy, $tenant)
             ->orderBy('position')
             ->pluck('term_id')
             ->filter(static fn (mixed $id): bool => is_string($id))
@@ -106,8 +107,8 @@ final readonly class TermAttachmentWriter
      */
     public function detach(Model $owner, string $taxonomy, array $references = []): int
     {
-        [, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy);
-        $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy);
+        [, $ownerAlias, $ownerId, $tenant] = $this->context($owner, $taxonomy, lock: true);
+        $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy, $tenant);
         $ids = [];
 
         if ($references !== []) {
@@ -122,7 +123,6 @@ final readonly class TermAttachmentWriter
             }
         }
 
-        $this->assertOwnerExists($owner);
         $query->lockForUpdate()->get();
 
         if ($ids !== []) {
@@ -133,15 +133,15 @@ final readonly class TermAttachmentWriter
     }
 
     /**
-     * @return array{TaxonomyDefinition, string, string}
+     * @return array{TaxonomyDefinition, string, string, string|null}
      */
-    private function context(Model $owner, string $taxonomy): array
+    private function context(Model $owner, string $taxonomy, bool $lock = false): array
     {
         if (! $owner->exists || $owner->getKey() === null) {
             throw new InvalidArgumentException('Taxonomy owners must be persisted.');
         }
 
-        $this->assertOwnerExists($owner);
+        $owner = $this->owners->resolve($owner, $lock);
 
         $definition = $this->taxonomies->get($taxonomy);
         $ownerAlias = $this->owners->aliasFor($owner);
@@ -153,23 +153,34 @@ final readonly class TermAttachmentWriter
             );
         }
 
+        $tenant = $owner->getRawOriginal('tenant_id');
+        if (config('tenancy.enabled') === true && ! is_string($tenant)) {
+            throw new TenantBoundaryViolation('The canonical taxonomy owner lacks tenant ownership.');
+        }
+
         return [
             $definition,
             $ownerAlias,
             TaxonomyConfiguration::modelIdentifier($owner),
+            is_string($tenant) ? $tenant : null,
         ];
     }
 
     /**
      * @return Builder
      */
-    private function ownerQuery(string $ownerAlias, string $ownerId, string $taxonomy)
+    private function ownerQuery(string $ownerAlias, string $ownerId, string $taxonomy, ?string $tenant)
     {
-        return DB::connection((new Term)->getConnectionName())
+        $query = DB::connection((new Term)->getConnectionName())
             ->table((new Termable)->getTable())
             ->where('termable_type', $ownerAlias)
             ->where('termable_id', $ownerId)
             ->where('taxonomy', $taxonomy);
+        if ($tenant !== null) {
+            $query->where('tenant_id', $tenant);
+        }
+
+        return $query;
     }
 
     /**
@@ -188,10 +199,4 @@ final readonly class TermAttachmentWriter
         }
     }
 
-    private function assertOwnerExists(Model $owner): void
-    {
-        if (! $owner->newQuery()->whereKey($owner->getKey())->exists()) {
-            throw new InvalidArgumentException('The taxonomy owner no longer exists.');
-        }
-    }
 }

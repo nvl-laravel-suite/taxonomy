@@ -5,15 +5,24 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Providers;
 
 use Illuminate\Container\Container;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use Nvl\Data\Services\TypeScriptSourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Taxonomy\Commands;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Models\Termable;
+use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
+use Nvl\Taxonomy\Tenancy\TaxonomyAdoptionAdapter;
+use Nvl\Taxonomy\Tenancy\TaxonomyTenancyResources;
+use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
+use Nvl\Tenancy\Services\TenantAdoptionRegistry;
+use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
 /**
@@ -31,7 +40,7 @@ final class TaxonomyServiceProvider extends ServiceProvider
         $this->mergePackageConfiguration(__DIR__.'/../../config/taxonomy.php', 'taxonomy');
 
         $this->app->singleton(TaxonomyRegistry::class);
-        $this->app->singleton(SlugGenerator::class, function (Container $app): SlugGenerator {
+        $this->app->scoped(SlugGenerator::class, function (Container $app): SlugGenerator {
             $generator = config('taxonomy.slugs.generator', SlugGenerator::class);
 
             if (! is_string($generator) || ! is_a($generator, SlugGenerator::class, true)) {
@@ -44,8 +53,11 @@ final class TaxonomyServiceProvider extends ServiceProvider
 
             return $instance;
         });
-        $this->app->singleton(TaxonomyOwnerRegistry::class, function (): TaxonomyOwnerRegistry {
-            $registry = new TaxonomyOwnerRegistry;
+        $this->app->singleton(TaxonomyOwnerRegistry::class, function (Container $app): TaxonomyOwnerRegistry {
+            $registry = new TaxonomyOwnerRegistry(
+                $app->make(TenantResourceRegistry::class),
+                $app->make(TenantBoundary::class),
+            );
             $configuredOwners = config('taxonomy.owners', []);
 
             if (! is_array($configuredOwners)) {
@@ -74,8 +86,20 @@ final class TaxonomyServiceProvider extends ServiceProvider
         TypeScriptSourceRegistry $typeScriptSources,
         TaxonomyOwnerRegistry $owners,
         TaxonomyRegistry $taxonomies,
+        TaxonomyTenancyResources $tenancyResources,
+        TenantResourceRegistry $tenantResources,
+        TenantAdoptionRegistry $tenantAdoptions,
+        TenantBoundary $tenantBoundary,
     ): void {
+        $tenancyResources->register($tenantResources);
+        $tenantAdoptions->register('taxonomy', TaxonomyAdoptionAdapter::class);
+        $this->registerTenantScopes($tenantBoundary);
         foreach ($taxonomies->all() as $definition) {
+            if (config('tenancy.enabled') === true && $definition->model !== Term::class) {
+                throw new TenantConfigurationInvalid(
+                    'Tenant-enabled Taxonomy vocabularies must use the canonical Term model.',
+                );
+            }
             $unknownOwners = array_diff(
                 $definition->allowedOwners,
                 array_keys($owners->all()),
@@ -123,5 +147,19 @@ final class TaxonomyServiceProvider extends ServiceProvider
             displayColumns: ['taxonomy', 'slug'],
             orderColumn: 'position',
         );
+    }
+
+    /** Register tenant predicates on every configured term model and inherited row. */
+    private function registerTenantScopes(TenantBoundary $boundary): void
+    {
+        Term::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'taxonomy.terms');
+        });
+        Termable::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'taxonomy.attachments');
+        });
+        TermTranslation::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+            $boundary->query($query, 'taxonomy.translations');
+        });
     }
 }

@@ -18,6 +18,11 @@ use Nvl\Taxonomy\Models\TermablePivot;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
+use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Tenancy\Contracts\TenantContext;
+use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Tenancy\Services\TenantResourceRegistry;
 use ReflectionClass;
 
 /**
@@ -51,6 +56,10 @@ trait HasTaxonomies
                     ))
                         ->using(TermablePivot::class)
                         ->wherePivot('taxonomy', $taxonomy)
+                        ->when(
+                            self::currentTaxonomyTenant() !== null,
+                            static fn (MorphToMany $relation) => $relation->wherePivot('tenant_id', self::currentTaxonomyTenant()),
+                        )
                         ->withPivot('position')
                         ->withTimestamps()
                         ->orderByPivot('position');
@@ -63,14 +72,17 @@ trait HasTaxonomies
                 return;
             }
 
-            Termable::query()
+            $canonical = app(TaxonomyOwnerRegistry::class)->resolve($model, lock: true);
+            $query = Termable::query()
                 ->where('termable_type', $model->getMorphClass())
-                ->where('termable_id', TaxonomyConfiguration::modelIdentifier($model))
-                ->delete();
+                ->where('termable_id', TaxonomyConfiguration::modelIdentifier($canonical));
+            if (($tenant = self::currentTaxonomyTenant()) !== null) {
+                $query->where('tenant_id', $tenant);
+            }
+            $query->delete();
         };
 
         static::deleting($deleteAttachments);
-        static::deleted($deleteAttachments);
     }
 
     /**
@@ -80,13 +92,18 @@ trait HasTaxonomies
      */
     public function termables(): MorphMany
     {
-        return $this->morphMany(
+        $relation = $this->morphMany(
             Termable::class,
             'termable',
             null,
             null,
             $this->getKeyName(),
         );
+        if (($tenant = self::currentTaxonomyTenant()) !== null) {
+            $relation->where('tenant_id', $tenant);
+        }
+
+        return $relation;
     }
 
     /**
@@ -98,6 +115,7 @@ trait HasTaxonomies
      */
     public function scopeWithAnyTerms(Builder $query, string $taxonomy, array $values): Builder
     {
+        self::assertRegisteredTaxonomyOwner($query->getModel());
         $values = array_values(array_unique($values, SORT_REGULAR));
         self::assertScopeTermLimit($values);
 
@@ -132,6 +150,7 @@ trait HasTaxonomies
      */
     public function scopeWithAllTerms(Builder $query, string $taxonomy, array $values): Builder
     {
+        self::assertRegisteredTaxonomyOwner($query->getModel());
         $values = array_values(array_unique($values, SORT_REGULAR));
         self::assertScopeTermLimit($values);
 
@@ -166,6 +185,7 @@ trait HasTaxonomies
      */
     public function scopeWithoutTerms(Builder $query, string $taxonomy, array $values): Builder
     {
+        self::assertRegisteredTaxonomyOwner($query->getModel());
         $values = array_values(array_unique($values, SORT_REGULAR));
         self::assertScopeTermLimit($values);
 
@@ -199,6 +219,12 @@ trait HasTaxonomies
      */
     public function scopeInCategory(Builder $query, Term $category, bool $includeDescendants = true): Builder
     {
+        self::assertRegisteredTaxonomyOwner($query->getModel());
+        $identifier = $category->getRawOriginal($category->getKeyName());
+        if (! is_string($identifier)) {
+            throw new TenantBoundaryViolation('A canonical category identifier is required.');
+        }
+        $category = Term::query()->findOrFail($identifier);
         $ids = [$category->id];
 
         if ($includeDescendants) {
@@ -217,13 +243,36 @@ trait HasTaxonomies
      */
     public function hasTerm(string $taxonomy, string|int|Term $value): bool
     {
+        $canonicalOwner = app(TaxonomyOwnerRegistry::class)->resolve($this);
         $relation = Str::plural($taxonomy);
+
+        if ($value instanceof Term) {
+            $identifier = $value->getRawOriginal($value->getKeyName());
+            if (! is_string($identifier)) {
+                throw new TenantBoundaryViolation('A canonical taxonomy term identifier is required.');
+            }
+            $value = Term::query()->findOrFail($identifier);
+        }
 
         if ($this->relationLoaded($relation)) {
             $collection = $this->getRelation($relation);
 
             if (! $collection instanceof Collection) {
                 return false;
+            }
+
+            $tenant = self::currentTaxonomyTenant();
+            foreach ($collection as $loadedTerm) {
+                if (! $loadedTerm instanceof Term) {
+                    throw new TenantBoundaryViolation('A loaded taxonomy relation contains an invalid term.');
+                }
+                if ($loadedTerm::class === Term::class) {
+                    app(TenantBoundary::class)->assertRecord($loadedTerm, 'taxonomy.terms');
+                }
+                if ($loadedTerm->getRawOriginal('taxonomy') !== $taxonomy
+                    || ($tenant !== null && $loadedTerm->getRawOriginal('tenant_id') !== $tenant)) {
+                    throw new TenantBoundaryViolation('A loaded taxonomy relation contains a foreign term.');
+                }
             }
 
             if ($value instanceof Term) {
@@ -259,9 +308,13 @@ trait HasTaxonomies
 
         return Termable::query()
             ->whereIn('term_id', $termIds)
-            ->where('termable_type', $this->getMorphClass())
-            ->where('termable_id', TaxonomyConfiguration::modelIdentifier($this))
+            ->where('termable_type', $canonicalOwner->getMorphClass())
+            ->where('termable_id', TaxonomyConfiguration::modelIdentifier($canonicalOwner))
             ->where('taxonomy', $taxonomy)
+            ->when(
+                self::currentTaxonomyTenant() !== null,
+                static fn (Builder $builder) => $builder->where('tenant_id', self::currentTaxonomyTenant()),
+            )
             ->exists();
     }
 
@@ -319,5 +372,24 @@ trait HasTaxonomies
         }
 
         return [$identifiers, $slugs];
+    }
+
+    /** Require the consumer model to have a canonical Foundation ownership declaration. */
+    private static function assertRegisteredTaxonomyOwner(Model $model): void
+    {
+        app(TaxonomyOwnerRegistry::class)->aliasFor($model);
+        if (config('tenancy.enabled') === true) {
+            app(TenantResourceRegistry::class)->forModel($model);
+        }
+    }
+
+    /** Resolve the active tenant used by pivot correlations, preserving disabled compatibility. */
+    private static function currentTaxonomyTenant(): ?string
+    {
+        if (config('tenancy.enabled') !== true) {
+            return null;
+        }
+
+        return app(TenantContext::class)->requireTenant()->value;
     }
 }

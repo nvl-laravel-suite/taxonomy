@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
+use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
@@ -14,6 +15,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  */
 final class TermablePivot extends MorphPivot
 {
+    use GuardsTenantOwnership;
     use HasUuids;
 
     /** @var list<string> */

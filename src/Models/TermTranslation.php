@@ -9,12 +9,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
+use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Stores localized term names and descriptions.
  *
  * @property string $id
+ * @property string|null $tenant_id Canonical tenant UUID inherited from the term.
  * @property string $term_id
  * @property string $locale
  * @property string $name
@@ -25,6 +27,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  */
 final class TermTranslation extends Model
 {
+    use GuardsTenantOwnership;
     use HasUuids;
 
     protected $fillable = [

@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Actions;
 
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Services\TermModelResolver;
 use Nvl\Taxonomy\Services\TermWriter;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -25,6 +27,7 @@ final readonly class UpdateTermAction
     public function __construct(
         private TermWriter $writer,
         private TaxonomyRegistry $taxonomies,
+        private TermModelResolver $terms,
     ) {}
 
     /**
@@ -35,20 +38,22 @@ final readonly class UpdateTermAction
         MutateTermPayload $data,
         TranslationSyncMode $mode = TranslationSyncMode::Patch,
     ): Term {
-        $termId = $term instanceof Term ? $term->id : $term;
-        $definition = $this->taxonomies->get($data->taxonomy);
-        $modelClass = $definition->model;
-        $connection = (new $modelClass)->getConnectionName();
+        $termId = $term instanceof Term
+            ? $term->getRawOriginal($term->getKeyName())
+            : $term;
+
+        if (! is_string($termId)) {
+            throw new InvalidArgumentException('A canonical taxonomy term identifier is required.');
+        }
+        $connection = (new Term)->getConnectionName();
 
         return DB::connection($connection)->transaction(function () use (
             $termId,
-            $modelClass,
             $data,
             $mode,
         ): Term {
-            $resolvedTerm = $modelClass::query()
-                ->lockForUpdate()
-                ->findOrFail($termId);
+            $resolvedTerm = $this->terms->lock($termId);
+            $this->taxonomies->get($resolvedTerm->taxonomy);
 
             $updated = $this->writer->update($resolvedTerm, $data, $mode);
             TermChanged::dispatch(

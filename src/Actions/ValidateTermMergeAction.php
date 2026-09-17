@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Actions;
 
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermMergeValidator;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
@@ -28,9 +29,17 @@ final readonly class ValidateTermMergeAction
         int $expectedSourceRevision,
         int $expectedDestinationRevision,
     ): void {
-        $sourceId = $source instanceof Term ? $source->id : $source;
-        $destinationId = $destination instanceof Term ? $destination->id : $destination;
-        $connection = $this->connectionFor($source, $destination);
+        $sourceId = $source instanceof Term
+            ? $source->getRawOriginal($source->getKeyName())
+            : $source;
+        $destinationId = $destination instanceof Term
+            ? $destination->getRawOriginal($destination->getKeyName())
+            : $destination;
+
+        if (! is_string($sourceId) || ! is_string($destinationId)) {
+            throw new InvalidArgumentException('Canonical merge term identifiers are required.');
+        }
+        $connection = $this->connectionFor();
 
         DB::connection($connection)->transaction(
             fn () => $this->validator->validate(
@@ -43,16 +52,8 @@ final readonly class ValidateTermMergeAction
         );
     }
 
-    private function connectionFor(Term|string $source, Term|string $destination): ?string
+    private function connectionFor(): ?string
     {
-        if ($source instanceof Term) {
-            return $source->getConnectionName();
-        }
-
-        if ($destination instanceof Term) {
-            return $destination->getConnectionName();
-        }
-
         return (new Term)->getConnectionName();
     }
 }

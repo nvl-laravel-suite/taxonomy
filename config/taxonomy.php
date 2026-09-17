@@ -42,6 +42,7 @@ return [
         TaxonomyTables::Terms => TaxonomyTables::Terms,
         TaxonomyTables::I18n => TaxonomyTables::I18n,
         TaxonomyTables::Termables => TaxonomyTables::Termables,
+        TaxonomyTables::TenantAdoptionCopies => TaxonomyTables::TenantAdoptionCopies,
     ],
 
     'storage' => [

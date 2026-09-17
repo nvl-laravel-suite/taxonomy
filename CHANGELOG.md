@@ -4,6 +4,18 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added opt-in tenant-local term trees, translations, and owner attachments with
+  reviewed expand/backfill/constrain adoption and split-tree copy ledgers.
+- Added canonical owner and term guards across Actions, traits, maintenance
+  commands, hierarchy operations, loaded relations, and raw attachment writes.
+
+### Changed
+
+- Scoped locale-aware slug generation to request/job lifecycles and keyed
+  attachment, prune, and rebuild locks by the active tenant boundary.
+
 ## [2.0.0] - 2026-08-29
 
 ### Changed
