@@ -19,9 +19,9 @@ return new class extends Migration
         $translations = TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n);
         $attachments = TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables);
 
-        $this->dropForeign($schema, $terms, ['taxonomy', 'parent_id']);
+        $this->dropForeignColumns($schema, $terms, ['taxonomy', 'parent_id']);
         $this->dropForeignColumns($schema, $translations, ['term_id']);
-        $this->dropForeign($schema, $attachments, ['taxonomy', 'term_id']);
+        $this->dropForeignColumns($schema, $attachments, ['taxonomy', 'term_id']);
         $this->dropIndex($schema, $terms, 'terms_sibling_slug_unique', true);
         $this->dropIndex($schema, $translations, 'terms_i18n_owner_locale_unique', true);
         $this->dropUniqueColumns($schema, $attachments, ['term_id', 'termable_id', 'termable_type']);
