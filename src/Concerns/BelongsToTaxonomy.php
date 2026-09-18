@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Concerns;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Models\Term;
@@ -54,6 +55,6 @@ trait BelongsToTaxonomy
      */
     public function definition(): TaxonomyDefinition
     {
-        return app(TaxonomyRegistry::class)->get(static::$taxonomy);
+        return Container::getInstance()->make(TaxonomyRegistry::class)->get(static::$taxonomy);
     }
 }

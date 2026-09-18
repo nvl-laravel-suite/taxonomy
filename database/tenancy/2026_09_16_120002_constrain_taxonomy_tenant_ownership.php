@@ -19,9 +19,9 @@ return new class extends Migration
         $translations = TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n);
         $attachments = TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables);
 
-        $this->dropForeign($schema, $terms, 'terms_taxonomy_parent_foreign');
+        $this->dropForeign($schema, $terms, ['taxonomy', 'parent_id']);
         $this->dropForeignColumns($schema, $translations, ['term_id']);
-        $this->dropForeign($schema, $attachments, 'termables_taxonomy_term_foreign');
+        $this->dropForeign($schema, $attachments, ['taxonomy', 'term_id']);
         $this->dropIndex($schema, $terms, 'terms_sibling_slug_unique', true);
         $this->dropIndex($schema, $translations, 'terms_i18n_owner_locale_unique', true);
         $this->dropUniqueColumns($schema, $attachments, ['term_id', 'termable_id', 'termable_type']);
@@ -53,11 +53,11 @@ return new class extends Migration
         $translations = TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n);
         $attachments = TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables);
         foreach ([
-            [$terms, 'terms_tenant_parent_foreign'],
-            [$translations, 'terms_i18n_tenant_term_foreign'],
-            [$attachments, 'termables_tenant_term_foreign'],
-        ] as [$table, $name]) {
-            $this->dropForeign($schema, $table, $name);
+            [$terms, ['tenant_id', 'taxonomy', 'parent_id']],
+            [$translations, ['tenant_id', 'term_id']],
+            [$attachments, ['tenant_id', 'taxonomy', 'term_id']],
+        ] as [$table, $columns]) {
+            $this->dropForeign($schema, $table, $columns);
         }
         foreach ([
             [$terms, 'terms_tenant_sibling_slug_unique', true],
@@ -117,10 +117,15 @@ return new class extends Migration
     }
 
     /** Drop one named foreign key when present. */
-    private function dropForeign(Builder $schema, string $table, string $name): void
+    private function dropForeign(Builder $schema, string $table, string|array $identifier): void
     {
-        if ($schema->hasTable($table) && array_any($schema->getForeignKeys($table), static fn (array $foreign): bool => $foreign['name'] === $name)) {
-            $schema->table($table, static fn (Blueprint $blueprint) => $blueprint->dropForeign($name));
+        if ($schema->hasTable($table) && array_any(
+            $schema->getForeignKeys($table),
+            static fn (array $foreign): bool => is_string($identifier)
+                ? ($foreign['name'] ?? null) === $identifier
+                : ($foreign['columns'] ?? []) === $identifier,
+        )) {
+            $schema->table($table, static fn (Blueprint $blueprint) => $blueprint->dropForeign($identifier));
         }
     }
 
@@ -139,8 +144,9 @@ return new class extends Migration
             sort($actual);
 
             if ($actual === $expected) {
-                $name = $foreign['name'];
-                $schema->table($table, static fn (Blueprint $blueprint) => $blueprint->dropForeign($name));
+                $name = $foreign['name'] ?? null;
+                $identifier = is_string($name) ? $name : $columns;
+                $schema->table($table, static fn (Blueprint $blueprint) => $blueprint->dropForeign($identifier));
             }
         }
     }

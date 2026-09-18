@@ -103,7 +103,10 @@ final class PruneOrphansCommand extends Command
             return self::FAILURE;
         }
 
-        $lock = Cache::lock($boundary->key('taxonomy.terms', 'prune:'.(is_string($taxonomy) ? $taxonomy : '*')), 3600);
+        $lockKey = config('tenancy.enabled') === true
+            ? $boundary->key('taxonomy.terms', 'prune:'.(is_string($taxonomy) ? $taxonomy : '*'))
+            : 'nvl:taxonomy:prune';
+        $lock = Cache::lock($lockKey, 3600);
 
         if (! $lock->get()) {
             $this->error('Another taxonomy prune owns the process lock.');

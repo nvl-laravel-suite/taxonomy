@@ -7,6 +7,8 @@ use Nvl\Taxonomy\Actions\AttachTermsAction;
 use Nvl\Taxonomy\Actions\MergeTermsAction;
 use Nvl\Taxonomy\Actions\MoveTermAction;
 use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
+use Nvl\Taxonomy\Exceptions\InvalidParentException;
+use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
 use Nvl\Taxonomy\Tests\Fixtures\TaxonomyTenancyScenario;
@@ -31,9 +33,10 @@ it('rejects forged parents and cross-tenant move and merge targets', function ()
     $forged->parent_id = $termB->id;
 
     expect(fn () => $scenario->run($scenario::A, fn () => app(MoveTermAction::class)
-        ->execute($forged, $termB->id, 0, $termA->revision)))->toThrow(Throwable::class)
+        ->execute($forged, $termB->id, 0, $termA->revision)))->toThrow(InvalidParentException::class)
         ->and(fn () => $scenario->run($scenario::A, fn () => app(MergeTermsAction::class)
-            ->execute($termA, $termB, $termA->revision, $termB->revision)))->toThrow(Throwable::class);
+            ->execute($termA, $termB, $termA->revision, $termB->revision)))->toThrow(InvalidArgumentException::class)
+        ->and($termA)->toBeInstanceOf(Category::class);
 });
 
 it('keeps exclusive attachments local and rejects retained loaded foreign rows', function (): void {
@@ -59,7 +62,8 @@ it('isolates locale rows and owner force deletion cleanup', function (): void {
     $owner = $scenario->owner($scenario::A);
     $scenario->run($scenario::A, fn () => app(AttachTermsAction::class)->execute($owner, 'tag', [$termA]));
 
-    $termA->setRelation('translations', $termB->translations);
+    $foreignTranslations = $scenario->run($scenario::B, fn () => $termB->translations);
+    $termA->setRelation('translations', $foreignTranslations);
     expect(fn () => $scenario->run($scenario::A, fn (): string => $termA->displayName('en')))
         ->toThrow(TenantBoundaryViolation::class);
 

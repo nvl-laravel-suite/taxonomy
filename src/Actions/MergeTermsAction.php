@@ -122,9 +122,9 @@ final readonly class MergeTermsAction
                         $database->table($table)->whereIn('id', $transferable)
                             ->when(is_string($tenant), static fn ($query) => $query->where('tenant_id', $tenant))
                             ->update([
-                            'term_id' => $destination->id,
-                            'updated_at' => now(),
-                        ]);
+                                'term_id' => $destination->id,
+                                'updated_at' => now(),
+                            ]);
                     }
                 });
 

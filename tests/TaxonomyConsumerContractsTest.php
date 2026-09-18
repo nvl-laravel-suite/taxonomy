@@ -17,6 +17,8 @@ use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
+use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Tenancy\Services\TenantResourceRegistry;
 
 it('supports the public owner query and inspection workflow', function () {
     $categorized = Post::create(['title' => 'Categorized']);
@@ -250,7 +252,10 @@ it('rejects malformed configured and programmatic vocabulary definitions', funct
 });
 
 it('enforces stable owner aliases at registration and provider resolution', function () {
-    $registry = new TaxonomyOwnerRegistry;
+    $registry = new TaxonomyOwnerRegistry(
+        app(TenantResourceRegistry::class),
+        app(TenantBoundary::class),
+    );
     $registry->register('posts', Post::class);
     $registry->register('posts', Post::class);
 
@@ -264,9 +269,15 @@ it('enforces stable owner aliases at registration and provider resolution', func
         ->toThrow(InvalidArgumentException::class)
         ->and(fn () => $registry->register('other-posts', Post::class))
         ->toThrow(InvalidArgumentException::class)
-        ->and(fn () => (new TaxonomyOwnerRegistry)->register('posts', CustomKeyPost::class))
+        ->and(fn () => (new TaxonomyOwnerRegistry(
+            app(TenantResourceRegistry::class),
+            app(TenantBoundary::class),
+        ))->register('posts', CustomKeyPost::class))
         ->toThrow(InvalidArgumentException::class)
-        ->and(fn () => (new TaxonomyOwnerRegistry)->register('new-posts', Post::class))
+        ->and(fn () => (new TaxonomyOwnerRegistry(
+            app(TenantResourceRegistry::class),
+            app(TenantBoundary::class),
+        ))->register('new-posts', Post::class))
         ->toThrow(InvalidArgumentException::class);
 
     expect(Relation::getMorphedModel('posts'))->toBe(Post::class);
@@ -297,6 +308,7 @@ it('reports missing consumer schema without attempting data inspection', functio
     $checks = (new TaxonomyDoctor(
         app(TaxonomyRegistry::class),
         app(TaxonomyOwnerRegistry::class),
+        app(TenantResourceRegistry::class),
     ))->inspect();
 
     expect(collect($checks)->where('passed', false))->toHaveCount(9)

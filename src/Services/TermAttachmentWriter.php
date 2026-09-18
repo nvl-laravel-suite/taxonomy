@@ -198,5 +198,4 @@ final readonly class TermAttachmentWriter
             throw new InvalidArgumentException('Too many taxonomy terms were supplied.');
         }
     }
-
 }

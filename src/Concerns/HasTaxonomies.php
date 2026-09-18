@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Concerns;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -16,9 +17,9 @@ use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermablePivot;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
+use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
-use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Tenancy\Contracts\TenantContext;
 use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Tenancy\Services\TenantBoundary;
@@ -36,14 +37,13 @@ trait HasTaxonomies
     public static function bootHasTaxonomies(): void
     {
         foreach (static::configuredTaxonomies() as $taxonomy) {
-            $definition = app(TaxonomyRegistry::class)->get($taxonomy);
+            $definition = Container::getInstance()->make(TaxonomyRegistry::class)->get($taxonomy);
 
             static::resolveRelationUsing(
                 Str::plural($taxonomy),
                 function (Model $model) use ($definition, $taxonomy): MorphToMany {
                     $related = new ($definition->model);
-
-                    return (new StringMorphToMany(
+                    $relation = new StringMorphToMany(
                         $related->newQuery(),
                         $model,
                         'termable',
@@ -53,16 +53,19 @@ trait HasTaxonomies
                         $model->getKeyName(),
                         $related->getKeyName(),
                         Str::plural($taxonomy),
-                    ))
-                        ->using(TermablePivot::class)
-                        ->wherePivot('taxonomy', $taxonomy)
-                        ->when(
-                            self::currentTaxonomyTenant() !== null,
-                            static fn (MorphToMany $relation) => $relation->wherePivot('tenant_id', self::currentTaxonomyTenant()),
-                        )
-                        ->withPivot('position')
-                        ->withTimestamps()
-                        ->orderByPivot('position');
+                    );
+                    $relation->using(TermablePivot::class);
+                    $relation->wherePivot('taxonomy', $taxonomy);
+                    $tenant = self::currentTaxonomyTenant();
+                    if ($tenant !== null) {
+                        $relation->wherePivot('tenant_id', $tenant);
+                    }
+
+                    $relation->withPivot('position');
+                    $relation->withTimestamps();
+                    $relation->orderByPivot('position');
+
+                    return $relation;
                 },
             );
         }
@@ -72,7 +75,7 @@ trait HasTaxonomies
                 return;
             }
 
-            $canonical = app(TaxonomyOwnerRegistry::class)->resolve($model, lock: true);
+            $canonical = Container::getInstance()->make(TaxonomyOwnerRegistry::class)->resolve($model, lock: true);
             $query = Termable::query()
                 ->where('termable_type', $model->getMorphClass())
                 ->where('termable_id', TaxonomyConfiguration::modelIdentifier($canonical));
@@ -243,7 +246,7 @@ trait HasTaxonomies
      */
     public function hasTerm(string $taxonomy, string|int|Term $value): bool
     {
-        $canonicalOwner = app(TaxonomyOwnerRegistry::class)->resolve($this);
+        $canonicalOwner = Container::getInstance()->make(TaxonomyOwnerRegistry::class)->resolve($this);
         $relation = Str::plural($taxonomy);
 
         if ($value instanceof Term) {
@@ -266,9 +269,7 @@ trait HasTaxonomies
                 if (! $loadedTerm instanceof Term) {
                     throw new TenantBoundaryViolation('A loaded taxonomy relation contains an invalid term.');
                 }
-                if ($loadedTerm::class === Term::class) {
-                    app(TenantBoundary::class)->assertRecord($loadedTerm, 'taxonomy.terms');
-                }
+                Container::getInstance()->make(TenantBoundary::class)->assertRecord($loadedTerm, 'taxonomy.terms');
                 if ($loadedTerm->getRawOriginal('taxonomy') !== $taxonomy
                     || ($tenant !== null && $loadedTerm->getRawOriginal('tenant_id') !== $tenant)) {
                     throw new TenantBoundaryViolation('A loaded taxonomy relation contains a foreign term.');
@@ -377,9 +378,9 @@ trait HasTaxonomies
     /** Require the consumer model to have a canonical Foundation ownership declaration. */
     private static function assertRegisteredTaxonomyOwner(Model $model): void
     {
-        app(TaxonomyOwnerRegistry::class)->aliasFor($model);
+        Container::getInstance()->make(TaxonomyOwnerRegistry::class)->aliasFor($model);
         if (config('tenancy.enabled') === true) {
-            app(TenantResourceRegistry::class)->forModel($model);
+            Container::getInstance()->make(TenantResourceRegistry::class)->forModel($model);
         }
     }
 
@@ -390,6 +391,6 @@ trait HasTaxonomies
             return null;
         }
 
-        return app(TenantContext::class)->requireTenant()->value;
+        return Container::getInstance()->make(TenantContext::class)->requireTenant()->value;
     }
 }

@@ -20,7 +20,8 @@ it('uses configured storage aliases and tenant-leading tree constraints', functi
         ->and(Schema::hasIndex('tenant_terms', 'terms_tenant_sibling_slug_unique'))->toBeTrue()
         ->and(array_any(
             Schema::getForeignKeys('tenant_terms'),
-            static fn (array $foreign): bool => $foreign['name'] === 'terms_tenant_parent_foreign',
+            static fn (array $foreign): bool => $foreign['columns'] === ['tenant_id', 'taxonomy', 'parent_id']
+                && $foreign['foreign_columns'] === ['tenant_id', 'taxonomy', 'id'],
         ))->toBeTrue();
 });
 

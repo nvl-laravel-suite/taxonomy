@@ -128,7 +128,11 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
         $resolved = $query->first();
 
         if (! $resolved instanceof Model) {
-            throw new TenantBoundaryViolation('The canonical taxonomy owner is unavailable.');
+            if (config('tenancy.enabled') === true) {
+                throw new TenantBoundaryViolation('The canonical taxonomy owner is unavailable.');
+            }
+
+            throw new InvalidArgumentException('The canonical taxonomy owner is unavailable.');
         }
 
         if ($resource !== null) {

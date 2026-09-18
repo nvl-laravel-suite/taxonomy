@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Models;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -12,15 +13,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Carbon;
-use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
+use Nvl\Tenancy\Contracts\TenantContext;
 use Nvl\Translatable\Contracts\TranslatableModel;
 use Nvl\Translatable\Enums\TranslationMutationPolicy;
 use Nvl\Translatable\RelatedTranslationDefinition;
 use Nvl\Translatable\Translatable;
-use Nvl\Tenancy\Contracts\TenantContext;
 
 /**
  * Structural taxonomy term whose display copy exists only in locale rows.
@@ -172,7 +173,7 @@ class Term extends Model implements TranslatableModel
             $pivotColumns[] = 'tenant_id';
         }
 
-        return (new StringMorphToMany(
+        $relation = new StringMorphToMany(
             $related->newQuery(),
             $this,
             'termable',
@@ -183,14 +184,19 @@ class Term extends Model implements TranslatableModel
             $related->getKeyName(),
             'entries',
             true,
-        ))
-            ->using(TermablePivot::class)
-            ->when(
-                config('tenancy.enabled') === true,
-                static fn (MorphToMany $relation) => $relation->wherePivot('tenant_id', app(TenantContext::class)->requireTenant()->value),
-            )
-            ->withPivot($pivotColumns)
-            ->withTimestamps();
+        );
+        $relation->using(TermablePivot::class);
+        if (config('tenancy.enabled') === true) {
+            $relation->wherePivot(
+                'tenant_id',
+                Container::getInstance()->make(TenantContext::class)->requireTenant()->value,
+            );
+        }
+
+        $relation->withPivot($pivotColumns);
+        $relation->withTimestamps();
+
+        return $relation;
     }
 
     /**

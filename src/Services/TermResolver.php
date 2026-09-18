@@ -16,8 +16,9 @@ use Nvl\Taxonomy\Exceptions\ClosedVocabularyException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
-use Nvl\Translatable\Services\ContentLocale;
+use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Translatable\Services\ContentLocale;
 
 /**
  * Resolves term references in batches and creates missing open-vocabulary roots.
@@ -113,14 +114,18 @@ final readonly class TermResolver
             $candidate = $byId->get($modelReferenceId);
 
             if (! $candidate instanceof Term) {
+                if (config('tenancy.enabled') === true) {
+                    throw new TenantBoundaryViolation(
+                        "Term [{$modelReferenceId}] is unavailable in the current tenant boundary.",
+                    );
+                }
+
                 throw new InvalidArgumentException(
                     "Term [{$modelReferenceId}] no longer exists in taxonomy [{$taxonomy}].",
                 );
             }
 
-            if ($candidate::class === Term::class) {
-                $this->boundary->assertRecord($candidate, 'taxonomy.terms');
-            }
+            $this->boundary->assertRecord($candidate, 'taxonomy.terms');
 
             $resolved[$candidate->id] = $candidate;
         }

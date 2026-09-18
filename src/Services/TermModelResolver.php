@@ -46,9 +46,7 @@ final readonly class TermModelResolver
         }
 
         $resolved = $modelClass::query()->where('taxonomy', $taxonomy)->lockForUpdate()->findOrFail($id);
-        if ($resolved::class === Term::class) {
-            $this->boundary->assertRecord($resolved, 'taxonomy.terms');
-        }
+        $this->boundary->assertRecord($resolved, 'taxonomy.terms');
 
         return $resolved;
     }

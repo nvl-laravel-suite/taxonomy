@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
-use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**

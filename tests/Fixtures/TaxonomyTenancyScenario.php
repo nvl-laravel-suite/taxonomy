@@ -43,13 +43,23 @@ final readonly class TaxonomyTenancyScenario
         return new self;
     }
 
-    /** @template T @param Closure(): T $callback @return T */
+    /**
+     * @template T
+     *
+     * @param  Closure(): T  $callback
+     * @return T
+     */
     public function run(string $tenant, Closure $callback): mixed
     {
         return app(TenantRunner::class)->run(new TenantId($tenant), $callback);
     }
 
-    /** @template T @param Closure(): T $callback @return T */
+    /**
+     * @template T
+     *
+     * @param  Closure(): T  $callback
+     * @return T
+     */
     public function platform(Closure $callback): mixed
     {
         return app(TenantRunner::class)->platform(new PlatformOperation('fixture.catalog', 'test', 'fixture'), $callback);

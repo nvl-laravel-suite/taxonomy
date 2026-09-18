@@ -8,6 +8,7 @@ use Illuminate\Contracts\Foundation\MaintenanceMode;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
+use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
@@ -64,8 +65,8 @@ abstract class TaxonomyTenancyTestCase extends Orchestra
             'taxonomy.table_names.termables' => 'tenant_termables',
             'taxonomy.table_names.term_tenant_adoption_copies' => 'tenant_term_adoption_copies',
             'taxonomy.taxonomies.tag' => ['model' => Term::class, 'hierarchical' => false, 'exclusive' => false, 'open' => true],
-            'taxonomy.taxonomies.category' => ['model' => Term::class, 'hierarchical' => true, 'exclusive' => true, 'open' => false, 'max_depth' => 3],
-            'taxonomy.owners' => ['test-owner' => Post::class],
+            'taxonomy.taxonomies.category' => ['model' => Category::class, 'hierarchical' => true, 'exclusive' => true, 'open' => false, 'max_depth' => 3],
+            'taxonomy.owners' => ['posts' => Post::class],
             'tenancy.enabled' => true,
             'tenancy.connection' => $fixtureConnection,
             'tenancy.resources.taxonomy' => 'tenant',

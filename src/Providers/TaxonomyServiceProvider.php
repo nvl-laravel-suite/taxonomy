@@ -19,7 +19,6 @@ use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tenancy\TaxonomyAdoptionAdapter;
 use Nvl\Taxonomy\Tenancy\TaxonomyTenancyResources;
-use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
 use Nvl\Tenancy\Services\TenantAdoptionRegistry;
 use Nvl\Tenancy\Services\TenantBoundary;
 use Nvl\Tenancy\Services\TenantResourceRegistry;
@@ -93,13 +92,8 @@ final class TaxonomyServiceProvider extends ServiceProvider
     ): void {
         $tenancyResources->register($tenantResources);
         $tenantAdoptions->register('taxonomy', TaxonomyAdoptionAdapter::class);
-        $this->registerTenantScopes($tenantBoundary);
+        $this->registerTenantScopes($tenantBoundary, $taxonomies);
         foreach ($taxonomies->all() as $definition) {
-            if (config('tenancy.enabled') === true && $definition->model !== Term::class) {
-                throw new TenantConfigurationInvalid(
-                    'Tenant-enabled Taxonomy vocabularies must use the canonical Term model.',
-                );
-            }
             $unknownOwners = array_diff(
                 $definition->allowedOwners,
                 array_keys($owners->all()),
@@ -150,11 +144,22 @@ final class TaxonomyServiceProvider extends ServiceProvider
     }
 
     /** Register tenant predicates on every configured term model and inherited row. */
-    private function registerTenantScopes(TenantBoundary $boundary): void
-    {
-        Term::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'taxonomy.terms');
-        });
+    private function registerTenantScopes(
+        TenantBoundary $boundary,
+        TaxonomyRegistry $taxonomies,
+    ): void {
+        $termModels = [Term::class];
+
+        foreach ($taxonomies->all() as $definition) {
+            $termModels[] = $definition->model;
+        }
+
+        foreach (array_unique($termModels) as $termModel) {
+            $termModel::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
+                $boundary->query($query, 'taxonomy.terms');
+            });
+        }
+
         Termable::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
             $boundary->query($query, 'taxonomy.attachments');
         });

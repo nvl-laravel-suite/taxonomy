@@ -13,8 +13,8 @@ use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
-use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Nvl\Tenancy\Providers\TenancyServiceProvider;
+use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 /**

@@ -57,7 +57,10 @@ final class RebuildTreeCommand extends Command
             return self::SUCCESS;
         }
 
-        $lock = Cache::lock($boundary->key('taxonomy.terms', 'rebuild:'.($taxonomy ?? '*')), 3600);
+        $lockKey = config('tenancy.enabled') === true
+            ? $boundary->key('taxonomy.terms', 'rebuild:'.($taxonomy ?? '*'))
+            : 'nvl:taxonomy:rebuild';
+        $lock = Cache::lock($lockKey, 3600);
 
         if (! $lock->get()) {
             $this->error('Another taxonomy rebuild owns the process lock.');

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Tenancy;
 
 use Illuminate\Database\Connection;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Support\Str;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
@@ -99,7 +98,11 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
         return new TenantBackfillResult(null, 0);
     }
 
-    /** Verify bounded ownership, canonical owners, and complete split graph state. */
+    /**
+     * Verify bounded ownership, canonical owners, and complete split graph state.
+     *
+     * @phpstan-impure
+     */
     public function verify(TenantAdoptionPlan $plan): TenantVerification
     {
         $this->assertConnection($plan);
@@ -163,13 +166,17 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
     /** Apply final constraints only after verification succeeds. */
     public function activate(TenantAdoptionPlan $plan): void
     {
-        if (! $this->verify($plan)->passed()) {
-            throw new TenantBoundaryViolation('Taxonomy tenant schema did not verify before activation.');
-        }
+        $this->assertVerified($plan, 'Taxonomy tenant schema did not verify before activation.');
         $path = dirname(__DIR__, 2).'/database/tenancy/2026_09_16_120002_constrain_taxonomy_tenant_ownership.php';
         $this->migrator->usingConnection($plan->connection, fn () => $this->migrator->run([$path], ['force' => true]));
-        if (! $this->verify($plan)->passed()) {
-            throw new TenantBoundaryViolation('Taxonomy tenant schema did not verify after activation.');
+        $this->assertVerified($plan, 'Taxonomy tenant schema did not verify after activation.');
+    }
+
+    /** Require a fresh persisted verification at one activation checkpoint. */
+    private function assertVerified(TenantAdoptionPlan $plan, string $message): void
+    {
+        if ($this->verify($plan)->errors !== []) {
+            throw new TenantBoundaryViolation($message);
         }
     }
 
@@ -284,7 +291,11 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
     private function destinations(TenantAssignment $assignment): array
     {
         $destinations = [$assignment->tenantId->value => $assignment->recordId];
-        foreach ($assignment->metadata['splits'] ?? [] as $split) {
+        $splits = $assignment->metadata['splits'] ?? [];
+        if (! is_array($splits)) {
+            throw new TenantConfigurationInvalid('Taxonomy split metadata is invalid.');
+        }
+        foreach ($splits as $split) {
             if (! is_array($split) || ! is_string($split['tenant_id'] ?? null) || ! is_string($split['destination_id'] ?? null)) {
                 throw new TenantConfigurationInvalid('Taxonomy split metadata is invalid.');
             }
@@ -335,7 +346,7 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
         if ($model->getConnection() !== $this->connectionForModel()) {
             throw new TenantConfigurationInvalid('Taxonomy owner adoption requires one effective connection.');
         }
-        $tenant = $model->newQueryWithoutScopes()->whereKey($attachment->termable_id)->value('tenant_id');
+        $tenant = $model->newQueryWithoutScopes()->whereKey($attachment->termable_id)->toBase()->value('tenant_id');
         if (! is_string($tenant) || ! Str::isUuid($tenant)) {
             throw new TenantBoundaryViolation('A Taxonomy attachment owner lacks reviewed tenant ownership.');
         }
