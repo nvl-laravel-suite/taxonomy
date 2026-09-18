@@ -19,9 +19,9 @@ return new class extends Migration
         $translations = TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n);
         $attachments = TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables);
 
-        $this->dropForeignColumns($schema, $terms, ['taxonomy', 'parent_id']);
-        $this->dropForeignColumns($schema, $translations, ['term_id']);
-        $this->dropForeignColumns($schema, $attachments, ['taxonomy', 'term_id']);
+        $this->dropForeign($schema, $terms, ['taxonomy', 'parent_id']);
+        $this->dropForeign($schema, $translations, ['term_id']);
+        $this->dropForeign($schema, $attachments, ['taxonomy', 'term_id']);
         $this->dropIndex($schema, $terms, 'terms_sibling_slug_unique', true);
         $this->dropIndex($schema, $translations, 'terms_i18n_owner_locale_unique', true);
         $this->dropUniqueColumns($schema, $attachments, ['term_id', 'termable_id', 'termable_type']);
@@ -116,37 +116,30 @@ return new class extends Migration
         }
     }
 
-    /** Drop one named foreign key when present. */
+    /** Drop one named foreign key or column set when present using its actual constraint name. */
     private function dropForeign(Builder $schema, string $table, string|array $identifier): void
-    {
-        if ($schema->hasTable($table) && array_any(
-            $schema->getForeignKeys($table),
-            static fn (array $foreign): bool => is_string($identifier)
-                ? ($foreign['name'] ?? null) === $identifier
-                : ($foreign['columns'] ?? []) === $identifier,
-        )) {
-            $schema->table($table, static fn (Blueprint $blueprint) => $blueprint->dropForeign($identifier));
-        }
-    }
-
-    /** Drop every foreign key matching one exact local column set. */
-    private function dropForeignColumns(Builder $schema, string $table, array $columns): void
     {
         if (! $schema->hasTable($table)) {
             return;
         }
 
-        $expected = $columns;
-        sort($expected);
+        $expectedColumns = is_array($identifier) ? $identifier : null;
+        if ($expectedColumns !== null) {
+            sort($expectedColumns);
+        }
 
         foreach ($schema->getForeignKeys($table) as $foreign) {
-            $actual = $foreign['columns'];
-            sort($actual);
+            $actualColumns = $foreign['columns'];
+            sort($actualColumns);
 
-            if ($actual === $expected) {
+            $matches = is_string($identifier)
+                ? ($foreign['name'] ?? null) === $identifier
+                : $actualColumns === $expectedColumns;
+
+            if ($matches) {
                 $name = $foreign['name'] ?? null;
-                $identifier = is_string($name) ? $name : $columns;
-                $schema->table($table, static fn (Blueprint $blueprint) => $blueprint->dropForeign($identifier));
+                $target = is_string($name) ? $name : $identifier;
+                $schema->table($table, static fn (Blueprint $blueprint) => $blueprint->dropForeign($target));
             }
         }
     }
