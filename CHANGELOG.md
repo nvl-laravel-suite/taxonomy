@@ -4,6 +4,8 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-21
+
 - Documented immutable adoption mapping recovery, backup requirements, and
   bounded tenant-graph cleanup for tenant-local taxonomy cutovers.
 
