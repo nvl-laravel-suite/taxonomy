@@ -4,6 +4,10 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Prepare `nvl/taxonomy` for independent Composer and Git publication; require `nvl/core` for shared Support and Data services.
+
 ## [2.0.1] - 2026-09-22
 
 - Documented immutable adoption mapping recovery, backup requirements, and
