@@ -48,11 +48,11 @@ abstract class TestCase extends Orchestra
      */
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('taxonomy.taxonomies', [
+        $app['config']->set('nvl-taxonomy.taxonomies', [
             'tag' => ['model' => Tag::class, 'hierarchical' => false, 'exclusive' => false, 'open' => true],
             'category' => ['model' => Category::class, 'hierarchical' => true, 'exclusive' => true, 'open' => false, 'max_depth' => 3],
         ]);
-        $app['config']->set('taxonomy.owners', [
+        $app['config']->set('nvl-taxonomy.owners', [
             'custom_key_posts' => CustomKeyPost::class,
             'posts' => Post::class,
         ]);

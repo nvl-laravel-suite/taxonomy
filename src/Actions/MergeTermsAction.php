@@ -67,7 +67,7 @@ final readonly class MergeTermsAction
             $source = $context->source;
             $destination = $context->destination;
             $tenant = $source->getRawOriginal('tenant_id');
-            if (config('tenancy.enabled') === true && ! is_string($tenant)) {
+            if (config('nvl-tenancy.enabled') === true && ! is_string($tenant)) {
                 throw new TenantBoundaryViolation('A merged Taxonomy term lacks tenant ownership.');
             }
 

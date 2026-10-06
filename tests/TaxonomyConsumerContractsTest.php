@@ -61,7 +61,7 @@ it('supports the public owner query and inspection workflow', function () {
 
     expect($categorized->hasTerm('tag', $tag))->toBeFalse();
 
-    config()->set('taxonomy.limits.bulk_terms', 1);
+    config()->set('nvl-taxonomy.limits.bulk_terms', 1);
 
     expect(fn () => Post::query()->withAnyTerms('tag', ['one', 'two'])->get())
         ->toThrow(InvalidArgumentException::class)
@@ -178,13 +178,13 @@ it('rejects malformed configured and programmatic vocabulary definitions', funct
     ];
 
     foreach ($invalidConfigurations as $configuration) {
-        config()->set('taxonomy.taxonomies', $configuration);
+        config()->set('nvl-taxonomy.taxonomies', $configuration);
 
         expect(fn () => new TaxonomyRegistry)
             ->toThrow(InvalidArgumentException::class);
     }
 
-    config()->set('taxonomy.taxonomies', []);
+    config()->set('nvl-taxonomy.taxonomies', []);
     $registry = new TaxonomyRegistry;
     $valid = new TaxonomyDefinition(
         taxonomy: 'probe',
@@ -252,7 +252,8 @@ it('rejects malformed configured and programmatic vocabulary definitions', funct
         ->toHaveKeys(['taxonomy', 'slug', 'translations', 'parentId', 'expectedRevision']);
 });
 
-it('enforces stable owner aliases at registration and provider resolution', function () {
+it('validates capability aliases without installing a host morph map', function () {
+    $originalMorphMap = Relation::morphMap();
     $registry = new TaxonomyOwnerRegistry(
         app(TenantResourceRegistry::class),
         app(TenantBoundary::class),
@@ -261,8 +262,9 @@ it('enforces stable owner aliases at registration and provider resolution', func
     $registry->register('posts', Post::class);
     $registry->register('posts', Post::class);
 
-    expect($registry->aliasFor(new Post))->toBe('posts')
-        ->and($registry->all())->toBe(['posts' => Post::class])
+    expect($registry->aliasFor(new Post))->toBe(Post::class)
+        ->and($registry->all())->toBe([Post::class => Post::class])
+        ->and($registry->unknownReferences(['posts', Post::class, 'unknown']))->toBe(['unknown'])
         ->and(fn () => $registry->register('Invalid Alias', Post::class))
         ->toThrow(InvalidArgumentException::class)
         ->and(fn () => $registry->register('invalid-model', stdClass::class))
@@ -276,34 +278,36 @@ it('enforces stable owner aliases at registration and provider resolution', func
             app(TenantBoundary::class),
             app(OwnerRegistry::class),
         ))->register('posts', CustomKeyPost::class))
-        ->toThrow(InvalidArgumentException::class)
-        ->and(fn () => (new TaxonomyOwnerRegistry(
-            app(TenantResourceRegistry::class),
-            app(TenantBoundary::class),
-            app(OwnerRegistry::class),
-        ))->register('new-posts', Post::class))
         ->toThrow(InvalidArgumentException::class);
 
-    expect(Relation::getMorphedModel('posts'))->toBe(Post::class);
+    $separateRegistry = new TaxonomyOwnerRegistry(
+        app(TenantResourceRegistry::class),
+        app(TenantBoundary::class),
+        app(OwnerRegistry::class),
+    );
+    $separateRegistry->register('new-posts', Post::class);
+    expect($separateRegistry->aliasFor(new Post))->toBe(Post::class)
+        ->and($separateRegistry->all())->toBe([Post::class => Post::class])
+        ->and(Relation::morphMap())->toBe($originalMorphMap);
 
-    config()->set('taxonomy.owners', 'invalid');
+    config()->set('nvl-taxonomy.owners', 'invalid');
     app()->forgetInstance(TaxonomyOwnerRegistry::class);
     expect(fn () => app(TaxonomyOwnerRegistry::class))
         ->toThrow(InvalidArgumentException::class);
 
-    config()->set('taxonomy.owners', [0 => Post::class]);
+    config()->set('nvl-taxonomy.owners', [42]);
     app()->forgetInstance(TaxonomyOwnerRegistry::class);
     expect(fn () => app(TaxonomyOwnerRegistry::class))
         ->toThrow(InvalidArgumentException::class);
 
-    config()->set('taxonomy.slugs.generator', stdClass::class);
+    config()->set('nvl-taxonomy.slugs.generator', stdClass::class);
     app()->forgetInstance(SlugGenerator::class);
     expect(fn () => app(SlugGenerator::class))
         ->toThrow(InvalidArgumentException::class);
 });
 
 it('reports missing consumer schema without attempting data inspection', function () {
-    config()->set('taxonomy.table_names', [
+    config()->set('nvl-taxonomy.table_names', [
         'terms' => 'missing_terms',
         'terms_i18n' => 'missing_terms_i18n',
         'termables' => 'missing_termables',

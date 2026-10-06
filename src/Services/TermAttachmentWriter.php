@@ -147,14 +147,14 @@ final readonly class TermAttachmentWriter
         $ownerAlias = $this->owners->aliasFor($owner);
 
         if ($definition->allowedOwners !== []
-            && ! in_array($ownerAlias, $definition->allowedOwners, true)) {
+            && ! in_array($owner::class, array_map($this->owners->model(...), $definition->allowedOwners), true)) {
             throw new InvalidArgumentException(
                 "Owner [{$ownerAlias}] is not allowed for taxonomy [{$taxonomy}].",
             );
         }
 
         $tenant = $owner->getRawOriginal('tenant_id');
-        if (config('tenancy.enabled') === true && ! is_string($tenant)) {
+        if (config('nvl-tenancy.enabled') === true && ! is_string($tenant)) {
             throw new TenantBoundaryViolation('The canonical taxonomy owner lacks tenant ownership.');
         }
 

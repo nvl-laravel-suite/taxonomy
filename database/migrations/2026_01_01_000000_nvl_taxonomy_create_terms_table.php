@@ -46,7 +46,7 @@ return new class extends Migration
             $table->index(['taxonomy', 'parent_id', 'position']);
             $table->foreign(['taxonomy', 'parent_id'], 'terms_taxonomy_parent_foreign')
                 ->references(['taxonomy', 'id'])
-                ->on((string) config('taxonomy.table_names.terms', TaxonomyTables::get(TaxonomyTables::Terms)))
+                ->on((string) config('nvl-taxonomy.table_names.terms', TaxonomyTables::get(TaxonomyTables::Terms)))
                 ->restrictOnDelete();
         });
     }

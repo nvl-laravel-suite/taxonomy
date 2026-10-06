@@ -11,11 +11,11 @@ See the [installation and publishing guide](https://github.com/nvl-laravel-suite
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/taxonomy:^2.0` |
+| Installed through | `composer require nvl/taxonomy:^5.0` |
 | Module identifier | `nvl/taxonomy` |
 | PHP namespace | `Nvl\Taxonomy` |
 | Service provider | `Nvl\Taxonomy\Providers\TaxonomyServiceProvider` |
-| Configuration | `config/taxonomy.php` |
+| Configuration | `config/nvl-taxonomy.php` |
 
 ## Purpose
 
@@ -26,30 +26,30 @@ The package depends on `nvl/core`, `nvl/tenancy`, and `nvl/translatable` inside 
 ## Requirements and installation
 
 ```bash
-composer require nvl/taxonomy:^2.0
+composer require nvl/taxonomy:^5.0
 php artisan migrate
 ```
 
 Laravel auto-discovers `TaxonomyServiceProvider`. Optional publish tags are:
 
 ```bash
-php artisan vendor:publish --tag=taxonomy-config
-php artisan vendor:publish --tag=taxonomy-migrations
-php artisan vendor:publish --tag=taxonomy-skills
+php artisan vendor:publish --tag=nvl-taxonomy-config
+php artisan vendor:publish --tag=nvl-taxonomy-migrations
+php artisan vendor:publish --tag=nvl-taxonomy-skills
 ```
 
-Clean-install migrations use UUID term identifiers, nullable UUID parent identifiers, dedicated term translations, and string-compatible owner identifiers. Set `taxonomy.migrations.enabled=false` during controlled adoption of existing tables.
+Clean-install migrations use UUID term identifiers, nullable UUID parent identifiers, dedicated term translations, and string-compatible owner identifiers. Set `nvl-taxonomy.migrations.enabled=false` during controlled adoption of existing tables.
 
 Choose exactly one migration owner. For automatic vendor loading, leave
-`taxonomy.migrations.enabled=true` and do not publish `taxonomy-migrations`.
-For host-owned migrations, publish `taxonomy-migrations`, set
-`taxonomy.migrations.enabled=false` before the first migration, and maintain
+`nvl-taxonomy.migrations.enabled=true` and do not publish `nvl-taxonomy-migrations`.
+For host-owned migrations, publish `nvl-taxonomy-migrations`, set
+`nvl-taxonomy.migrations.enabled=false` before the first migration, and maintain
 the copied files as application migrations. Never run both sources; Laravel
 retimestamps published migrations.
 
 ## Register vocabularies and owners
 
-Declare stable vocabulary rules in `config/taxonomy.php`:
+Declare stable vocabulary rules in `config/nvl-taxonomy.php`:
 
 ```php
 'taxonomies' => [
@@ -224,18 +224,18 @@ Released under the [MIT License](LICENSE).
 Declare a model once in `config/nvl-core.php`:
 
 ```php
-'owners' => ['article' => Article::class],
+'owners' => [Article::class],
 ```
 
-Enable this package capability separately in `config/taxonomy.php`:
+Enable this package capability separately in `config/nvl-taxonomy.php`:
 
 ```php
-'owners' => ['article'],
+'owners' => [Article::class],
 ```
 
 The shared alias must match the Taxonomy owner identity. Registering an identity does not expand vocabulary allowed_owners or authorize term mutations. Core registration does not add the model to this package's allowlist.
 
-Existing package class/resolver/handler registrations remain accepted for one major cycle. Run `php artisan nvl:doctor --strict --format=json` to inspect compatibility diagnostics. See [UPGRADING.md](UPGRADING.md) before changing a persisted morph type.
+Laravel's `getMorphClass()` determines stored identity. These class declarations do not install host morph maps. Keep resolvers, handlers and authorization independent; use `nvl:doctor --strict --format=json` to review legacy alias mismatches or stored identity drift. See [UPGRADING.md](UPGRADING.md) before changing the host's morph map.
 
 ## Shared consumer diagnostics
 
@@ -244,11 +244,11 @@ Run `php artisan nvl:doctor --strict --format=json` to combine the read-only che
 
 ## Shared infrastructure options
 
-Attachment actions and maintenance command locks use `taxonomy.locks.store`, then `nvl-core.locks.store`, then `cache.default`. `locks.seconds` and `locks.wait_seconds` still control attachment locking, and command lock durations remain unchanged. Production nodes must share a lock-capable store.
+Attachment actions and maintenance command locks use `nvl-taxonomy.locks.store`, then `nvl-core.locks.store`, then `cache.default`. `locks.seconds` and `locks.wait_seconds` still control attachment locking, and command lock durations remain unchanged. Production nodes must share a lock-capable store.
 
 ## Next major: isolated schema identities
 
-Use `taxonomy.tables.<logical-key>` for every table and `taxonomy.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
+Use `nvl-taxonomy.tables.<logical-key>` for every table and `nvl-taxonomy.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
 
 | Logical key | New default | Previous name |
 | --- | --- | --- |
@@ -257,4 +257,10 @@ Use `taxonomy.tables.<logical-key>` for every table and `taxonomy.connection` fo
 | `termables` | `nvl_taxonomy_termables` | `termables` |
 | `tenant_adoption_copies` | `nvl_taxonomy_tenant_adoption_copies` | `term_tenant_adoption_copies` |
 
-Migration filenames contain `nvl_taxonomy_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before any migration in the batch runs; legacy storage with old history needs an ownership decision.
+Migration filenames contain `nvl_taxonomy_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before that owned migration runs; use `nvl:schema:preflight` for an explicit whole-batch check; legacy storage with old history needs an ownership decision.
+
+Owned cache and lock identities follow `nvl:<package>:<purpose>:…`. Attachment locks use `nvl:taxonomy:attachments:` instead of the generic `attachments:` key. Rebuild and prune locks use `nvl:taxonomy:rebuild:` and `nvl:taxonomy:prune:` outside tenant identities. Existing generic host locks are never acquired or removed. See [UPGRADING](UPGRADING.md) for coordinated worker and lock lease cutover.
+
+## Canonical configuration ownership
+
+Use `nvl-taxonomy` settings in `config/nvl-taxonomy.php` and canonical package environment names. Old generic roots are foreign unless an upgrading NVL host explicitly selects them in Core's default-off compatibility. Canonical false/null/empty values win; no old roots are populated or written back. Keep logical package/resource IDs unchanged. Review [Core's rename inventory and cache/worker cutover](https://github.com/nvl-laravel-suite/core/blob/main/UPGRADING.md#major-5-canonical-configuration-and-environment).

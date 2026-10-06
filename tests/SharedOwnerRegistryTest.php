@@ -23,8 +23,9 @@ it('resolves shared taxonomy references without registering other core owners', 
     $registry = app()->build(TaxonomyOwnerRegistry::class);
     $registry->register('posts', 'posts');
 
-    expect($registry->aliasFor(new Post))->toBe('posts')
-        ->and($registry->all())->toBe(['posts' => Post::class])
+    expect($registry->aliasFor(new Post))->toBe(Post::class)
+        ->and($registry->all())->toBe([Post::class => Post::class])
+        ->and($registry->model('posts'))->toBe(Post::class)
         ->and(fn () => $registry->aliasFor(new CustomKeyPost))->toThrow(InvalidArgumentException::class);
 });
 

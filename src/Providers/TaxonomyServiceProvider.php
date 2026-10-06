@@ -15,6 +15,7 @@ use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
+use Nvl\Support\Traits\RegistersNamespacedResources;
 use Nvl\Taxonomy\Commands;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
@@ -34,6 +35,7 @@ use Nvl\Translatable\Services\TranslationResourceRegistry;
 final class TaxonomyServiceProvider extends ServiceProvider
 {
     use MergesPackageConfiguration;
+    use RegistersNamespacedResources;
 
     /**
      * Register merged configuration and package singletons.
@@ -43,11 +45,11 @@ final class TaxonomyServiceProvider extends ServiceProvider
         $this->app->register(SupportServiceProvider::class);
         PackageDoctorContributor::register($this->app, 'nvl/taxonomy', fn (): array => $this->app->make(TaxonomyDoctor::class)->inspect());
 
-        $this->mergePackageConfiguration(__DIR__.'/../../config/taxonomy.php', 'taxonomy');
+        $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-taxonomy.php', 'taxonomy');
 
         $this->app->singleton(TaxonomyRegistry::class);
         $this->app->scoped(SlugGenerator::class, function (Container $app): SlugGenerator {
-            $generator = config('taxonomy.slugs.generator', SlugGenerator::class);
+            $generator = config('nvl-taxonomy.slugs.generator', SlugGenerator::class);
 
             if (! is_string($generator) || ! is_a($generator, SlugGenerator::class, true)) {
                 throw new InvalidArgumentException(
@@ -65,7 +67,7 @@ final class TaxonomyServiceProvider extends ServiceProvider
                 $app->make(TenantBoundary::class),
                 $app->make(OwnerRegistry::class),
             );
-            $configuredOwners = config('taxonomy.owners', []);
+            $configuredOwners = config('nvl-taxonomy.owners', []);
 
             if (! is_array($configuredOwners)) {
                 throw new InvalidArgumentException('Taxonomy owners must be an alias-to-model array.');
@@ -106,10 +108,7 @@ final class TaxonomyServiceProvider extends ServiceProvider
         }
         $this->registerTenantScopes($tenantBoundary, $taxonomies);
         foreach ($taxonomies->all() as $definition) {
-            $unknownOwners = array_diff(
-                $definition->allowedOwners,
-                array_keys($owners->all()),
-            );
+            $unknownOwners = $owners->unknownReferences($definition->allowedOwners);
 
             if ($unknownOwners !== []) {
                 throw new InvalidArgumentException(
@@ -122,13 +121,13 @@ final class TaxonomyServiceProvider extends ServiceProvider
         $typeScriptSources->register(__DIR__.'/..', 'nvl/taxonomy');
 
         $this->publishes([
-            __DIR__.'/../../config/taxonomy.php' => config_path('taxonomy.php'),
+            __DIR__.'/../../config/nvl-taxonomy.php' => config_path('nvl-taxonomy.php'),
         ], 'taxonomy-config');
 
         $this->publishesMigrations([
             __DIR__.'/../../database/migrations' => database_path('migrations'),
         ], 'taxonomy-migrations');
-        if ((bool) config('taxonomy.migrations.enabled', true)) {
+        if ((bool) config('nvl-taxonomy.migrations.enabled', true)) {
             $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
         }
 

@@ -40,7 +40,7 @@ final class TaxonomyConfiguration
      */
     public static function positiveLimit(string $key, int $default): int
     {
-        $limit = config("taxonomy.limits.{$key}", $default);
+        $limit = config("nvl-taxonomy.limits.{$key}", $default);
 
         return is_int($limit) && $limit > 0 ? $limit : $default;
     }
@@ -115,7 +115,7 @@ final class TaxonomyConfiguration
      */
     public static function attachmentLockName(TenantBoundary $boundary, Model $owner, string $taxonomy): string
     {
-        return $boundary->key('taxonomy.terms', 'attachments:'.hash('sha256', implode('|', [
+        return 'nvl:taxonomy:attachments:'.$boundary->key('taxonomy.terms', hash('sha256', implode('|', [
             $owner->getMorphClass(),
             self::modelIdentifier($owner),
             $taxonomy,
@@ -128,7 +128,7 @@ final class TaxonomyConfiguration
      */
     private static function positiveInteger(string $key, int $default): int
     {
-        $value = config("taxonomy.{$key}", $default);
+        $value = config("nvl-taxonomy.{$key}", $default);
 
         return is_int($value) && $value > 0 ? $value : $default;
     }

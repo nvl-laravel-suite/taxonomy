@@ -44,7 +44,7 @@ use Nvl\Translatable\Exceptions\InvalidTranslatableFieldException;
 use Nvl\Translatable\Services\ContentLocale;
 
 it('preserves nested taxonomy defaults around consumer definitions', function () {
-    config()->set('taxonomy', [
+    config()->set('nvl-taxonomy', [
         'taxonomies' => [
             'tag' => [
                 'open' => true,
@@ -54,8 +54,8 @@ it('preserves nested taxonomy defaults around consumer definitions', function ()
 
     (new TaxonomyServiceProvider(app()))->register();
 
-    expect(config('taxonomy.taxonomies.tag.sort'))->toBe('position')
-        ->and(config('taxonomy.taxonomies.category.max_depth'))->toBe(3)
+    expect(config('nvl-taxonomy.taxonomies.tag.sort'))->toBe('position')
+        ->and(config('nvl-taxonomy.taxonomies.category.max_depth'))->toBe(3)
         ->and(TaxonomyTables::get(TaxonomyTables::I18n))->toBe('nvl_taxonomy_i18n');
 });
 
@@ -136,11 +136,11 @@ it('removes raw attachment rows when an owning model is deleted', function () {
     $post = Post::create(['title' => 'Disposable post']);
     app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['laravel']);
 
-    $this->assertDatabaseCount(config('taxonomy.table_names.termables', 'termables'), 1);
+    $this->assertDatabaseCount(config('nvl-taxonomy.table_names.termables', 'termables'), 1);
 
     $post->delete();
 
-    $this->assertDatabaseCount(config('taxonomy.table_names.termables', 'termables'), 0);
+    $this->assertDatabaseCount(config('nvl-taxonomy.table_names.termables', 'termables'), 0);
     expect(Tag::query()->where('slug', 'laravel')->exists())->toBeTrue();
 });
 
@@ -166,8 +166,8 @@ it('queries category subtrees with qualified relationship columns', function () 
 });
 
 it('creates dedicated term translations with deterministic field fallback', function () {
-    config()->set('translatable.locales', ['en', 'bg']);
-    config()->set('translatable.fallback_locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en', 'bg']);
+    config()->set('nvl-translatable.fallback_locales', ['en']);
 
     $term = app(CreateTermAction::class)->execute(
         MutateTermPayload::from([
@@ -193,8 +193,8 @@ it('creates dedicated term translations with deterministic field fallback', func
 });
 
 it('patches and replaces translated term copy through explicit update modes', function () {
-    config()->set('translatable.locales', ['en', 'bg']);
-    config()->set('translatable.fallback_locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en', 'bg']);
+    config()->set('nvl-translatable.fallback_locales', ['en']);
 
     $term = app(CreateTermAction::class)->execute(MutateTermPayload::from([
         'taxonomy' => 'category',
@@ -242,8 +242,8 @@ it('patches and replaces translated term copy through explicit update modes', fu
 });
 
 it('stores localized copy only in dedicated translation rows', function () {
-    config()->set('translatable.locales', ['en', 'bg']);
-    config()->set('translatable.fallback_locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en', 'bg']);
+    config()->set('nvl-translatable.fallback_locales', ['en']);
 
     $term = app(CreateTermAction::class)->execute(
         MutateTermPayload::from([
@@ -281,8 +281,8 @@ it('rolls back term creation on the configured taxonomy connection when translat
         'prefix' => '',
         'foreign_key_constraints' => true,
     ]);
-    config()->set('taxonomy.storage.connection', $connection);
-    config()->set('translatable.locales', ['en']);
+    config()->set('nvl-taxonomy.storage.connection', $connection);
+    config()->set('nvl-translatable.locales', ['en']);
 
     try {
         $termsMigration = require __DIR__.'/../database/migrations/2026_01_01_000000_nvl_taxonomy_create_terms_table.php';
@@ -310,7 +310,7 @@ it('rolls back term creation on the configured taxonomy connection when translat
 });
 
 it('uses the request scoped content locale when creating open vocabulary terms', function () {
-    config()->set('translatable.locales', ['en', 'bg']);
+    config()->set('nvl-translatable.locales', ['en', 'bg']);
     app(ContentLocale::class)->set('bg');
 
     $post = Post::create(['title' => 'Localized post']);
@@ -323,7 +323,7 @@ it('uses the request scoped content locale when creating open vocabulary terms',
 });
 
 it('uses UUID keys, prevents cycles and stale writes, and exposes a healthy doctor', function () {
-    config()->set('translatable.locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en']);
     $create = app(CreateTermAction::class);
     $parent = $create->execute(MutateTermPayload::from([
         'taxonomy' => 'category',
@@ -368,7 +368,7 @@ it('uses UUID keys, prevents cycles and stale writes, and exposes a healthy doct
 });
 
 it('synchronizes registered owner attachments and enforces deletion strategies', function () {
-    config()->set('translatable.locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en']);
     $post = Post::create(['title' => 'Attachment owner']);
     $term = app(CreateTermAction::class)->execute(MutateTermPayload::from([
         'taxonomy' => 'tag',
@@ -454,12 +454,12 @@ it('stores stable owner aliases and UUID-backed attachment rows', function () {
     $post = Post::create(['title' => 'Stable owner']);
     app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['laravel']);
 
-    $row = DB::table(config('taxonomy.table_names.termables', 'termables'))->first();
+    $row = DB::table(config('nvl-taxonomy.table_names.termables', 'termables'))->first();
 
     expect($row)->not->toBeNull()
         ->and($row->id)->toBeUuid()
-        ->and($row->termable_type)->toBe('posts')
-        ->and($post->getMorphClass())->toBe('posts');
+        ->and($row->termable_type)->toBe(Post::class)
+        ->and($post->getMorphClass())->toBe(Post::class);
 });
 
 it('resolves raw attachment relations through custom owner primary keys', function () {
@@ -479,10 +479,10 @@ it('uses the UUID pivot model for relation-level attachment compatibility', func
     $tag = Tag::create(['slug' => 'relation-tag']);
     $post->tags()->attach($tag, ['taxonomy' => 'tag', 'position' => 0]);
 
-    $row = DB::table(config('taxonomy.table_names.termables', 'termables'))->first();
+    $row = DB::table(config('nvl-taxonomy.table_names.termables', 'termables'))->first();
 
     expect($row?->id)->toBeUuid()
-        ->and($row?->termable_type)->toBe('posts');
+        ->and($row?->termable_type)->toBe(Post::class);
 });
 
 it('rejects multiple exclusive terms without replacing the current attachment', function () {
@@ -501,7 +501,7 @@ it('rejects multiple exclusive terms without replacing the current attachment', 
 });
 
 it('requires optimistic revisions for every update', function () {
-    config()->set('translatable.locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en']);
     $term = app(CreateTermAction::class)->execute(MutateTermPayload::from([
         'taxonomy' => 'tag',
         'slug' => 'revisioned',
@@ -573,8 +573,8 @@ it('protects closed vocabulary terms from orphan pruning by default', function (
 });
 
 it('enforces metadata depth and canonical slug contracts', function () {
-    config()->set('translatable.locales', ['en']);
-    config()->set('taxonomy.limits.metadata_depth', 2);
+    config()->set('nvl-translatable.locales', ['en']);
+    config()->set('nvl-taxonomy.limits.metadata_depth', 2);
 
     expect(fn () => app(CreateTermAction::class)->execute(MutateTermPayload::from([
         'taxonomy' => 'tag',
@@ -595,7 +595,7 @@ it('enforces metadata depth and canonical slug contracts', function () {
 });
 
 it('checks bulk limits before creating open-vocabulary terms', function () {
-    config()->set('taxonomy.limits.bulk_terms', 1);
+    config()->set('nvl-taxonomy.limits.bulk_terms', 1);
     $post = Post::create(['title' => 'Limited']);
 
     expect(fn () => app(SyncTermAttachmentsAction::class)->execute(
@@ -654,7 +654,7 @@ it('supports generic trees, no-op unknown detaches, and merge invariants', funct
 });
 
 it('loads localized trees without per-node translation queries', function () {
-    config()->set('translatable.locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en']);
     $create = app(CreateTermAction::class);
     $root = $create->execute(MutateTermPayload::from([
         'taxonomy' => 'category',
@@ -701,7 +701,7 @@ it('loads localized trees without per-node translation queries', function () {
 });
 
 it('discards term events when an outer transaction rolls back', function () {
-    config()->set('translatable.locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en']);
     Event::fake([TermChanged::class]);
     $connection = DB::connection((new Term)->getConnectionName());
     $initialTransactionLevel = $connection->transactionLevel();
@@ -727,7 +727,7 @@ it('discards term events when an outer transaction rolls back', function () {
 });
 
 it('emits one committed event with the resulting term revision', function () {
-    config()->set('translatable.locales', ['en']);
+    config()->set('nvl-translatable.locales', ['en']);
     Event::fake([TermChanged::class]);
 
     $term = app(CreateTermAction::class)->execute(MutateTermPayload::from([
@@ -747,9 +747,9 @@ it('emits one committed event with the resulting term revision', function () {
 });
 
 it('does not swallow non-unique database failures while creating open terms', function () {
-    $translationTable = config('taxonomy.table_names.terms_i18n', 'terms_i18n');
+    $translationTable = config('nvl-taxonomy.table_names.terms_i18n', 'terms_i18n');
     config()->set(
-        'taxonomy.table_names.terms_i18n',
+        'nvl-taxonomy.table_names.terms_i18n',
         'taxonomy_translation_failure',
     );
     $post = Post::create(['title' => 'Failed open term']);
@@ -763,7 +763,7 @@ it('does not swallow non-unique database failures while creating open terms', fu
             ->and(Tag::query()->where('slug', 'must-rollback')->exists())->toBeFalse()
             ->and(DB::table(TaxonomyTables::Termables)->count())->toBe(0);
     } finally {
-        config()->set('taxonomy.table_names.terms_i18n', $translationTable);
+        config()->set('nvl-taxonomy.table_names.terms_i18n', $translationTable);
     }
 });
 
@@ -815,8 +815,8 @@ it('validates programmatic taxonomy definitions at the registry boundary', funct
 });
 
 it('reserves UUID syntax for identifiers and bounds translation descriptions', function () {
-    config()->set('translatable.locales', ['en']);
-    config()->set('taxonomy.limits.description_chars', 3);
+    config()->set('nvl-translatable.locales', ['en']);
+    config()->set('nvl-taxonomy.limits.description_chars', 3);
 
     expect(fn () => app(CreateTermAction::class)->execute(MutateTermPayload::from([
         'taxonomy' => 'tag',
@@ -910,8 +910,8 @@ it('keeps move merge delete and attachments on the configured connection', funct
         'prefix' => '',
         'foreign_key_constraints' => true,
     ]);
-    config()->set('taxonomy.storage.connection', $connection);
-    config()->set('translatable.locales', ['en']);
+    config()->set('nvl-taxonomy.storage.connection', $connection);
+    config()->set('nvl-translatable.locales', ['en']);
 
     try {
         foreach ([
@@ -974,7 +974,7 @@ it('keeps move merge delete and attachments on the configured connection', funct
             ->and(DB::connection($connection)->table(TaxonomyTables::get(TaxonomyTables::Termables))->value('term_id'))->toBe($destination->id)
             ->and(DB::connection()->table(TaxonomyTables::get(TaxonomyTables::Terms))->count())->toBe(0);
     } finally {
-        config()->set('taxonomy.storage.connection', null);
+        config()->set('nvl-taxonomy.storage.connection', null);
         DB::purge($connection);
         unlink($database);
     }

@@ -29,7 +29,7 @@ final class RebuildTreeCommand extends Command
     public function handle(RebuildTreeAction $rebuild, TenantRunner $runner, TenantBoundary $boundary): int
     {
         $tenant = $this->option('tenant');
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             if (! is_string($tenant) || $tenant === '') {
                 $this->error('Enabled taxonomy maintenance requires --tenant.');
 
@@ -57,8 +57,8 @@ final class RebuildTreeCommand extends Command
             return self::SUCCESS;
         }
 
-        $lockKey = config('tenancy.enabled') === true
-            ? $boundary->key('taxonomy.terms', 'rebuild:'.($taxonomy ?? '*'))
+        $lockKey = config('nvl-tenancy.enabled') === true
+            ? 'nvl:taxonomy:rebuild:'.$boundary->key('taxonomy.terms', 'rebuild:'.($taxonomy ?? '*'))
             : 'nvl:taxonomy:rebuild';
         $lock = TaxonomyConfiguration::lock($lockKey, 3600);
 

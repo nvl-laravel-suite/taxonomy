@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Actions\AttachTermsAction;
 use Nvl\Taxonomy\Actions\MergeTermsAction;
 use Nvl\Taxonomy\Actions\MoveTermAction;
@@ -76,6 +78,19 @@ it('prunes only the selected tenant vocabulary', function (): void {
     $scenario = TaxonomyTenancyScenario::install();
     $termA = $scenario->term($scenario::A, 'orphan-a');
     $termB = $scenario->term($scenario::B, 'orphan-b');
+    $lockKey = $scenario->run($scenario::A, static fn (): string => 'nvl:taxonomy:prune:'.app(TenantBoundary::class)->key('taxonomy.terms', 'prune:tag'));
+    $lock = Cache::lock($lockKey, 60);
+    expect($lock->get())->toBeTrue();
+
+    try {
+        $this->artisan('nvl:taxonomy:prune', [
+            'taxonomy' => 'tag',
+            '--tenant' => $scenario::A,
+            '--force' => true,
+        ])->assertFailed();
+    } finally {
+        $lock->release();
+    }
 
     $this->artisan('nvl:taxonomy:prune', [
         'taxonomy' => 'tag',
@@ -85,4 +100,28 @@ it('prunes only the selected tenant vocabulary', function (): void {
 
     expect($scenario->run($scenario::A, fn (): bool => Term::query()->whereKey($termA->id)->exists()))->toBeFalse()
         ->and($scenario->run($scenario::B, fn (): bool => Term::query()->whereKey($termB->id)->exists()))->toBeTrue();
+});
+
+it('serializes tenant tree rebuilding under the owned operation prefix', function (): void {
+    $scenario = TaxonomyTenancyScenario::install();
+    $term = $scenario->term($scenario::A, 'out-of-order', 'category');
+    $scenario->run($scenario::A, static fn () => $term->update(['position' => 8]));
+    $lockKey = $scenario->run($scenario::A, static fn (): string => 'nvl:taxonomy:rebuild:'.app(TenantBoundary::class)->key('taxonomy.terms', 'rebuild:category'));
+    $lock = Cache::lock($lockKey, 60);
+    expect($lock->get())->toBeTrue();
+
+    try {
+        $this->artisan('nvl:taxonomy:rebuild', [
+            'taxonomy' => 'category',
+            '--tenant' => $scenario::A,
+        ])->assertFailed();
+    } finally {
+        $lock->release();
+    }
+
+    $this->artisan('nvl:taxonomy:rebuild', [
+        'taxonomy' => 'category',
+        '--tenant' => $scenario::A,
+    ])->assertSuccessful();
+    expect($scenario->run($scenario::A, static fn (): int => $term->refresh()->position))->toBe(0);
 });

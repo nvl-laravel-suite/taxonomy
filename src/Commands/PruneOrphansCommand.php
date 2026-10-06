@@ -42,7 +42,7 @@ final class PruneOrphansCommand extends Command
         TenantBoundary $boundary,
     ): int {
         $tenant = $this->option('tenant');
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             if (! is_string($tenant) || $tenant === '') {
                 $this->error('Enabled taxonomy maintenance requires --tenant.');
 
@@ -103,8 +103,8 @@ final class PruneOrphansCommand extends Command
             return self::FAILURE;
         }
 
-        $lockKey = config('tenancy.enabled') === true
-            ? $boundary->key('taxonomy.terms', 'prune:'.(is_string($taxonomy) ? $taxonomy : '*'))
+        $lockKey = config('nvl-tenancy.enabled') === true
+            ? 'nvl:taxonomy:prune:'.$boundary->key('taxonomy.terms', 'prune:'.(is_string($taxonomy) ? $taxonomy : '*'))
             : 'nvl:taxonomy:prune';
         $lock = TaxonomyConfiguration::lock($lockKey, 3600);
 

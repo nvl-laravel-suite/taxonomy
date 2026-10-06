@@ -379,7 +379,7 @@ trait HasTaxonomies
     private static function assertRegisteredTaxonomyOwner(Model $model): void
     {
         Container::getInstance()->make(TaxonomyOwnerRegistry::class)->aliasFor($model);
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             Container::getInstance()->make(TenantResourceRegistry::class)->forModel($model);
         }
     }
@@ -387,7 +387,7 @@ trait HasTaxonomies
     /** Resolve the active tenant used by pivot correlations, preserving disabled compatibility. */
     private static function currentTaxonomyTenant(): ?string
     {
-        if (config('tenancy.enabled') !== true) {
+        if (config('nvl-tenancy.enabled') !== true) {
             return null;
         }
 

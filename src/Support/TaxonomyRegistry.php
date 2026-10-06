@@ -26,7 +26,7 @@ final class TaxonomyRegistry
 
     protected function loadFromConfig(): void
     {
-        $taxonomies = config('taxonomy.taxonomies', []);
+        $taxonomies = config('nvl-taxonomy.taxonomies', []);
 
         if (! is_array($taxonomies)) {
             throw new InvalidArgumentException('Taxonomy definitions must be an array.');

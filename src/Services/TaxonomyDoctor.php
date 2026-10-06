@@ -40,7 +40,7 @@ final readonly class TaxonomyDoctor
     public function inspect(): array
     {
         $schema = Schema::connection(TaxonomyConfiguration::connection());
-        $tenantColumns = config('tenancy.enabled') === true ? ['tenant_id'] : [];
+        $tenantColumns = config('nvl-tenancy.enabled') === true ? ['tenant_id'] : [];
         $tables = [
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)) => [
                 'id', 'taxonomy', 'parent_id', 'parent_key', 'slug', 'position', 'meta',
@@ -76,7 +76,7 @@ final readonly class TaxonomyDoctor
             $schemaCompatible = $schemaCompatible && $exists && $missing === [];
         }
 
-        $tenantEnabled = config('tenancy.enabled') === true;
+        $tenantEnabled = config('nvl-tenancy.enabled') === true;
         $checks[] = $this->indexCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
             [
@@ -152,7 +152,7 @@ final readonly class TaxonomyDoctor
         $connectionMismatches = [];
 
         foreach ($this->taxonomies->all() as $definition) {
-            foreach (array_diff($definition->allowedOwners, array_keys($this->owners->all())) as $alias) {
+            foreach ($this->owners->unknownReferences($definition->allowedOwners) as $alias) {
                 $unknownAllowedOwners[] = $definition->taxonomy.':'.$alias;
             }
 
@@ -377,7 +377,7 @@ final readonly class TaxonomyDoctor
             ->whereColumn('attachment.taxonomy', '!=', 'term.taxonomy')
             ->count();
         $tenantMismatches = 0;
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             $tenantMismatches += $connection->table("{$terms} as child")
                 ->join("{$terms} as parent", 'parent.id', '=', 'child.parent_id')
                 ->whereColumn('child.tenant_id', '!=', 'parent.tenant_id')->count();

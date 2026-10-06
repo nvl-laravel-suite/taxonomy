@@ -15,7 +15,7 @@ use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Taxonomy\Models\Term;
 
 /**
- * Maps stable owner aliases to consumer model classes.
+ * Resolves capability references and native morph identities for Taxonomy owners.
  */
 final class TaxonomyOwnerRegistry implements TenantParentResolver
 {
@@ -30,7 +30,7 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
     ) {}
 
     /**
-     * Register a stable polymorphic alias for one taxonomy owner model.
+     * Register one package capability without changing the host morph map.
      */
     public function register(string $alias, string $model): void
     {
@@ -42,7 +42,7 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
             throw new InvalidArgumentException("Taxonomy owner [{$alias}] must use its canonical shared alias [{$reference}].");
         }
 
-        if (preg_match('/^[a-z][a-z0-9_.-]{0,99}$/D', $alias) !== 1) {
+        if (preg_match('/^[a-z][a-z0-9_.-]{0,99}$/D', $alias) !== 1 && ! is_a($alias, Model::class, true)) {
             throw new InvalidArgumentException(
                 "Taxonomy owner alias [{$alias}] or model [{$model}] is invalid.",
             );
@@ -64,21 +64,21 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
             );
         }
 
-        $this->identitiesRegistry->reference($reference, "taxonomy.owners.{$alias}", $alias, true);
+        $this->identitiesRegistry->reference($reference, "nvl-taxonomy.owners.{$alias}", $alias);
         $this->owners[$alias] = $model;
         ksort($this->owners);
 
     }
 
     /**
-     * Return the exact stable alias for one concrete owner model.
+     * Return the native morph identity for one registered owner model.
      */
     public function aliasFor(Model $owner): string
     {
         $alias = array_search($owner::class, $this->owners, true);
 
         if (is_string($alias)) {
-            return $alias;
+            return $owner->getMorphClass();
         }
 
         throw new InvalidArgumentException(
@@ -102,7 +102,7 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
         $query = $canonical->newQuery()->whereKey($identifier);
         $resource = null;
 
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             if ($canonical->getConnection() !== (new Term)->getConnection()) {
                 throw new TenantConfigurationInvalid('Taxonomy owners must share the Taxonomy connection.');
             }
@@ -118,7 +118,7 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
         $resolved = $query->first();
 
         if (! $resolved instanceof Model) {
-            if (config('tenancy.enabled') === true) {
+            if (config('nvl-tenancy.enabled') === true) {
                 throw new TenantBoundaryViolation('The canonical taxonomy owner is unavailable.');
             }
 
@@ -139,16 +139,63 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
      */
     public function types(): array
     {
-        return $this->owners;
+        return $this->all();
     }
 
     /**
-     * Return every registered owner model by stable alias.
+     * Return every registered owner model keyed by its native morph identity.
      *
      * @return array<string, class-string<Model>>
      */
     public function all(): array
     {
-        return $this->owners;
+        $types = [];
+        foreach ($this->owners as $model) {
+            $identity = (new $model)->getMorphClass();
+            if (isset($types[$identity]) && $types[$identity] !== $model) {
+                throw new InvalidArgumentException("Taxonomy owners share the native morph identity [{$identity}].");
+            }
+            $types[$identity] = $model;
+        }
+
+        return $types;
+    }
+
+    /**
+     * Resolve a declared capability, model class, or native identity to a registered model.
+     *
+     * @return class-string<Model>
+     */
+    public function model(string $reference): string
+    {
+        $model = $this->owners[$reference] ?? $this->all()[$reference] ?? null;
+        if ($model !== null) {
+            return $model;
+        }
+        if (in_array($reference, $this->owners, true)) {
+            return $reference;
+        }
+
+        throw new InvalidArgumentException("Taxonomy owner reference [{$reference}] is not registered.");
+    }
+
+    /**
+     * Return invalid capability references without comparing labels with stored morph identities.
+     *
+     * @param  list<string>  $references
+     * @return list<string>
+     */
+    public function unknownReferences(array $references): array
+    {
+        $unknown = [];
+        foreach ($references as $reference) {
+            try {
+                $this->model($reference);
+            } catch (InvalidArgumentException) {
+                $unknown[] = $reference;
+            }
+        }
+
+        return $unknown;
     }
 }

@@ -27,7 +27,7 @@ final readonly class TaxonomyTenancyScenario
     public static function install(bool $catalogCopies = false): self
     {
         expect($catalogCopies)->toBeFalse()
-            ->and(config('tenancy.enabled'))->toBeTrue();
+            ->and(config('nvl-tenancy.enabled'))->toBeTrue();
         $operation = new PlatformOperation('fixture.adoption', 'test', 'fixture');
         $coordinator = app(TenantAdoptionCoordinator::class);
         $plan = $coordinator->prepare(['resource-fixture-owners', 'taxonomy'], [], $operation);

@@ -25,7 +25,7 @@ class SlugGenerator
      */
     public function generate(string $source): string
     {
-        $configuredLocale = config('taxonomy.slugs.locale');
+        $configuredLocale = config('nvl-taxonomy.slugs.locale');
         $locale = is_string($configuredLocale) && $configuredLocale !== ''
             ? $configuredLocale
             : $this->contentLocale->get();

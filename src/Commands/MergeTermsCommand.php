@@ -39,7 +39,7 @@ final class MergeTermsCommand extends Command
         TenantRunner $runner,
     ): int {
         $tenant = $this->option('tenant');
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             if (! is_string($tenant) || $tenant === '') {
                 $this->error('Enabled taxonomy maintenance requires --tenant.');
 

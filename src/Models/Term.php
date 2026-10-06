@@ -72,7 +72,7 @@ class Term extends Model implements TranslatableModel
             foreignKey: 'term_id',
             fields: ['name', 'description'],
             mutationPolicy: TranslationMutationPolicy::DomainActionOnly,
-            ownershipResource: config('tenancy.enabled') === true ? 'taxonomy.terms' : null,
+            ownershipResource: config('nvl-tenancy.enabled') === true ? 'taxonomy.terms' : null,
         );
     }
 
@@ -145,7 +145,7 @@ class Term extends Model implements TranslatableModel
         $taxonomy = is_string($taxonomyAttribute) && $taxonomyAttribute !== ''
             ? $taxonomyAttribute
             : static::taxonomyName();
-        $sort = config("taxonomy.taxonomies.{$taxonomy}.sort", 'position');
+        $sort = config("nvl-taxonomy.taxonomies.{$taxonomy}.sort", 'position');
         $column = is_string($sort) && in_array($sort, ['position', 'slug', 'created_at'], true)
             ? $sort
             : 'position';
@@ -170,7 +170,7 @@ class Term extends Model implements TranslatableModel
         $related = new $type;
         $pivotColumns = ['position', 'taxonomy'];
 
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             $pivotColumns[] = 'tenant_id';
         }
 
@@ -187,7 +187,7 @@ class Term extends Model implements TranslatableModel
             true,
         );
         $relation->using(TermablePivot::class);
-        if (config('tenancy.enabled') === true) {
+        if (config('nvl-tenancy.enabled') === true) {
             $relation->wherePivot(
                 'tenant_id',
                 Container::getInstance()->make(TenantContext::class)->requireTenant()->value,

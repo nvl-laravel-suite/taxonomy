@@ -114,7 +114,7 @@ final readonly class TermResolver
             $candidate = $byId->get($modelReferenceId);
 
             if (! $candidate instanceof Term) {
-                if (config('tenancy.enabled') === true) {
+                if (config('nvl-tenancy.enabled') === true) {
                     throw new TenantBoundaryViolation(
                         "Term [{$modelReferenceId}] is unavailable in the current tenant boundary.",
                     );
