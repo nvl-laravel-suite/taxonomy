@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
-use InvalidArgumentException;
+use Nvl\Taxonomy\Exceptions\InvalidTermOperationException;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
+use Nvl\Taxonomy\Exceptions\TermNotFoundException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Support\TermMergeContext;
@@ -42,11 +43,11 @@ final readonly class TermMergeValidator
         $destination = $terms->get($destinationId);
 
         if (! $source instanceof Term || ! $destination instanceof Term) {
-            throw new InvalidArgumentException('Both merge terms must exist.');
+            throw new TermNotFoundException('Both merge terms must exist.');
         }
 
         if ($source->id === $destination->id || $source->taxonomy !== $destination->taxonomy) {
-            throw new InvalidArgumentException(
+            throw new InvalidTermOperationException(
                 'Merge terms must be distinct members of the same taxonomy.',
             );
         }
@@ -64,7 +65,7 @@ final readonly class TermMergeValidator
             $destination = $typedTerms->get($destinationId);
 
             if (! $source instanceof Term || ! $destination instanceof Term) {
-                throw new InvalidArgumentException(
+                throw new InvalidTermOperationException(
                     'Both merge terms must resolve through the registered taxonomy model.',
                 );
             }

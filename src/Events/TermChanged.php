@@ -4,17 +4,16 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Events;
 
-use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
-use Illuminate\Foundation\Events\Dispatchable;
+use Nvl\Support\Contracts\DomainEvent;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 
 /**
  * Signals a committed structural or localized term change.
+ *
+ * @api
  */
-final readonly class TermChanged implements ShouldDispatchAfterCommit
+final readonly class TermChanged implements DomainEvent
 {
-    use Dispatchable;
-
     /**
      * Create one committed term mutation event.
      */
@@ -23,5 +22,12 @@ final readonly class TermChanged implements ShouldDispatchAfterCommit
         public string $taxonomy,
         public TermChangeOperation $operation,
         public int $revision,
+        public int $schemaVersion = 1,
     ) {}
+
+    /** Return the immutable event payload schema version. */
+    public function schemaVersion(): int
+    {
+        return $this->schemaVersion;
+    }
 }

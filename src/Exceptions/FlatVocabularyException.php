@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Exceptions;
 
 /**
+ * @api
+
  * Raised when hierarchy is requested for a flat vocabulary.
  */
 final class FlatVocabularyException extends TaxonomyException

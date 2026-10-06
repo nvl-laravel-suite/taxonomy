@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Database\Factories\TermableFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
@@ -17,6 +19,9 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 final class TermablePivot extends MorphPivot
 {
     use GuardsTenantOwnership;
+
+    /** @use HasFactory<TermableFactory> */
+    use HasFactory;
     use HasUuids;
 
     /** @var list<string> */
@@ -55,5 +60,14 @@ final class TermablePivot extends MorphPivot
     public function getConnectionName(): ?string
     {
         return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('taxonomy') ?? parent::getConnectionName());
+    }
+
+    /** Return the shared attachment fixture factory.
+     *
+     * @internal
+     */
+    protected static function newFactory(): TermableFactory
+    {
+        return TermableFactory::new();
     }
 }

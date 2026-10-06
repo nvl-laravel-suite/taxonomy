@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Taxonomy\Exceptions\InvalidTermOperationException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
@@ -42,7 +43,7 @@ final readonly class TermAttachmentWriter
         $resolved = $this->terms->resolve($taxonomy, $references);
 
         if ($definition->exclusive && count($resolved) > 1) {
-            throw new InvalidArgumentException(
+            throw new InvalidTermOperationException(
                 "Taxonomy [{$taxonomy}] allows only one term per owner.",
             );
         }
@@ -148,7 +149,7 @@ final readonly class TermAttachmentWriter
 
         if ($definition->allowedOwners !== []
             && ! in_array($owner::class, array_map($this->owners->model(...), $definition->allowedOwners), true)) {
-            throw new InvalidArgumentException(
+            throw new InvalidTermOperationException(
                 "Owner [{$ownerAlias}] is not allowed for taxonomy [{$taxonomy}].",
             );
         }
@@ -195,7 +196,7 @@ final readonly class TermAttachmentWriter
         }
 
         if (count($unique) > TaxonomyConfiguration::positiveLimit('bulk_terms', 500)) {
-            throw new InvalidArgumentException('Too many taxonomy terms were supplied.');
+            throw new InvalidTermOperationException('Too many taxonomy terms were supplied.');
         }
     }
 }

@@ -1,10 +1,19 @@
 # Changelog
 
+## Unreleased — consumer runtime integration
+
+- Added focused consumer contract/testing guidance and shipped-factory usage limits.
+- Versioned committed event payloads and documented canonical aliases, source connections, failure metadata and optional safe rendering.
+- Added explicit first-use/installer and deployment guidance; new acceptance checks remain pending.
+
+
 All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
 ### Added
+
+- Added focused injectable contracts for all 9 selected public workflows, with native signatures and conditional defaults preserving host bindings. Added transient `TaxonomyTreeContract` and `TermResolverContract` for their native service APIs.
 
 - Add bounded authorized many-owner Taxonomy DTO reads with explicit object maps, localized display copy, native morph identity, and independently bound SQL policies.
 - Probe visible owner/vocabulary overflow at 101 attachments before loading terms or translations; successful lists contain at most 100 terms per requested group.

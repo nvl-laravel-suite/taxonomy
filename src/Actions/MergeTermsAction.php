@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
+use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Taxonomy\Contracts\MergeTermsContract;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Models\Term;
@@ -22,7 +24,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  *
  * @api
  */
-final readonly class MergeTermsAction
+final readonly class MergeTermsAction implements MergeTermsContract
 {
     /**
      * Create the term merge action.
@@ -30,6 +32,7 @@ final readonly class MergeTermsAction
     public function __construct(
         private TermMergeValidator $validator,
         private TaxonomyOwnerRegistry $owners,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -133,28 +136,28 @@ final readonly class MergeTermsAction
             foreach ($context->children as $child) {
                 $child->parent_id = $destination->id;
                 $child->save();
-                TermChanged::dispatch(
+                $this->domainEvents->dispatch(new TermChanged(
                     $child->id,
                     $child->taxonomy,
                     TermChangeOperation::Moved,
                     $child->revision,
-                );
+                ), $child->getConnection());
             }
 
             $destination->revision++;
             $destination->save();
-            TermChanged::dispatch(
+            $this->domainEvents->dispatch(new TermChanged(
                 $destination->id,
                 $destination->taxonomy,
                 TermChangeOperation::Merged,
                 $destination->revision,
-            );
-            TermChanged::dispatch(
+            ), $destination->getConnection());
+            $this->domainEvents->dispatch(new TermChanged(
                 $source->id,
                 $source->taxonomy,
                 TermChangeOperation::Deleted,
                 $source->revision,
-            );
+            ), $source->getConnection());
             $source->delete();
 
             return $destination->refresh()->load('translations');

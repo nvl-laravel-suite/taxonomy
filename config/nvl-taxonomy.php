@@ -7,6 +7,7 @@ use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Support\SlugGenerator;
 
+/** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
 
     'owners' => [

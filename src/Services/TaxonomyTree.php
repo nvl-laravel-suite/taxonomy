@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Services;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as BaseCollection;
+use Nvl\Taxonomy\Contracts\TaxonomyTreeContract;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
@@ -14,7 +15,7 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
  *
  * @api
  */
-final readonly class TaxonomyTree
+final readonly class TaxonomyTree implements TaxonomyTreeContract
 {
     /**
      * Create the generic taxonomy tree reader.

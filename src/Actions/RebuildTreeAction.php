@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Actions;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Models\Term;
@@ -22,7 +23,7 @@ final readonly class RebuildTreeAction
     /**
      * Create the tree rebuild action.
      */
-    public function __construct(private TaxonomyRegistry $taxonomies) {}
+    public function __construct(private TaxonomyRegistry $taxonomies, private DomainEventDispatcher $domainEvents) {}
 
     /**
      * Normalize sibling positions or return the prospective change count.
@@ -49,12 +50,12 @@ final readonly class RebuildTreeAction
 
                     $child->position = $index;
                     $child->save();
-                    TermChanged::dispatch(
+                    $this->domainEvents->dispatch(new TermChanged(
                         $child->id,
                         $child->taxonomy,
                         TermChangeOperation::Reordered,
                         $child->revision,
-                    );
+                    ), $child->getConnection());
                 }
             }
 

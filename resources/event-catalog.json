@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "package": "nvl/taxonomy",
+  "documentation": "docs/events.md",
+  "implementation_status": "implemented; executable acceptance proof pending",
+  "events": [
+    {
+      "class": "Nvl\\Taxonomy\\Events\\TermChanged",
+      "source": "packages/nvl/taxonomy/src/Events/TermChanged.php",
+      "constructor_fields": [
+        {
+          "name": "termId",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "taxonomy",
+          "type": "string",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "operation",
+          "type": "Nvl\\Taxonomy\\Enums\\TermChangeOperation",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "revision",
+          "type": "int",
+          "visibility": "public",
+          "required": true
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int",
+          "visibility": "public",
+          "required": false,
+          "default_expression": "1"
+        }
+      ],
+      "public_fields": [
+        {
+          "name": "termId",
+          "type": "string"
+        },
+        {
+          "name": "taxonomy",
+          "type": "string"
+        },
+        {
+          "name": "operation",
+          "type": "Nvl\\Taxonomy\\Enums\\TermChangeOperation"
+        },
+        {
+          "name": "revision",
+          "type": "int"
+        },
+        {
+          "name": "schemaVersion",
+          "type": "int"
+        }
+      ],
+      "kind": "value_object",
+      "schema_version": 1,
+      "trigger": "Taxonomy term/tree mutation persisted.",
+      "aliases": [],
+      "producers": [
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/CreateTermAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$term->getConnection()",
+          "construction_expression": "new TermChanged( $term->id, $term->taxonomy, TermChangeOperation::Created, $term->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/DeleteTermAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$child->getConnection()",
+          "construction_expression": "new TermChanged( $child->id, $child->taxonomy, TermChangeOperation::Moved, $child->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/DeleteTermAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$descendant->getConnection()",
+          "construction_expression": "new TermChanged( $descendant->id, $descendant->taxonomy, TermChangeOperation::Deleted, $descendant->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/DeleteTermAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$term->getConnection()",
+          "construction_expression": "new TermChanged( $term->id, $term->taxonomy, TermChangeOperation::Deleted, $term->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/MergeTermsAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$child->getConnection()",
+          "construction_expression": "new TermChanged( $child->id, $child->taxonomy, TermChangeOperation::Moved, $child->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/MergeTermsAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$destination->getConnection()",
+          "construction_expression": "new TermChanged( $destination->id, $destination->taxonomy, TermChangeOperation::Merged, $destination->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/MergeTermsAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$source->getConnection()",
+          "construction_expression": "new TermChanged( $source->id, $source->taxonomy, TermChangeOperation::Deleted, $source->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/MoveTermAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$term->getConnection()",
+          "construction_expression": "new TermChanged( $term->id, $term->taxonomy, TermChangeOperation::Moved, $term->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/RebuildTreeAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$child->getConnection()",
+          "construction_expression": "new TermChanged( $child->id, $child->taxonomy, TermChangeOperation::Reordered, $child->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Actions/UpdateTermAction.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$updated->getConnection()",
+          "construction_expression": "new TermChanged( $updated->id, $updated->taxonomy, TermChangeOperation::Updated, $updated->revision, )"
+        },
+        {
+          "path": "packages/nvl/taxonomy/src/Services/TermResolver.php",
+          "trigger": "Taxonomy term/tree mutation persisted.",
+          "connection": "$created->getConnection()",
+          "construction_expression": "new TermChanged( $created->id, $created->taxonomy, TermChangeOperation::Created, $created->revision, )"
+        }
+      ],
+      "security_notes": [
+        "Term/taxonomy identity, enum fact and revision only; no translated term copy or model."
+      ],
+      "no_op_semantics": "Existing revision/tree mutation guards govern publication. Multi-term operations can emit one fact for each qualifying term; this is not one event per action."
+    }
+  ],
+  "value_types": [
+    {
+      "class": "Nvl\\Taxonomy\\Enums\\TermChangeOperation",
+      "source": "packages/nvl/taxonomy/src/Enums/TermChangeOperation.php",
+      "constructor_fields": [],
+      "public_fields": [],
+      "kind": "enum",
+      "backing_type": "string",
+      "cases": [
+        {
+          "name": "Created",
+          "value": "created"
+        },
+        {
+          "name": "Updated",
+          "value": "updated"
+        },
+        {
+          "name": "Moved",
+          "value": "moved"
+        },
+        {
+          "name": "Reordered",
+          "value": "reordered"
+        },
+        {
+          "name": "Deleted",
+          "value": "deleted"
+        },
+        {
+          "name": "Merged",
+          "value": "merged"
+        }
+      ]
+    }
+  ],
+  "aliases": [],
+  "publication": {
+    "publication": "The native host dispatcher receives the captured event after the supplied source connection outer commit, or immediately when that connection has no active transaction.",
+    "rollback": "Callbacks attach to the matching native connection and current nesting record; native outer/savepoint rollback discards the corresponding callbacks.",
+    "registration_failure": "Missing source transaction records fail before commit; Mail Notifications reports and drops unusable observations.",
+    "host_policy": "Host after-commit listeners and queue after_commit policies can add their own deferral after publication. Host transaction infrastructure and dispatcher bindings are preserved.",
+    "delivery_limit": "Local callbacks are not an outbox. Process exit between commit and callback can lose delivery; no crash durability or exactly-once delivery is promised.",
+    "cardinality": "One canonical object is dispatched per qualifying producer call. This is local publication, not cross-process deduplication or a guarantee that repeated observations are unique.",
+    "manual_producers": "Use Nvl\\Support\\Events\\DomainEventDispatcher::dispatch($event, $writerConnection). Native Event::dispatch() is immediate and has no package interception."
+  },
+  "security_notes": [
+    "Term/taxonomy identity, enum fact and revision only; no translated term copy or model."
+  ],
+  "no_op_semantics": "Existing revision/tree mutation guards govern publication. Multi-term operations can emit one fact for each qualifying term; this is not one event per action.",
+  "notes": []
+}

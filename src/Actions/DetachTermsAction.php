@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Taxonomy\Contracts\DetachTermsContract;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermAttachmentWriter;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
@@ -17,7 +18,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  *
  * @api
  */
-final readonly class DetachTermsAction
+final readonly class DetachTermsAction implements DetachTermsContract
 {
     /**
      * Create the attachment removal action.

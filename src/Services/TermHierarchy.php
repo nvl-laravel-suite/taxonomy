@@ -11,6 +11,7 @@ use Nvl\Taxonomy\Exceptions\CircularHierarchyException;
 use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
 use Nvl\Taxonomy\Exceptions\FlatVocabularyException;
 use Nvl\Taxonomy\Exceptions\InvalidParentException;
+use Nvl\Taxonomy\Exceptions\InvalidTermOperationException;
 use Nvl\Taxonomy\Exceptions\MaximumDepthExceededException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -70,7 +71,7 @@ final readonly class TermHierarchy
 
         foreach ($movingTerms as $movingTerm) {
             if ($movingTerm->taxonomy !== $taxonomy || ! $terms->has($movingTerm->id)) {
-                throw new InvalidArgumentException(
+                throw new InvalidTermOperationException(
                     'Every moved term must exist in the same registered taxonomy.',
                 );
             }

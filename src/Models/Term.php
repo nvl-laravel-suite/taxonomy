@@ -8,6 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -16,6 +17,7 @@ use Illuminate\Support\Carbon;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Database\Factories\TermFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
@@ -56,6 +58,9 @@ use Nvl\Translatable\Translatable;
 class Term extends Model implements TranslatableModel
 {
     use GuardsTenantOwnership;
+
+    /** @use HasFactory<TermFactory> */
+    use HasFactory;
     use HasUuids;
     use Translatable;
 
@@ -301,5 +306,15 @@ class Term extends Model implements TranslatableModel
                 $term->revision = (is_int($revision) ? $revision : 0) + 1;
             }
         });
+    }
+
+    /**
+     * Return the package's runtime fixture factory.
+     *
+     * @internal
+     */
+    protected static function newFactory(): TermFactory
+    {
+        return TermFactory::new();
     }
 }

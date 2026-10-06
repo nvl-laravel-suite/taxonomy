@@ -1,0 +1,43 @@
+{
+    "schema_version": 1,
+    "configs": {
+        "nvl-taxonomy": {
+            "required": [],
+            "common": [
+                "locks.seconds",
+                "migrations.enabled",
+                "owners",
+                "storage.connection"
+            ],
+            "advanced": [
+                "limits.bulk_terms",
+                "limits.description_chars",
+                "limits.metadata_bytes",
+                "limits.metadata_depth",
+                "locks.wait_seconds",
+                "slugs.generator",
+                "slugs.locale",
+                "table_names.nvl_taxonomy_i18n",
+                "table_names.nvl_taxonomy_tenant_adoption_copies",
+                "table_names.nvl_taxonomy_termables",
+                "table_names.nvl_taxonomy_terms",
+                "taxonomies.category.allowed_owners",
+                "taxonomies.category.exclusive",
+                "taxonomies.category.hierarchical",
+                "taxonomies.category.max_depth",
+                "taxonomies.category.metadata_rules",
+                "taxonomies.category.model",
+                "taxonomies.category.open",
+                "taxonomies.category.sort",
+                "taxonomies.tag.allowed_owners",
+                "taxonomies.tag.exclusive",
+                "taxonomies.tag.hierarchical",
+                "taxonomies.tag.metadata_rules",
+                "taxonomies.tag.model",
+                "taxonomies.tag.open",
+                "taxonomies.tag.sort",
+                "transactions.attempts"
+            ]
+        }
+    }
+}

@@ -7,6 +7,7 @@ namespace Nvl\Taxonomy\Actions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Taxonomy\Contracts\SyncTermAttachmentsContract;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermAttachmentWriter;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
@@ -16,7 +17,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  *
  * @api
  */
-final readonly class SyncTermAttachmentsAction
+final readonly class SyncTermAttachmentsAction implements SyncTermAttachmentsContract
 {
     /**
      * Create the attachment synchronization action.

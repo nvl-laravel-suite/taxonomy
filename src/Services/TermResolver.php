@@ -8,8 +8,10 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Taxonomy\Contracts\TermResolverContract;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
@@ -25,7 +27,7 @@ use Nvl\Translatable\Services\ContentLocale;
  *
  * @api
  */
-final readonly class TermResolver
+final readonly class TermResolver implements TermResolverContract
 {
     /**
      * Create the batched term reference resolver.
@@ -36,6 +38,7 @@ final readonly class TermResolver
         private ContentLocale $contentLocale,
         private TermWriter $writer,
         private TenantBoundary $boundary,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -175,20 +178,28 @@ final readonly class TermResolver
         $database = DB::connection((new $modelClass)->getConnectionName());
 
         foreach ($missing as $slug => $name) {
-            $wasCreated = true;
 
             try {
                 $created = $database->transaction(
-                    fn (): Term => $this->writer->create(MutateTermPayload::from([
-                        'taxonomy' => $taxonomy,
-                        'slug' => $slug,
-                        'translations' => [
-                            $this->contentLocale->get() => ['name' => $name],
-                        ],
-                    ])),
+                    function () use ($taxonomy, $slug, $name): Term {
+                        $created = $this->writer->create(MutateTermPayload::from([
+                            'taxonomy' => $taxonomy,
+                            'slug' => $slug,
+                            'translations' => [
+                                $this->contentLocale->get() => ['name' => $name],
+                            ],
+                        ]));
+                        $this->domainEvents->dispatch(new TermChanged(
+                            $created->id,
+                            $created->taxonomy,
+                            TermChangeOperation::Created,
+                            $created->revision,
+                        ), $created->getConnection());
+
+                        return $created;
+                    },
                 );
             } catch (UniqueConstraintViolationException $exception) {
-                $wasCreated = false;
                 $created = $modelClass::query()
                     ->where('taxonomy', $taxonomy)
                     ->where('parent_key', '__root__')
@@ -203,14 +214,6 @@ final readonly class TermResolver
 
             $resolved[$created->id] = $created;
 
-            if ($wasCreated) {
-                TermChanged::dispatch(
-                    $created->id,
-                    $created->taxonomy,
-                    TermChangeOperation::Created,
-                    $created->revision,
-                );
-            }
         }
 
         return $this->orderedResults($normalizedReferences, $resolved);

@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Models;
 
 use Illuminate\Support\Collection;
 use Nvl\Taxonomy\Concerns\BelongsToTaxonomy;
+use Nvl\Taxonomy\Database\Factories\TermFactory;
 
 /**
  * Convenience hierarchical term model for the built-in category vocabulary.
@@ -63,5 +64,14 @@ class Category extends Term
         }
 
         return $tree;
+    }
+
+    /** Return a Term fixture in the specialized native vocabulary.
+     *
+     * @internal
+     */
+    protected static function newFactory(): TermFactory
+    {
+        return TermFactory::new()->category();
     }
 }

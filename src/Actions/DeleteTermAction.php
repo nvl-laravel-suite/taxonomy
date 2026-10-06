@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Nvl\Support\Events\DomainEventDispatcher;
+use Nvl\Taxonomy\Contracts\DeleteTermContract;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
@@ -21,7 +23,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  *
  * @api
  */
-final readonly class DeleteTermAction
+final readonly class DeleteTermAction implements DeleteTermContract
 {
     /**
      * Create the term deletion action.
@@ -29,6 +31,7 @@ final readonly class DeleteTermAction
     public function __construct(
         private TermHierarchy $hierarchy,
         private TermModelResolver $terms,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -79,22 +82,22 @@ final readonly class DeleteTermAction
                 foreach ($children as $child) {
                     $child->parent_id = $reparentTo;
                     $child->save();
-                    TermChanged::dispatch(
+                    $this->domainEvents->dispatch(new TermChanged(
                         $child->id,
                         $child->taxonomy,
                         TermChangeOperation::Moved,
                         $child->revision,
-                    );
+                    ), $child->getConnection());
                 }
             } elseif ($strategy === DeleteTermStrategy::Cascade) {
                 foreach ($this->hierarchy->descendants($term)->reverse() as $descendant) {
                     $descendant->attachments()->delete();
-                    TermChanged::dispatch(
+                    $this->domainEvents->dispatch(new TermChanged(
                         $descendant->id,
                         $descendant->taxonomy,
                         TermChangeOperation::Deleted,
                         $descendant->revision,
-                    );
+                    ), $descendant->getConnection());
                     $descendant->delete();
                 }
             } elseif ($hasChildren) {
@@ -107,12 +110,12 @@ final readonly class DeleteTermAction
                 $term->attachments()->delete();
             }
 
-            TermChanged::dispatch(
+            $this->domainEvents->dispatch(new TermChanged(
                 $term->id,
                 $term->taxonomy,
                 TermChangeOperation::Deleted,
                 $term->revision,
-            );
+            ), $term->getConnection());
 
             return (bool) $term->delete();
         }, TaxonomyConfiguration::transactionAttempts());

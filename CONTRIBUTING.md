@@ -1,13 +1,5 @@
-# Contributing to NVL Taxonomy
+# Contributing
 
-This public repository is a publication mirror of private source. Open an issue
-here for a bug or proposal; include a reproduction and, if helpful, a patch.
-Maintainers apply accepted changes in source and publish a mirror release.
-Direct mirror pull requests do not update source. See the
-[organization contribution guide](https://github.com/nvl-laravel-suite/.github/blob/main/CONTRIBUTING.md).
+This repository is a read-only release mirror. Pull requests to the mirror are not accepted. Open a public issue with a reproducible example or a proposed patch. Maintainers apply reviewed changes in the private source repository and publish immutable releases from there.
 
-Changes must keep structural identity separate from localized display content.
-
-Test UUID identifiers, translations, fallback, slug stability, tree order, cycles, depth, moves, merges, attachments, delete policy, revisions, maintenance locks, query counts, and database parity. Run Pest, Pint, PHPStan at maximum strictness, Composer validation, dependency analysis, and distribution validation.
-
-Commerce-option or arbitrary attribute behavior does not belong in this package.
+Report vulnerabilities privately through the [security policy](https://github.com/nvl-laravel-suite/taxonomy/security/policy). Public issues must not contain undisclosed vulnerability details.

@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Database\Factories\TermTranslationFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
@@ -25,10 +27,17 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Term $term
+ *
+ * @api
+ *
+ * @nvl-consumer-read id
  */
 final class TermTranslation extends Model
 {
     use GuardsTenantOwnership;
+
+    /** @use HasFactory<TermTranslationFactory> */
+    use HasFactory;
     use HasUuids;
 
     protected $fillable = [
@@ -62,5 +71,15 @@ final class TermTranslation extends Model
     public function term(): BelongsTo
     {
         return $this->belongsTo(Term::class, 'term_id');
+    }
+
+    /**
+     * Return the package's runtime fixture factory.
+     *
+     * @internal
+     */
+    protected static function newFactory(): TermTranslationFactory
+    {
+        return TermTranslationFactory::new();
     }
 }

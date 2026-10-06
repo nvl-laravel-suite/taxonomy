@@ -6,6 +6,8 @@ namespace Nvl\Taxonomy\Actions;
 
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Nvl\Support\Events\DomainEventDispatcher;
+use Nvl\Taxonomy\Contracts\UpdateTermContract;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
@@ -21,7 +23,7 @@ use Nvl\Translatable\Enums\TranslationSyncMode;
  *
  * @api
  */
-final readonly class UpdateTermAction
+final readonly class UpdateTermAction implements UpdateTermContract
 {
     /**
      * Create the term update action.
@@ -30,6 +32,7 @@ final readonly class UpdateTermAction
         private TermWriter $writer,
         private TaxonomyRegistry $taxonomies,
         private TermModelResolver $terms,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -58,12 +61,12 @@ final readonly class UpdateTermAction
             $this->taxonomies->get($resolvedTerm->taxonomy);
 
             $updated = $this->writer->update($resolvedTerm, $data, $mode);
-            TermChanged::dispatch(
+            $this->domainEvents->dispatch(new TermChanged(
                 $updated->id,
                 $updated->taxonomy,
                 TermChangeOperation::Updated,
                 $updated->revision,
-            );
+            ), $updated->getConnection());
 
             return $updated;
         }, TaxonomyConfiguration::transactionAttempts());

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Exceptions;
 
 /**
+ * @api
+
  * Raised when a deletion strategy cannot preserve taxonomy invariants.
  */
 final class UnsafeTermDeletionException extends TaxonomyException

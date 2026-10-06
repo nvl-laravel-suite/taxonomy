@@ -7,6 +7,7 @@ namespace Nvl\Taxonomy\Tests;
 use Illuminate\Contracts\Foundation\MaintenanceMode;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Nvl\Data\Providers\DataServiceProvider;
+use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Term;
@@ -42,6 +43,7 @@ abstract class TaxonomyTenancyTestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
+            LocaleServiceProvider::class,
             DataServiceProvider::class,
             SupportServiceProvider::class,
             TenancyServiceProvider::class,

@@ -7,6 +7,8 @@ namespace Nvl\Taxonomy\Actions;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Nvl\Support\Events\DomainEventDispatcher;
+use Nvl\Taxonomy\Contracts\MoveTermContract;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
@@ -20,7 +22,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  *
  * @api
  */
-final readonly class MoveTermAction
+final readonly class MoveTermAction implements MoveTermContract
 {
     /**
      * Create the term move action.
@@ -28,6 +30,7 @@ final readonly class MoveTermAction
     public function __construct(
         private TermHierarchy $hierarchy,
         private TermModelResolver $terms,
+        private DomainEventDispatcher $domainEvents,
     ) {}
 
     /**
@@ -62,12 +65,12 @@ final readonly class MoveTermAction
             $term->parent_id = $parentId;
             $term->position = $position;
             $term->save();
-            TermChanged::dispatch(
+            $this->domainEvents->dispatch(new TermChanged(
                 $term->id,
                 $term->taxonomy,
                 TermChangeOperation::Moved,
                 $term->revision,
-            );
+            ), $term->getConnection());
 
             return $term->refresh()->load('translations');
         }, TaxonomyConfiguration::transactionAttempts());

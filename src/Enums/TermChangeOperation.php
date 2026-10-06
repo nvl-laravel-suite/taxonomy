@@ -6,6 +6,8 @@ namespace Nvl\Taxonomy\Enums;
 
 /**
  * Identifies the committed taxonomy mutation represented by a term event.
+ *
+ * @api
  */
 enum TermChangeOperation: string
 {

@@ -10,22 +10,43 @@ use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use Nvl\Data\Services\TypeScriptSourceRegistry;
 use Nvl\Support\Doctor\PackageDoctorContributor;
+use Nvl\Support\Globals\GlobalNames;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Support\Traits\RegistersNamespacedResources;
+use Nvl\Taxonomy\Actions\AttachTermsAction;
+use Nvl\Taxonomy\Actions\CreateTermAction;
+use Nvl\Taxonomy\Actions\DeleteTermAction;
+use Nvl\Taxonomy\Actions\DetachTermsAction;
 use Nvl\Taxonomy\Actions\ListOwnerTaxonomyTermsAction;
+use Nvl\Taxonomy\Actions\MergeTermsAction;
+use Nvl\Taxonomy\Actions\MoveTermAction;
+use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
+use Nvl\Taxonomy\Actions\UpdateTermAction;
 use Nvl\Taxonomy\Commands;
+use Nvl\Taxonomy\Contracts\AttachTermsContract;
+use Nvl\Taxonomy\Contracts\CreateTermContract;
+use Nvl\Taxonomy\Contracts\DeleteTermContract;
+use Nvl\Taxonomy\Contracts\DetachTermsContract;
 use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
+use Nvl\Taxonomy\Contracts\MergeTermsContract;
+use Nvl\Taxonomy\Contracts\MoveTermContract;
+use Nvl\Taxonomy\Contracts\SyncTermAttachmentsContract;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
+use Nvl\Taxonomy\Contracts\TaxonomyTreeContract;
+use Nvl\Taxonomy\Contracts\TermResolverContract;
+use Nvl\Taxonomy\Contracts\UpdateTermContract;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Services\RegisteredTaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Taxonomy\Services\TaxonomyTree;
+use Nvl\Taxonomy\Services\TermResolver;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tenancy\TaxonomyAdoptionAdapter;
@@ -46,6 +67,17 @@ final class TaxonomyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bindIf(AttachTermsContract::class, AttachTermsAction::class);
+        $this->app->bindIf(CreateTermContract::class, CreateTermAction::class);
+        $this->app->bindIf(DeleteTermContract::class, DeleteTermAction::class);
+        $this->app->bindIf(DetachTermsContract::class, DetachTermsAction::class);
+        $this->app->bindIf(MergeTermsContract::class, MergeTermsAction::class);
+        $this->app->bindIf(MoveTermContract::class, MoveTermAction::class);
+        $this->app->bindIf(SyncTermAttachmentsContract::class, SyncTermAttachmentsAction::class);
+        $this->app->bindIf(UpdateTermContract::class, UpdateTermAction::class);
+        $this->app->bindIf(TaxonomyTreeContract::class, TaxonomyTree::class);
+        $this->app->bindIf(TermResolverContract::class, TermResolver::class);
+
         $this->app->register(SupportServiceProvider::class);
         PackageDoctorContributor::register($this->app, 'nvl/taxonomy', fn (): array => $this->app->make(TaxonomyDoctor::class)->inspect());
 
@@ -108,6 +140,10 @@ final class TaxonomyServiceProvider extends ServiceProvider
         TenantResourceRegistry $tenantResources,
         TenantBoundary $tenantBoundary,
     ): void {
+        $this->app->make(GlobalNames::class)->translations('taxonomy', __DIR__.'/../../lang', $this->app->make('translation.loader'));
+        $this->publishes([
+            __DIR__.'/../../lang' => lang_path('vendor/nvl-taxonomy'),
+        ], 'nvl-taxonomy-translations');
         $tenancyResources->register($tenantResources);
         if ($this->app->bound(TenantAdoptionRegistry::class)) {
             $this->app->make(TenantAdoptionRegistry::class)->register('taxonomy', TaxonomyAdoptionAdapter::class);
