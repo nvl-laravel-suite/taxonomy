@@ -1,0 +1,366 @@
+{
+    "schema_version": 1,
+    "package": "nvl/taxonomy",
+    "psr4": {
+        "Nvl\\Taxonomy\\": "src"
+    },
+    "symbols": {
+        "Nvl\\Taxonomy\\Actions\\AttachTermsAction": {
+            "kind": "class",
+            "file": "src/Actions/AttachTermsAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Actions\\CreateTermAction": {
+            "kind": "class",
+            "file": "src/Actions/CreateTermAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Actions\\DeleteTermAction": {
+            "kind": "class",
+            "file": "src/Actions/DeleteTermAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Actions\\DetachTermsAction": {
+            "kind": "class",
+            "file": "src/Actions/DetachTermsAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Actions\\ListOwnerTaxonomyTermsAction": {
+            "kind": "class",
+            "file": "src/Actions/ListOwnerTaxonomyTermsAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Actions\\MergeTermsAction": {
+            "kind": "class",
+            "file": "src/Actions/MergeTermsAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Actions\\MoveTermAction": {
+            "kind": "class",
+            "file": "src/Actions/MoveTermAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Actions\\SyncTermAttachmentsAction": {
+            "kind": "class",
+            "file": "src/Actions/SyncTermAttachmentsAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Actions\\UpdateTermAction": {
+            "kind": "class",
+            "file": "src/Actions/UpdateTermAction.php",
+            "methods": [
+                "__construct",
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Concerns\\HasTaxonomies": {
+            "kind": "trait",
+            "file": "src/Concerns/HasTaxonomies.php",
+            "methods": [
+                "scopeInCategory",
+                "scopeWithAllTerms",
+                "scopeWithAnyTerms",
+                "scopeWithoutTerms"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Contracts\\ListOwnerTaxonomyTermsContract": {
+            "kind": "interface",
+            "file": "src/Contracts/ListOwnerTaxonomyTermsContract.php",
+            "methods": [
+                "execute"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Contracts\\TaxonomyBatchAuthorization": {
+            "kind": "interface",
+            "file": "src/Contracts/TaxonomyBatchAuthorization.php",
+            "methods": [
+                "authorizeOwners",
+                "scopeAttachments",
+                "scopeHostTerms",
+                "scopeTerms"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Data\\MutateTermPayload": {
+            "kind": "class",
+            "file": "src/Data/MutateTermPayload.php",
+            "methods": [
+                "__construct",
+                "rules"
+            ],
+            "properties": [
+                "expectedRevision",
+                "meta",
+                "parentId",
+                "position",
+                "slug",
+                "taxonomy",
+                "translations"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Data\\OwnerTaxonomyTerm": {
+            "kind": "class",
+            "file": "src/Data/OwnerTaxonomyTerm.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "description",
+                "id",
+                "name",
+                "parentId",
+                "position",
+                "slug",
+                "vocabulary"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Data\\OwnerTaxonomyTermList": {
+            "kind": "class",
+            "file": "src/Data/OwnerTaxonomyTermList.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "vocabularies"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Data\\OwnerTaxonomyTerms": {
+            "kind": "class",
+            "file": "src/Data/OwnerTaxonomyTerms.php",
+            "methods": [
+                "__construct",
+                "fromMap"
+            ],
+            "properties": [
+                "order",
+                "owners"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Enums\\DeleteTermStrategy": {
+            "kind": "enum",
+            "file": "src/Enums/DeleteTermStrategy.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Cascade",
+                "Detach",
+                "Reparent",
+                "Restrict"
+            ]
+        },
+        "Nvl\\Taxonomy\\Models\\Term": {
+            "kind": "class",
+            "file": "src/Models/Term.php",
+            "methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "properties": [
+                "created_at",
+                "id",
+                "position",
+                "revision",
+                "slug",
+                "taxonomy",
+                "updated_at"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Models\\Termable": {
+            "kind": "class",
+            "file": "src/Models/Termable.php",
+            "methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Services\\TaxonomyOwnerRegistry": {
+            "kind": "class",
+            "file": "src/Services/TaxonomyOwnerRegistry.php",
+            "methods": [
+                "__construct",
+                "aliasFor",
+                "all",
+                "model",
+                "register",
+                "resolve",
+                "types",
+                "unknownReferences"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Services\\TaxonomyTree": {
+            "kind": "class",
+            "file": "src/Services/TaxonomyTree.php",
+            "methods": [
+                "__construct",
+                "for"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Services\\TermResolver": {
+            "kind": "class",
+            "file": "src/Services/TermResolver.php",
+            "methods": [
+                "__construct",
+                "resolve"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Support\\TaxonomyDefinition": {
+            "kind": "class",
+            "file": "src/Support/TaxonomyDefinition.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "allowedOwners",
+                "exclusive",
+                "hierarchical",
+                "maxDepth",
+                "metadataRules",
+                "model",
+                "open",
+                "sort",
+                "taxonomy"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Support\\TaxonomyRegistry": {
+            "kind": "class",
+            "file": "src/Support/TaxonomyRegistry.php",
+            "methods": [
+                "__construct",
+                "all",
+                "get",
+                "register"
+            ],
+            "properties": [],
+            "constants": []
+        }
+    },
+    "models": {
+        "Nvl\\Taxonomy\\Models\\Term": {
+            "read": [
+                "created_at",
+                "id",
+                "position",
+                "revision",
+                "slug",
+                "taxonomy",
+                "updated_at"
+            ],
+            "identity_methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "capability_relations": []
+        },
+        "Nvl\\Taxonomy\\Models\\Termable": {
+            "read": [],
+            "identity_methods": [
+                "getKey",
+                "getKeyName",
+                "getMorphClass",
+                "getRouteKey",
+                "getRouteKeyName",
+                "is",
+                "isNot",
+                "relationLoaded"
+            ],
+            "capability_relations": []
+        }
+    },
+    "capability_relations": {
+        "Nvl\\Taxonomy\\Concerns\\HasTaxonomies": [
+            "termables"
+        ]
+    },
+    "tables": {
+        "i18n": "nvl_taxonomy_i18n",
+        "tenant_adoption_copies": "nvl_taxonomy_tenant_adoption_copies",
+        "termables": "nvl_taxonomy_termables",
+        "terms": "nvl_taxonomy_terms"
+    }
+}
