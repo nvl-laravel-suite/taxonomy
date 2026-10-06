@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Services;
 
 use InvalidArgumentException;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
-use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Reloads mutation targets through their registered taxonomy model under a row lock.

@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Actions;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermAttachmentWriter;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
-use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Appends terms while preserving existing attachment order.
@@ -33,7 +32,7 @@ final readonly class AttachTermsAction
     public function execute(Model $owner, string $taxonomy, array $terms): void
     {
         $connection = (new Term)->getConnectionName();
-        $lock = Cache::lock(
+        $lock = TaxonomyConfiguration::lock(
             TaxonomyConfiguration::attachmentLockName($this->boundary, $owner, $taxonomy),
             TaxonomyConfiguration::lockSeconds(),
         );

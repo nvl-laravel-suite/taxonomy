@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Cache;
+use Nvl\Support\OwnerRegistry;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Exceptions\UnknownTaxonomyException;
@@ -17,8 +20,6 @@ use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
 
 it('supports the public owner query and inspection workflow', function () {
     $categorized = Post::create(['title' => 'Categorized']);
@@ -255,6 +256,7 @@ it('enforces stable owner aliases at registration and provider resolution', func
     $registry = new TaxonomyOwnerRegistry(
         app(TenantResourceRegistry::class),
         app(TenantBoundary::class),
+        app(OwnerRegistry::class),
     );
     $registry->register('posts', Post::class);
     $registry->register('posts', Post::class);
@@ -272,11 +274,13 @@ it('enforces stable owner aliases at registration and provider resolution', func
         ->and(fn () => (new TaxonomyOwnerRegistry(
             app(TenantResourceRegistry::class),
             app(TenantBoundary::class),
+            app(OwnerRegistry::class),
         ))->register('posts', CustomKeyPost::class))
         ->toThrow(InvalidArgumentException::class)
         ->and(fn () => (new TaxonomyOwnerRegistry(
             app(TenantResourceRegistry::class),
             app(TenantBoundary::class),
+            app(OwnerRegistry::class),
         ))->register('new-posts', Post::class))
         ->toThrow(InvalidArgumentException::class);
 

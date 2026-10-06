@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Nvl\Support\Config\PackageStorage;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
@@ -42,7 +43,7 @@ final class TermTranslation extends Model
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n);
+        return TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n));
     }
 
     /**
@@ -50,7 +51,7 @@ final class TermTranslation extends Model
      */
     public function getConnectionName(): ?string
     {
-        return TaxonomyConfiguration::connection() ?? parent::getConnectionName();
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('taxonomy') ?? parent::getConnectionName());
     }
 
     /**

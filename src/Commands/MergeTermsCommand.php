@@ -6,13 +6,13 @@ namespace Nvl\Taxonomy\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
+use Nvl\Support\Tenancy\Contracts\TenantRunner;
+use Nvl\Support\Tenancy\ValueObjects\TenantId;
 use Nvl\Taxonomy\Actions\MergeTermsAction;
 use Nvl\Taxonomy\Actions\ValidateTermMergeAction;
 use Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
-use Nvl\Tenancy\Services\TenantRunner;
-use Nvl\Tenancy\ValueObjects\TenantId;
 
 /**
  * Executes a locked, rerunnable term merge with an inspect-only mode.

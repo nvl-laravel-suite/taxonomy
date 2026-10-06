@@ -218,3 +218,43 @@ See [UPGRADING.md](UPGRADING.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](
 ## License
 
 Released under the [MIT License](LICENSE).
+
+## Shared owner identity
+
+Declare a model once in `config/nvl-core.php`:
+
+```php
+'owners' => ['article' => Article::class],
+```
+
+Enable this package capability separately in `config/taxonomy.php`:
+
+```php
+'owners' => ['article'],
+```
+
+The shared alias must match the Taxonomy owner identity. Registering an identity does not expand vocabulary allowed_owners or authorize term mutations. Core registration does not add the model to this package's allowlist.
+
+Existing package class/resolver/handler registrations remain accepted for one major cycle. Run `php artisan nvl:doctor --strict --format=json` to inspect compatibility diagnostics. See [UPGRADING.md](UPGRADING.md) before changing a persisted morph type.
+
+## Shared consumer diagnostics
+
+Run `php artisan nvl:doctor --strict --format=json` to combine the read-only checks from loaded NVL package providers. Errors fail the gate, and strict mode also fails warnings. This package's existing Doctor command remains available and uses the same package-owned inspection service.
+
+
+## Shared infrastructure options
+
+Attachment actions and maintenance command locks use `taxonomy.locks.store`, then `nvl-core.locks.store`, then `cache.default`. `locks.seconds` and `locks.wait_seconds` still control attachment locking, and command lock durations remain unchanged. Production nodes must share a lock-capable store.
+
+## Next major: isolated schema identities
+
+Use `taxonomy.tables.<logical-key>` for every table and `taxonomy.connection` for its database connection. Null connection inherits `nvl-core.connection`, then Laravel's default. Tables are resolved at runtime by the package table definition helper.
+
+| Logical key | New default | Previous name |
+| --- | --- | --- |
+| `terms` | `nvl_taxonomy_terms` | `terms` |
+| `i18n` | `nvl_taxonomy_i18n` | `terms_i18n` |
+| `termables` | `nvl_taxonomy_termables` | `termables` |
+| `tenant_adoption_copies` | `nvl_taxonomy_tenant_adoption_copies` | `term_tenant_adoption_copies` |
+
+Migration filenames contain `nvl_taxonomy_`. Existing installations must complete the upgrade in `UPGRADING.md` before running new migrations. A pending creator rejects an existing target before any migration in the batch runs; legacy storage with old history needs an ownership decision.

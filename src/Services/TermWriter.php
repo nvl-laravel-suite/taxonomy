@@ -7,6 +7,7 @@ namespace Nvl\Taxonomy\Services;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
@@ -14,7 +15,6 @@ use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
-use Nvl\Tenancy\Services\TenantBoundary;
 use Nvl\Translatable\Enums\TranslationSyncMode;
 use Nvl\Translatable\Services\TranslationWriter;
 

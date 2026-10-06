@@ -13,11 +13,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Carbon;
+use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
-use Nvl\Tenancy\Contracts\TenantContext;
 use Nvl\Translatable\Contracts\TranslatableModel;
 use Nvl\Translatable\Enums\TranslationMutationPolicy;
 use Nvl\Translatable\RelatedTranslationDefinition;
@@ -80,7 +81,7 @@ class Term extends Model implements TranslatableModel
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms);
+        return TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms));
     }
 
     /**
@@ -88,7 +89,7 @@ class Term extends Model implements TranslatableModel
      */
     public function getConnectionName(): ?string
     {
-        return TaxonomyConfiguration::connection() ?? parent::getConnectionName();
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('taxonomy') ?? parent::getConnectionName());
     }
 
     /**
@@ -177,7 +178,7 @@ class Term extends Model implements TranslatableModel
             $related->newQuery(),
             $this,
             'termable',
-            TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables),
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
             'term_id',
             'termable_id',
             $this->getKeyName(),

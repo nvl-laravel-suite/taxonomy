@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Tenancy;
 
+use Nvl\Support\Tenancy\Enums\TenantResourceKind;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
+use Nvl\Support\Tenancy\ValueObjects\TenantResourceDefinition;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
-use Nvl\Tenancy\Enums\TenantResourceKind;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
-use Nvl\Tenancy\ValueObjects\TenantResourceDefinition;
 
 /** Registers Taxonomy's immutable tenant-owned tree graph. */
 final readonly class TaxonomyTenancyResources

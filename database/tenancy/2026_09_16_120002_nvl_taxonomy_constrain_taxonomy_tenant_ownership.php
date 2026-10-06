@@ -6,18 +6,25 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\Schema;
+use Nvl\Support\Config\PackageStorage;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 return new class extends Migration
 {
+    /** Use the effective package connection for Laravel's migration transaction. */
+    public function getConnection(): ?string
+    {
+        return PackageStorage::connection('taxonomy');
+    }
+
     /** Apply verified tenant-local tree, translation, and attachment constraints. */
     public function up(): void
     {
         $schema = Schema::connection(TaxonomyConfiguration::connection());
-        $terms = TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms);
-        $translations = TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n);
-        $attachments = TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables);
+        $terms = TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms));
+        $translations = TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n));
+        $attachments = TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables));
 
         $this->dropForeign($schema, $terms, ['taxonomy', 'parent_id']);
         $this->dropForeign($schema, $translations, ['term_id']);
@@ -49,9 +56,9 @@ return new class extends Migration
     public function down(): void
     {
         $schema = Schema::connection(TaxonomyConfiguration::connection());
-        $terms = TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms);
-        $translations = TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n);
-        $attachments = TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables);
+        $terms = TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms));
+        $translations = TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n));
+        $attachments = TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables));
         foreach ([
             [$terms, ['tenant_id', 'taxonomy', 'parent_id']],
             [$translations, ['tenant_id', 'term_id']],

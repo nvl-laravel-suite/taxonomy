@@ -61,3 +61,24 @@ Treat vocabulary, parent, slug, order, metadata, and attachments as structural d
 - Preserve disabled compatibility and package independence; tenant support never creates an undeclared Auth or Suite dependency.
 - Use registered package-owned resources, adoption adapters, Actions, and lifecycle APIs. Never add a generic tenant delete-all path or raw cross-package cleanup.
 - Treat mapping/configuration hashes, interruption checkpoints, conservation evidence, worker context, tenant-leading queries, and standalone consumption as release contracts.
+
+## Shared owner identities
+
+- Declare canonical owner identity once in `nvl-core.owners`; reference its alias in `taxonomy` capability configuration.
+- The shared alias must match the Taxonomy owner identity. Registering an identity does not expand vocabulary allowed_owners or authorize term mutations.
+- Keep the package allowlist and authorization independent of Core registration. Never authorize a model merely because Core knows it.
+- Accept legacy class/resolver/handler inputs during the documented one-major compatibility cycle. Report deprecated host identity inputs through `nvl:doctor`; preserve established write-time morph types.
+- Before introducing an alias for historical FQCN-backed data, explicitly convert reviewed package-owned columns and reconcile affected host relations. Never silently rewrite host morph tables or enable `enforceMorphMap()` globally.
+
+## Shared consumer diagnostics
+
+Run `php artisan nvl:doctor --strict --format=json` to combine checks from loaded NVL providers. Retain the package Doctor command for its detailed report; both paths reuse the package-owned inspection service.
+
+
+## Shared infrastructure options
+
+- Attachment actions and maintenance commands must use `taxonomy.locks.store`, then Core, then `cache.default`. Preserve attachment lifetime/wait bounds and existing command lock durations; production nodes need a shared lock-capable store.
+
+### Brownfield storage identities
+
+Resolve all package tables through the table helper and canonical `taxonomy.tables.*`, connections through `taxonomy.connection` with Core/Laravel inheritance. Defaults use `nvl_taxonomy_*`; migration filenames include that package slug. Never silently adopt a matching table or generic migration filename. Run shared `nvl:doctor --strict --format=json` and the explicit `nvl:schema:upgrade --package=taxonomy --claim-legacy --dry-run --format=json` before upgrading owned legacy storage. Validate the complete plan and choose one migration owner. Preserve host records, constraint names and stored morph values. Deprecated config inputs last one major; canonical options take precedence.

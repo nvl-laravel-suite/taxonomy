@@ -6,16 +6,16 @@ namespace Nvl\Taxonomy\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\Cache;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantRunner;
+use Nvl\Support\Tenancy\ValueObjects\TenantId;
 use Nvl\Taxonomy\Actions\DeleteTermAction;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\Services\TenantRunner;
-use Nvl\Tenancy\ValueObjects\TenantId;
 
 /**
  * Prunes unattached leaf terms in locked chunks.
@@ -106,7 +106,7 @@ final class PruneOrphansCommand extends Command
         $lockKey = config('tenancy.enabled') === true
             ? $boundary->key('taxonomy.terms', 'prune:'.(is_string($taxonomy) ? $taxonomy : '*'))
             : 'nvl:taxonomy:prune';
-        $lock = Cache::lock($lockKey, 3600);
+        $lock = TaxonomyConfiguration::lock($lockKey, 3600);
 
         if (! $lock->get()) {
             $this->error('Another taxonomy prune owns the process lock.');

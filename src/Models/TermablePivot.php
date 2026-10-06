@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
+use Nvl\Support\Config\PackageStorage;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
@@ -45,7 +46,7 @@ final class TermablePivot extends MorphPivot
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables);
+        return TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables));
     }
 
     /**
@@ -53,6 +54,6 @@ final class TermablePivot extends MorphPivot
      */
     public function getConnectionName(): ?string
     {
-        return TaxonomyConfiguration::connection() ?? parent::getConnectionName();
+        return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('taxonomy') ?? parent::getConnectionName());
     }
 }

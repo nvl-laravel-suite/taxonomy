@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Services;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use InvalidArgumentException;
+use Nvl\Support\OwnerRegistry;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantParentResolver;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Exceptions\TenantConfigurationInvalid;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Taxonomy\Models\Term;
-use Nvl\Tenancy\Contracts\TenantParentResolver;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
 
 /**
  * Maps stable owner aliases to consumer model classes.
@@ -26,6 +26,7 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
     public function __construct(
         private readonly TenantResourceRegistry $resources,
         private readonly TenantBoundary $boundary,
+        private readonly OwnerRegistry $identitiesRegistry,
     ) {}
 
     /**
@@ -34,9 +35,14 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
     public function register(string $alias, string $model): void
     {
         $alias = trim($alias);
+        $reference = $model;
+        $model = is_a($reference, Model::class, true) ? $reference : $this->identitiesRegistry->model($reference);
 
-        if (preg_match('/^[a-z][a-z0-9_.-]{0,99}$/D', $alias) !== 1
-            || ! is_a($model, Model::class, true)) {
+        if ($reference !== $model && $reference !== $alias) {
+            throw new InvalidArgumentException("Taxonomy owner [{$alias}] must use its canonical shared alias [{$reference}].");
+        }
+
+        if (preg_match('/^[a-z][a-z0-9_.-]{0,99}$/D', $alias) !== 1) {
             throw new InvalidArgumentException(
                 "Taxonomy owner alias [{$alias}] or model [{$model}] is invalid.",
             );
@@ -58,26 +64,10 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
             );
         }
 
-        $morphedModel = Relation::getMorphedModel($alias);
-
-        if ($morphedModel !== null && $morphedModel !== $model) {
-            throw new InvalidArgumentException(
-                "Morph alias [{$alias}] is already registered for [{$morphedModel}].",
-            );
-        }
-
-        foreach (Relation::morphMap() as $morphAlias => $morphModel) {
-            if ($morphModel === $model && $morphAlias !== $alias) {
-                throw new InvalidArgumentException(
-                    "Model [{$model}] already uses morph alias [{$morphAlias}].",
-                );
-            }
-        }
-
+        $this->identitiesRegistry->reference($reference, "taxonomy.owners.{$alias}", $alias, true);
         $this->owners[$alias] = $model;
         ksort($this->owners);
 
-        Relation::morphMap([$alias => $model], merge: true);
     }
 
     /**
@@ -142,7 +132,11 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
         return $resolved;
     }
 
-    /** Return explicitly registered morph identities for inherited ownership. */
+    /**
+     * Return explicitly registered morph identities for inherited ownership.
+     *
+     * @return array<string, class-string<Model>>
+     */
     public function types(): array
     {
         return $this->owners;

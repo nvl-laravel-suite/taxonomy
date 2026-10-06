@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Support;
 
+use Illuminate\Contracts\Cache\Lock;
+use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
-use Nvl\Tenancy\Services\TenantBoundary;
+use Nvl\Support\Config\PackageOptions;
+use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 
 /**
  * Normalizes package configuration and polymorphic identifiers at infrastructure boundaries.
@@ -18,14 +24,7 @@ final class TaxonomyConfiguration
      */
     public static function table(string $key, string $default): string
     {
-        $table = config("taxonomy.table_names.{$key}", $default);
-
-        if (! is_string($table)
-            || preg_match('/^[A-Za-z_][A-Za-z0-9_.]*$/D', $table) !== 1) {
-            throw new InvalidArgumentException("Taxonomy table [{$key}] is invalid.");
-        }
-
-        return $table;
+        return TaxonomyTables::get($key);
     }
 
     /**
@@ -33,9 +32,7 @@ final class TaxonomyConfiguration
      */
     public static function connection(): ?string
     {
-        $connection = config('taxonomy.storage.connection');
-
-        return is_string($connection) && $connection !== '' ? $connection : null;
+        return PackageStorage::connection('taxonomy');
     }
 
     /**
@@ -64,6 +61,23 @@ final class TaxonomyConfiguration
     public static function lockSeconds(): int
     {
         return self::positiveInteger('locks.seconds', 30);
+    }
+
+    /** Return the effective distributed-lock store without changing operation durations. */
+    public static function lockStore(): string
+    {
+        return PackageOptions::lockStore('taxonomy');
+    }
+
+    /** Create one atomic lock on the selected store, failing clearly when unsupported. */
+    public static function lock(string $name, int $seconds): Lock
+    {
+        $provider = Cache::store(self::lockStore())->getStore();
+        if (! $provider instanceof LockProvider) {
+            throw new InvalidArgumentException('The selected Taxonomy lock store must support atomic locks.');
+        }
+
+        return $provider->lock($name, $seconds);
     }
 
     /**

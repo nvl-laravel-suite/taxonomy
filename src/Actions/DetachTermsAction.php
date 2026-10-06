@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Actions;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use LogicException;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermAttachmentWriter;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
-use Nvl\Tenancy\Services\TenantBoundary;
 
 /**
  * Removes selected terms or all terms from one vocabulary attachment set.
@@ -34,7 +33,7 @@ final readonly class DetachTermsAction
     public function execute(Model $owner, string $taxonomy, array $terms = []): int
     {
         $connection = (new Term)->getConnectionName();
-        $lock = Cache::lock(
+        $lock = TaxonomyConfiguration::lock(
             TaxonomyConfiguration::attachmentLockName($this->boundary, $owner, $taxonomy),
             TaxonomyConfiguration::lockSeconds(),
         );

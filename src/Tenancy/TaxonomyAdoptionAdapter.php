@@ -7,17 +7,17 @@ namespace Nvl\Taxonomy\Tenancy;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Support\Str;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Exceptions\TenantConfigurationInvalid;
+use Nvl\Support\Tenancy\Services\EffectiveTenantConnection;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Tenancy\Contracts\TenantAdoptionAdapter;
 use Nvl\Tenancy\Contracts\TenantAdoptionMetadataValidator;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Tenancy\Exceptions\TenantConfigurationInvalid;
-use Nvl\Tenancy\Services\EffectiveTenantConnection;
 use Nvl\Tenancy\Services\TenantAdoptionMappings;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Tenancy\ValueObjects\TenantAdoptionPlan;
 use Nvl\Tenancy\ValueObjects\TenantAssignment;
 use Nvl\Tenancy\ValueObjects\TenantBackfillResult;
@@ -76,7 +76,7 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
     public function prepare(TenantAdoptionPlan $plan): void
     {
         $this->assertConnection($plan);
-        $path = dirname(__DIR__, 2).'/database/tenancy/2026_09_16_120001_expand_taxonomy_tenant_ownership.php';
+        $path = dirname(__DIR__, 2).'/database/tenancy/2026_09_16_120001_nvl_taxonomy_expand_taxonomy_tenant_ownership.php';
         $this->migrator->usingConnection($plan->connection, fn () => $this->migrator->run([$path], ['force' => true]));
     }
 
@@ -108,10 +108,10 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
         $this->assertConnection($plan);
         $connection = $this->connection($plan);
         $schema = $connection->getSchemaBuilder();
-        $terms = $this->table(TaxonomyTables::Terms);
-        $translations = $this->table(TaxonomyTables::I18n);
-        $attachments = $this->table(TaxonomyTables::Termables);
-        $copies = $this->table(TaxonomyTables::TenantAdoptionCopies);
+        $terms = $this->table(TaxonomyTables::get(TaxonomyTables::Terms));
+        $translations = $this->table(TaxonomyTables::get(TaxonomyTables::I18n));
+        $attachments = $this->table(TaxonomyTables::get(TaxonomyTables::Termables));
+        $copies = $this->table(TaxonomyTables::get(TaxonomyTables::TenantAdoptionCopies));
         $errors = [];
         foreach ([$terms, $translations, $attachments] as $table) {
             if (! $schema->hasTable($table) || ! $schema->hasColumn($table, 'tenant_id')) {
@@ -167,7 +167,7 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
     public function activate(TenantAdoptionPlan $plan): void
     {
         $this->assertVerified($plan, 'Taxonomy tenant schema did not verify before activation.');
-        $path = dirname(__DIR__, 2).'/database/tenancy/2026_09_16_120002_constrain_taxonomy_tenant_ownership.php';
+        $path = dirname(__DIR__, 2).'/database/tenancy/2026_09_16_120002_nvl_taxonomy_constrain_taxonomy_tenant_ownership.php';
         $this->migrator->usingConnection($plan->connection, fn () => $this->migrator->run([$path], ['force' => true]));
         $this->assertVerified($plan, 'Taxonomy tenant schema did not verify after activation.');
     }
@@ -185,9 +185,9 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
     {
         $this->validateAssignment($assignment);
         $connection = $this->connection($plan);
-        $terms = $this->table(TaxonomyTables::Terms);
-        $translations = $this->table(TaxonomyTables::I18n);
-        $attachments = $this->table(TaxonomyTables::Termables);
+        $terms = $this->table(TaxonomyTables::get(TaxonomyTables::Terms));
+        $translations = $this->table(TaxonomyTables::get(TaxonomyTables::I18n));
+        $attachments = $this->table(TaxonomyTables::get(TaxonomyTables::Termables));
         $source = $connection->table($terms)->where('id', $assignment->recordId)->first();
         if (! $source instanceof stdClass) {
             throw new TenantBoundaryViolation('A reviewed Taxonomy term is unavailable.');
@@ -201,7 +201,7 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
             } else {
                 $this->copyTerm($source, $destinationId, $tenant);
             }
-            $connection->table($this->table(TaxonomyTables::TenantAdoptionCopies))
+            $connection->table($this->table(TaxonomyTables::get(TaxonomyTables::TenantAdoptionCopies)))
                 ->where('adoption_run_id', $plan->id)->where('source_id', $assignment->recordId)
                 ->where('tenant_id', $tenant)->update(['status' => 'committed', 'updated_at' => now()]);
         }
@@ -223,8 +223,8 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
     private function copyTerm(stdClass $source, string $destinationId, string $tenant): void
     {
         $connection = $this->connectionForModel();
-        $terms = $this->table(TaxonomyTables::Terms);
-        $translations = $this->table(TaxonomyTables::I18n);
+        $terms = $this->table(TaxonomyTables::get(TaxonomyTables::Terms));
+        $translations = $this->table(TaxonomyTables::get(TaxonomyTables::I18n));
         $existing = $connection->table($terms)->where('id', $destinationId)->first();
         if ($existing !== null) {
             if ($existing->tenant_id !== $tenant || $existing->taxonomy !== $source->taxonomy || $existing->slug !== $source->slug) {
@@ -264,8 +264,8 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
     private function reconcileGraph(TenantAdoptionPlan $plan): void
     {
         $connection = $this->connection($plan);
-        $terms = $this->table(TaxonomyTables::Terms);
-        $copies = $this->table(TaxonomyTables::TenantAdoptionCopies);
+        $terms = $this->table(TaxonomyTables::get(TaxonomyTables::Terms));
+        $copies = $this->table(TaxonomyTables::get(TaxonomyTables::TenantAdoptionCopies));
         foreach ($connection->table($copies)->where('adoption_run_id', $plan->id)->orderBy('source_id')->orderBy('tenant_id')->get() as $copy) {
             $source = $connection->table($terms)->where('id', $copy->source_id)->first();
             if (! $source instanceof stdClass) {
@@ -309,7 +309,7 @@ final readonly class TaxonomyAdoptionAdapter implements TenantAdoptionAdapter, T
     /** Persist one idempotent reviewed copy-ledger row. */
     private function recordCopy(TenantAdoptionPlan $plan, string $sourceId, string $tenant, string $destinationId): void
     {
-        $table = $this->table(TaxonomyTables::TenantAdoptionCopies);
+        $table = $this->table(TaxonomyTables::get(TaxonomyTables::TenantAdoptionCopies));
         $connection = $this->connection($plan);
         $row = $connection->table($table)->where('adoption_run_id', $plan->id)
             ->where('source_id', $sourceId)->where('tenant_id', $tenant)->first();

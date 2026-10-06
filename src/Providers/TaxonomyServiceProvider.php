@@ -9,19 +9,23 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use Nvl\Data\Services\TypeScriptSourceRegistry;
+use Nvl\Support\Doctor\PackageDoctorContributor;
+use Nvl\Support\OwnerRegistry;
+use Nvl\Support\Providers\SupportServiceProvider;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Taxonomy\Commands;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
+use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tenancy\TaxonomyAdoptionAdapter;
 use Nvl\Taxonomy\Tenancy\TaxonomyTenancyResources;
 use Nvl\Tenancy\Services\TenantAdoptionRegistry;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
 /**
@@ -36,6 +40,9 @@ final class TaxonomyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->register(SupportServiceProvider::class);
+        PackageDoctorContributor::register($this->app, 'nvl/taxonomy', fn (): array => $this->app->make(TaxonomyDoctor::class)->inspect());
+
         $this->mergePackageConfiguration(__DIR__.'/../../config/taxonomy.php', 'taxonomy');
 
         $this->app->singleton(TaxonomyRegistry::class);
@@ -56,6 +63,7 @@ final class TaxonomyServiceProvider extends ServiceProvider
             $registry = new TaxonomyOwnerRegistry(
                 $app->make(TenantResourceRegistry::class),
                 $app->make(TenantBoundary::class),
+                $app->make(OwnerRegistry::class),
             );
             $configuredOwners = config('taxonomy.owners', []);
 
@@ -64,6 +72,9 @@ final class TaxonomyServiceProvider extends ServiceProvider
             }
 
             foreach ($configuredOwners as $alias => $model) {
+                if (is_int($alias) && is_string($model)) {
+                    $alias = $model;
+                }
                 if (! is_string($alias) || ! is_string($model)) {
                     throw new InvalidArgumentException(
                         'Taxonomy owners must use string aliases and model class names.',
@@ -87,11 +98,12 @@ final class TaxonomyServiceProvider extends ServiceProvider
         TaxonomyRegistry $taxonomies,
         TaxonomyTenancyResources $tenancyResources,
         TenantResourceRegistry $tenantResources,
-        TenantAdoptionRegistry $tenantAdoptions,
         TenantBoundary $tenantBoundary,
     ): void {
         $tenancyResources->register($tenantResources);
-        $tenantAdoptions->register('taxonomy', TaxonomyAdoptionAdapter::class);
+        if ($this->app->bound(TenantAdoptionRegistry::class)) {
+            $this->app->make(TenantAdoptionRegistry::class)->register('taxonomy', TaxonomyAdoptionAdapter::class);
+        }
         $this->registerTenantScopes($tenantBoundary, $taxonomies);
         foreach ($taxonomies->all() as $definition) {
             $unknownOwners = array_diff(

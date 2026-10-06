@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Cache;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantRunner;
+use Nvl\Support\Tenancy\ValueObjects\TenantId;
 use Nvl\Taxonomy\Actions\RebuildTreeAction;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\Services\TenantRunner;
-use Nvl\Tenancy\ValueObjects\TenantId;
+use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Normalizes sibling positions with a distributed process lock.
@@ -60,7 +60,7 @@ final class RebuildTreeCommand extends Command
         $lockKey = config('tenancy.enabled') === true
             ? $boundary->key('taxonomy.terms', 'rebuild:'.($taxonomy ?? '*'))
             : 'nvl:taxonomy:rebuild';
-        $lock = Cache::lock($lockKey, 3600);
+        $lock = TaxonomyConfiguration::lock($lockKey, 3600);
 
         if (! $lock->get()) {
             $this->error('Another taxonomy rebuild owns the process lock.');

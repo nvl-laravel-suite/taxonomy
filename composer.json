@@ -3,13 +3,18 @@
     "description": "Hierarchical, attachable and translatable taxonomies for Laravel",
     "type": "library",
     "license": "MIT",
-    "keywords": ["laravel", "taxonomy", "categories", "tags", "translation"],
+    "keywords": [
+        "laravel",
+        "taxonomy",
+        "categories",
+        "tags",
+        "translation"
+    ],
     "require": {
         "php": "^8.3",
         "ext-ctype": "*",
         "laravel/framework": "^13.0",
         "nvl/core": "^2.0",
-        "nvl/tenancy": "^2.0",
         "nvl/translatable": "^2.0",
         "spatie/laravel-data": "^4.23",
         "spatie/typescript-transformer": "^3.3"
@@ -17,6 +22,7 @@
     "require-dev": {
         "larastan/larastan": "^3.10",
         "laravel/pint": "^1.27",
+        "nvl/tenancy": "^2.0",
         "orchestra/testbench": "^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0"
@@ -71,5 +77,8 @@
         ]
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "suggest": {
+        "nvl/tenancy": "Enables enforcing tenant ownership, scoped execution, adoption, and captured tenant queue contexts."
+    }
 }

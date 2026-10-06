@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Concerns;
 
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 
 /** Prevents persisted Taxonomy ownership from changing through model writes. */
 trait GuardsTenantOwnership

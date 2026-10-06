@@ -56,7 +56,7 @@ it('preserves nested taxonomy defaults around consumer definitions', function ()
 
     expect(config('taxonomy.taxonomies.tag.sort'))->toBe('position')
         ->and(config('taxonomy.taxonomies.category.max_depth'))->toBe(3)
-        ->and(config('taxonomy.table_names.terms_i18n'))->toBe('terms_i18n');
+        ->and(TaxonomyTables::get(TaxonomyTables::I18n))->toBe('nvl_taxonomy_i18n');
 });
 
 it('scopes terms by taxonomy correctly', function () {
@@ -285,8 +285,8 @@ it('rolls back term creation on the configured taxonomy connection when translat
     config()->set('translatable.locales', ['en']);
 
     try {
-        $termsMigration = require __DIR__.'/../database/migrations/2026_01_01_000000_create_terms_table.php';
-        $translationsMigration = require __DIR__.'/../database/migrations/2026_07_26_083129_create_terms_i18n_table.php';
+        $termsMigration = require __DIR__.'/../database/migrations/2026_01_01_000000_nvl_taxonomy_create_terms_table.php';
+        $translationsMigration = require __DIR__.'/../database/migrations/2026_07_26_083129_nvl_taxonomy_create_terms_i18n_table.php';
         $termsMigration->up();
         $translationsMigration->up();
 
@@ -497,7 +497,7 @@ it('rejects multiple exclusive terms without replacing the current attachment', 
         'category',
         [$first, $second],
     ))->toThrow(InvalidArgumentException::class)
-        ->and($post->fresh()?->categories()->pluck('terms.id')->all())->toBe([$first->id]);
+        ->and($post->fresh()?->categories()->pluck(TaxonomyTables::get(TaxonomyTables::Terms).'.id')->all())->toBe([$first->id]);
 });
 
 it('requires optimistic revisions for every update', function () {
@@ -844,7 +844,7 @@ it('validates multi-child merge hierarchy in a constant number of term reads', f
     DB::flushQueryLog();
     DB::enableQueryLog();
     $termsTable = strtolower(
-        DB::connection()->getQueryGrammar()->wrapTable('terms'),
+        DB::connection()->getQueryGrammar()->wrapTable(TaxonomyTables::get(TaxonomyTables::Terms)),
     );
 
     app(ValidateTermMergeAction::class)->execute(
@@ -915,9 +915,9 @@ it('keeps move merge delete and attachments on the configured connection', funct
 
     try {
         foreach ([
-            '2026_01_01_000000_create_terms_table.php',
-            '2026_01_01_000001_create_termables_table.php',
-            '2026_07_26_083129_create_terms_i18n_table.php',
+            '2026_01_01_000000_nvl_taxonomy_create_terms_table.php',
+            '2026_01_01_000001_nvl_taxonomy_create_termables_table.php',
+            '2026_07_26_083129_nvl_taxonomy_create_terms_i18n_table.php',
         ] as $migration) {
             (require __DIR__.'/../database/migrations/'.$migration)->up();
         }
@@ -970,9 +970,9 @@ it('keeps move merge delete and attachments on the configured connection', funct
         );
 
         expect($moved->getConnectionName())->toBe($connection)
-            ->and(DB::connection($connection)->table('terms')->where('id', $child->id)->exists())->toBeFalse()
-            ->and(DB::connection($connection)->table('termables')->value('term_id'))->toBe($destination->id)
-            ->and(DB::connection()->table('terms')->count())->toBe(0);
+            ->and(DB::connection($connection)->table(TaxonomyTables::get(TaxonomyTables::Terms))->where('id', $child->id)->exists())->toBeFalse()
+            ->and(DB::connection($connection)->table(TaxonomyTables::get(TaxonomyTables::Termables))->value('term_id'))->toBe($destination->id)
+            ->and(DB::connection()->table(TaxonomyTables::get(TaxonomyTables::Terms))->count())->toBe(0);
     } finally {
         config()->set('taxonomy.storage.connection', null);
         DB::purge($connection);

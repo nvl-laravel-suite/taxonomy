@@ -8,6 +8,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Taxonomy\Data\TaxonomyDoctorCheckData;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Term;
@@ -15,7 +16,6 @@ use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
-use Nvl\Tenancy\Services\TenantResourceRegistry;
 use Throwable;
 
 /**
@@ -42,14 +42,14 @@ final readonly class TaxonomyDoctor
         $schema = Schema::connection(TaxonomyConfiguration::connection());
         $tenantColumns = config('tenancy.enabled') === true ? ['tenant_id'] : [];
         $tables = [
-            TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms) => [
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)) => [
                 'id', 'taxonomy', 'parent_id', 'parent_key', 'slug', 'position', 'meta',
                 'revision', 'created_at', 'updated_at', ...$tenantColumns,
             ],
-            TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n) => [
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)) => [
                 'id', 'term_id', 'locale', 'name', 'description', 'created_at', 'updated_at', ...$tenantColumns,
             ],
-            TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables) => [
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)) => [
                 'id', 'term_id', 'termable_type', 'termable_id', 'taxonomy', 'position',
                 'created_at', 'updated_at', ...$tenantColumns,
             ],
@@ -78,41 +78,41 @@ final readonly class TaxonomyDoctor
 
         $tenantEnabled = config('tenancy.enabled') === true;
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
             [
                 $tenantEnabled ? ['tenant_id', 'taxonomy', 'id'] : ['taxonomy', 'id'],
                 $tenantEnabled ? ['tenant_id', 'taxonomy', 'parent_key', 'slug'] : ['taxonomy', 'parent_key', 'slug'],
             ],
         );
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n),
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)),
             [$tenantEnabled ? ['tenant_id', 'term_id', 'locale'] : ['term_id', 'locale']],
         );
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables),
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
             [$tenantEnabled ? ['tenant_id', 'term_id', 'termable_type', 'termable_id'] : ['term_id', 'termable_type', 'termable_id']],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
             [[
                 'columns' => $tenantEnabled ? ['tenant_id', 'taxonomy', 'parent_id'] : ['taxonomy', 'parent_id'],
-                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
                 'foreign_columns' => $tenantEnabled ? ['tenant_id', 'taxonomy', 'id'] : ['taxonomy', 'id'],
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::I18n, TaxonomyTables::I18n),
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)),
             [[
                 'columns' => $tenantEnabled ? ['tenant_id', 'term_id'] : ['term_id'],
-                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
                 'foreign_columns' => $tenantEnabled ? ['tenant_id', 'id'] : ['id'],
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::Termables, TaxonomyTables::Termables),
+            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
             [[
                 'columns' => $tenantEnabled ? ['tenant_id', 'taxonomy', 'term_id'] : ['taxonomy', 'term_id'],
-                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms, TaxonomyTables::Terms),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
                 'foreign_columns' => $tenantEnabled ? ['tenant_id', 'taxonomy', 'id'] : ['taxonomy', 'id'],
             ]],
         );

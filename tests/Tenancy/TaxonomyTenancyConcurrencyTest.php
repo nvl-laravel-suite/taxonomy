@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 use Illuminate\Container\Container;
 use Illuminate\Support\Facades\DB;
+use Nvl\Support\Tenancy\Contracts\TenantRunner;
+use Nvl\Support\Tenancy\ValueObjects\TenantId;
 use Nvl\Taxonomy\Actions\MoveTermAction;
 use Nvl\Taxonomy\Tests\Fixtures\TaxonomyTenancyScenario;
-use Nvl\Tenancy\Services\TenantRunner;
-use Nvl\Tenancy\ValueObjects\TenantId;
 
 it('creates identical roots concurrently in independent tenant partitions', function (): void {
     if (! in_array(DB::connection()->getDriverName(), ['mysql', 'pgsql'], true)

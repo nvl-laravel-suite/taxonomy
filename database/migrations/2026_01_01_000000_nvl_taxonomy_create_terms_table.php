@@ -5,22 +5,28 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Nvl\Support\Config\PackageStorage;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 
 return new class extends Migration
 {
+    /** Use the effective package connection for Laravel's migration transaction. */
+    public function getConnection(): ?string
+    {
+        return PackageStorage::connection('taxonomy');
+    }
+
     /**
      * Create the structural taxonomy term table.
      */
     public function up(): void
     {
-        $tableNames = config('taxonomy.table_names', [TaxonomyTables::Terms => TaxonomyTables::Terms, TaxonomyTables::Termables => TaxonomyTables::Termables]);
 
-        $schema = Schema::connection(config('taxonomy.storage.connection'));
-        $tableName = (string) $tableNames[TaxonomyTables::Terms];
+        $schema = Schema::connection(PackageStorage::connection('taxonomy'));
+        $tableName = (string) TaxonomyTables::get(TaxonomyTables::Terms);
 
         if ($schema->hasTable($tableName)) {
-            return;
+            throw new LogicException('Existing package table is not owned by this migration. Run nvl:doctor --strict and use nvl:schema:upgrade for a verified legacy installation.');
         }
 
         $schema->create($tableName, function (Blueprint $table): void {
@@ -40,7 +46,7 @@ return new class extends Migration
             $table->index(['taxonomy', 'parent_id', 'position']);
             $table->foreign(['taxonomy', 'parent_id'], 'terms_taxonomy_parent_foreign')
                 ->references(['taxonomy', 'id'])
-                ->on((string) config('taxonomy.table_names.terms', TaxonomyTables::Terms))
+                ->on((string) config('taxonomy.table_names.terms', TaxonomyTables::get(TaxonomyTables::Terms)))
                 ->restrictOnDelete();
         });
     }
@@ -50,8 +56,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        $tableNames = config('taxonomy.table_names', [TaxonomyTables::Terms => TaxonomyTables::Terms, TaxonomyTables::Termables => TaxonomyTables::Termables]);
-        Schema::connection(config('taxonomy.storage.connection'))
-            ->dropIfExists((string) $tableNames[TaxonomyTables::Terms]);
+        Schema::connection(PackageStorage::connection('taxonomy'))
+            ->dropIfExists((string) TaxonomyTables::get(TaxonomyTables::Terms));
     }
 };

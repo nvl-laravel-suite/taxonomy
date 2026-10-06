@@ -46,7 +46,7 @@ it('rejects a raw attachment whose term belongs to another tenant', function ():
 
 it('reverses and reapplies final taxonomy ownership constraints', function (): void {
     TaxonomyTenancyScenario::install();
-    $migration = require dirname(__DIR__, 2).'/database/tenancy/2026_09_16_120002_constrain_taxonomy_tenant_ownership.php';
+    $migration = require dirname(__DIR__, 2).'/database/tenancy/2026_09_16_120002_nvl_taxonomy_constrain_taxonomy_tenant_ownership.php';
 
     $migration->down();
     $columns = collect(Schema::getColumns('tenant_terms'))->keyBy('name');

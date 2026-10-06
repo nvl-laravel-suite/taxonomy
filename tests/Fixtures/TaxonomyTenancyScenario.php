@@ -7,14 +7,14 @@ namespace Nvl\Taxonomy\Tests\Fixtures;
 use Closure;
 use Illuminate\Contracts\Foundation\MaintenanceMode;
 use Illuminate\Database\Eloquent\Model;
+use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Tenancy\Contracts\TenantRunner;
+use Nvl\Support\Tenancy\ValueObjects\TenantId;
 use Nvl\Taxonomy\Actions\CreateTermAction;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Tenancy\Services\TenantAdoptionCoordinator;
-use Nvl\Tenancy\Services\TenantBoundary;
-use Nvl\Tenancy\Services\TenantRunner;
 use Nvl\Tenancy\ValueObjects\PlatformOperation;
-use Nvl\Tenancy\ValueObjects\TenantId;
 
 /** Installs and exercises Taxonomy through the real tenancy coordinator. */
 final readonly class TaxonomyTenancyScenario

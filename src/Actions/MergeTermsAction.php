@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
+use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Models\Term;
@@ -15,7 +16,6 @@ use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Services\TermMergeValidator;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
-use Nvl\Tenancy\Exceptions\TenantBoundaryViolation;
 
 /**
  * Merges a source term into a destination without duplicate attachments.
