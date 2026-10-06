@@ -6,6 +6,8 @@ namespace Nvl\Taxonomy\Enums;
 
 /**
  * Defines the supported handling strategies for a term deletion.
+ *
+ * @api
  */
 enum DeleteTermStrategy: string
 {

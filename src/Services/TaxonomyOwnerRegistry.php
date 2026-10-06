@@ -16,6 +16,8 @@ use Nvl\Taxonomy\Models\Term;
 
 /**
  * Resolves capability references and native morph identities for Taxonomy owners.
+ *
+ * @api
  */
 final class TaxonomyOwnerRegistry implements TenantParentResolver
 {

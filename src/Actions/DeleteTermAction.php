@@ -18,6 +18,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Deletes a term through an explicit attachment/child handling strategy.
+ *
+ * @api
  */
 final readonly class DeleteTermAction
 {

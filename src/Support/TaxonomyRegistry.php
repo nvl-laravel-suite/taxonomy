@@ -10,6 +10,8 @@ use Nvl\Taxonomy\Models\Term;
 
 /**
  * Validates and resolves immutable vocabulary definitions by canonical alias.
+ *
+ * @api
  */
 final class TaxonomyRegistry
 {

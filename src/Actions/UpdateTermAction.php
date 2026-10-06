@@ -18,6 +18,8 @@ use Nvl\Translatable\Enums\TranslationSyncMode;
 
 /**
  * Updates one taxonomy term and its locale rows atomically.
+ *
+ * @api
  */
 final readonly class UpdateTermAction
 {

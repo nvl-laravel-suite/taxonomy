@@ -11,6 +11,7 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ### Changed
 
+- Classify the supported consumer PHP surface with explicit source annotations and restrict package model handles to declared identity and in-memory read fields; preserve existing workflow behavior and concrete signatures.
 - Audit any/all/without/category host scopes for canonical storage, caller OR grouping, live owner and tenant guards, registered term visibility, and bounded category traversal; preserve optional compatible policy and reference semantics.
 - Reject ambiguous host-filter correlation before SQL when owner storage shares the actual registered term or attachment table; preserve exact paired batch reads and empty term-filter semantics.
 

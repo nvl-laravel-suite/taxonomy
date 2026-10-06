@@ -28,11 +28,17 @@ use ReflectionClass;
 
 /**
  * @mixin Model
+ *
+ * @api
+ *
+ * @nvl-consumer-relation termables
  */
 trait HasTaxonomies
 {
     /**
      * Register configured relations and owner lifecycle cleanup.
+     *
+     * @internal
      */
     public static function bootHasTaxonomies(): void
     {
@@ -92,6 +98,8 @@ trait HasTaxonomies
      * Return raw taxonomy attachment records owned by this model.
      *
      * @return MorphMany<Termable, $this>
+     *
+     * @internal
      */
     public function termables(): MorphMany
     {
@@ -158,6 +166,8 @@ trait HasTaxonomies
 
     /**
      * Determine whether this owner has one exact taxonomy term.
+     *
+     * @internal
      */
     public function hasTerm(string $taxonomy, string|int|Term $value): bool
     {

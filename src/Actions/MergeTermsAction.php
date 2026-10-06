@@ -19,6 +19,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Merges a source term into a destination without duplicate attachments.
+ *
+ * @api
  */
 final readonly class MergeTermsAction
 {

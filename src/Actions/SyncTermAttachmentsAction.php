@@ -13,6 +13,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Atomically replaces one owner's ordered attachments for a vocabulary.
+ *
+ * @api
  */
 final readonly class SyncTermAttachmentsAction
 {

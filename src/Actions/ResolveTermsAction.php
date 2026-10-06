@@ -12,6 +12,8 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
  * Resolves term models and stable slugs, creating localized open-vocabulary terms when allowed.
+ *
+ * @internal
  */
 final readonly class ResolveTermsAction
 {

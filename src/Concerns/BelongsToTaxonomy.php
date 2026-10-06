@@ -18,6 +18,8 @@ trait BelongsToTaxonomy
 {
     /**
      * Apply the configured vocabulary scope, creation default, and mutation guard.
+     *
+     * @internal
      */
     public static function bootBelongsToTaxonomy(): void
     {

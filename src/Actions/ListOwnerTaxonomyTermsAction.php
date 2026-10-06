@@ -9,7 +9,11 @@ use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
 use Nvl\Taxonomy\Data\OwnerTaxonomyTerms;
 use Nvl\Taxonomy\Services\OwnerTaxonomyBatchReader;
 
-/** Reads many canonical owners through the package's bounded DTO boundary. */
+/**
+ * Reads many canonical owners through the package's bounded DTO boundary.
+ *
+ * @api
+ */
 final readonly class ListOwnerTaxonomyTermsAction implements ListOwnerTaxonomyTermsContract
 {
     /** Retain the authorized batch reader. */

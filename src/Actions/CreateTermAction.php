@@ -15,6 +15,8 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
  * Creates one taxonomy term and all supplied locale rows atomically.
+ *
+ * @api
  */
 final readonly class CreateTermAction
 {

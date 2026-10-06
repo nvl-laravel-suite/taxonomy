@@ -11,6 +11,8 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
  * Builds a deterministic localized tree for any registered vocabulary.
+ *
+ * @api
  */
 final readonly class TaxonomyTree
 {

@@ -14,6 +14,8 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
  * Normalizes sibling positions independently inside every vocabulary tree.
+ *
+ * @internal
  */
 final readonly class RebuildTreeAction
 {

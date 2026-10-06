@@ -16,6 +16,8 @@ use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 /**
  * Defines structural term data and locale-keyed display copy for term mutations.
+ *
+ * @api
  */
 #[MapInputName(CamelCaseMapper::class)]
 #[MapOutputName(CamelCaseMapper::class)]

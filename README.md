@@ -109,9 +109,7 @@ Use `MoveTermAction` for reparenting. It rejects:
 - moves beyond the configured maximum depth;
 - duplicate sibling slugs.
 
-Ordered tree and subtree reads must eager-load translations and use the package's deterministic ordering. Do not recurse through lazily loaded child relationships in an API transformer.
-
-Use `TaxonomyTree::for($taxonomy, $locale)` for any registered vocabulary. `Category::tree()` is a convenience wrapper around the same generic service.
+`app(TaxonomyTree::class)->for($taxonomy, $locale)` delegates tree ordering and translation loading to the package reader and returns Term identity/result handles. The tree's loaded child/translation relationships describe internal storage state and do not grant consumer traversal or serialization. Obtain owner term display projections through `ListOwnerTaxonomyTermsContract`, or an explicitly authorized host adapter for a custom tree projection; do not query/eager-load package models or recurse through their relations in an API transformer.
 
 ## Attach terms
 
@@ -199,7 +197,7 @@ php artisan nvl:taxonomy:rebuild category --tenant=<tenant-uuid> --dry-run
 php artisan nvl:taxonomy:prune tag --tenant=<tenant-uuid> --dry-run
 ```
 
-Attachment Actions and owner-to-term lazy/eager relations support a dedicated taxonomy connection. Inverse `Term::entries()` joins and owner `with*Terms` / `inCategory` scopes require the owner and taxonomy connections to address the same physical database because Eloquent cannot execute a cross-database relationship subquery portably.
+Attachment Actions and `ListOwnerTaxonomyTermsContract` support the package's dedicated taxonomy storage boundary. Owner-to-term lazy/eager relations and inverse `Term::entries()` joins are package-internal storage behavior. Consumers use the bounded reader for display and the authorized C1 `withAnyTerms`, `withAllTerms`, `withoutTerms`, or `inCategory` host scopes with their explicit batch policy for filtering. Those correlated host scopes require the same physical database; raw relation traversal does not become supported merely because connections match.
 
 For an existing schema, disable automatic migrations and run the doctor. Convert root sentinels to `null`, backfill dedicated translation rows, and resolve identifier differences in an application-owned reversible bridge. A table-name match is not schema compatibility.
 
@@ -254,6 +252,14 @@ Host filters require the owner table identifier to differ from both the requeste
 The package tests cover UUID identifiers, stable morph aliases, translation fallback, slug stability, tree order, cycles, subtree depth, moves, merges, attachments, exclusivity, deletion policies, maintenance safety, and configured-connection behavior. CI runs the package on its supported PHP/Laravel and database matrix.
 
 See [UPGRADING.md](UPGRADING.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [CHANGELOG.md](CHANGELOG.md).
+
+## Supported PHP usage
+
+The source `@api` declarations identify supported workflows, extension contracts, and value types. Public members marked `@internal` and untagged implementation types remain package-owned. Concrete Actions retain their existing constructors, qualifiers, and `execute()` signatures.
+
+A package model returned or accepted by a public workflow is an identity/result handle. Use its declared type and `getKey()`, `getKeyName()`, `getMorphClass()`, `getRouteKey()`, `getRouteKeyName()`, `is()`, `isNot()`, and `relationLoaded()`. Read only explicitly declared in-memory `@nvl-consumer-read` fields; ordinary model PHPDocs and fillable attributes do not grant consumer reads. Obtain display projections through public reads. Persistence, additional model queries, relation access/loading, and generic model serialization are outside this contract. Host-model queries remain available, while traversal or aggregates of package capability relations require the package public reader or authorized adapter.
+
+The current readable handle fields are `Term`: `id`, `taxonomy`, `slug`, `position`, `revision`, `created_at`, `updated_at`. All other package model handles have no readable attribute grant.
 
 ## License
 

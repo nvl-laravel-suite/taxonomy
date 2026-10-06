@@ -13,6 +13,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Appends terms while preserving existing attachment order.
+ *
+ * @api
  */
 final readonly class AttachTermsAction
 {

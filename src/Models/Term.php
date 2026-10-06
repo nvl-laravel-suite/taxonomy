@@ -42,6 +42,16 @@ use Nvl\Translatable\Translatable;
  * @property-read Collection<int, Term> $children
  * @property-read Collection<int, TermTranslation> $translations
  * @property-read Collection<int, Termable> $attachments
+ *
+ * @api
+ *
+ * @nvl-consumer-read id
+ * @nvl-consumer-read taxonomy
+ * @nvl-consumer-read slug
+ * @nvl-consumer-read position
+ * @nvl-consumer-read revision
+ * @nvl-consumer-read created_at
+ * @nvl-consumer-read updated_at
  */
 class Term extends Model implements TranslatableModel
 {

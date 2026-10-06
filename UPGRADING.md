@@ -85,3 +85,11 @@ DDL transactions are driver dependent and per connection. Inspect dry-run warnin
 Attachment locks use `nvl:taxonomy:attachments:` instead of the generic `attachments:` key. Rebuild and prune locks use `nvl:taxonomy:rebuild:` and `nvl:taxonomy:prune:` outside tenant identities. Existing generic host locks are never acquired or removed.
 
 Drain old mutation workers and maintenance processes, then wait for their outstanding lock leases to end before starting the new major across all nodes. Running old and new lock prefixes concurrently would create independent serialization domains. Restart workers after cutover; preserve host-selected stores and keys, and do not flush a shared cache to remove old NVL entries.
+
+## Tagged consumer PHP boundary
+
+Use source `@api` workflows, extension contracts, and value types for application integration. Direct use of untagged implementations or `@internal` members is unsupported. This classification keeps existing concrete Action signatures and runtime behavior; it does not authorize package model persistence, ad hoc queries, relation traversal, or generic model serialization. Returned models are identity/result handles with only the explicitly declared in-memory read fields described in the README.
+
+The implementation Actions `RebuildTreeAction`, `ResolveTermsAction`, `ValidateTermMergeAction` are explicitly internal. Run `nvl:taxonomy:rebuild` for tree maintenance, read through `ListOwnerTaxonomyTermsAction`, and merge through `MergeTermsAction` or `nvl:taxonomy:merge`; the complete workflows own term resolution and merge validation.
+
+`HasTaxonomies::termables()` and `hasTerm()` are internal storage or lifecycle seams. Migrate direct traversal, eager/lazy loading, and aggregate queries to the package authorized read Actions or explicit C1 host scopes/adapters. Native host queries and opted-in Translatable behavior remain supported.

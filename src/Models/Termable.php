@@ -28,6 +28,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  * @property Carbon|null $updated_at
  * @property-read Term $term
  * @property-read Model $termable
+ *
+ * @api
  */
 final class Termable extends Model
 {

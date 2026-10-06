@@ -22,6 +22,8 @@ use Nvl\Translatable\Services\ContentLocale;
 
 /**
  * Resolves term references in batches and creates missing open-vocabulary roots.
+ *
+ * @api
  */
 final readonly class TermResolver
 {

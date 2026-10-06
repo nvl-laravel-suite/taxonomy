@@ -14,6 +14,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Removes selected terms or all terms from one vocabulary attachment set.
+ *
+ * @api
  */
 final readonly class DetachTermsAction
 {

@@ -12,6 +12,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Validates a term merge against locked revisions without mutation.
+ *
+ * @internal
  */
 final readonly class ValidateTermMergeAction
 {

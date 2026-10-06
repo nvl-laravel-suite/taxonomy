@@ -17,6 +17,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
  * Reparents one term after locked cycle and depth validation.
+ *
+ * @api
  */
 final readonly class MoveTermAction
 {

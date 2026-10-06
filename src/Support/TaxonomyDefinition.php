@@ -8,6 +8,8 @@ use Nvl\Taxonomy\Models\Term;
 
 /**
  * Immutable normalized contract for one registered taxonomy vocabulary.
+ *
+ * @api
  */
 final readonly class TaxonomyDefinition
 {
