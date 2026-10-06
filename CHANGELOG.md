@@ -4,7 +4,15 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add bounded authorized many-owner Taxonomy DTO reads with explicit object maps, localized display copy, native morph identity, and independently bound SQL policies.
+- Probe visible owner/vocabulary overflow at 101 attachments before loading terms or translations; successful lists contain at most 100 terms per requested group.
+
 ### Changed
+
+- Audit any/all/without/category host scopes for canonical storage, caller OR grouping, live owner and tenant guards, registered term visibility, and bounded category traversal; preserve optional compatible policy and reference semantics.
+- Reject ambiguous host-filter correlation before SQL when owner storage shares the actual registered term or attachment table; preserve exact paired batch reads and empty term-filter semantics.
 
 - Isolate owned cache and lock keys under `nvl:taxonomy:`; preserve generic host entries and explicit store choices.
 

@@ -16,10 +16,14 @@ use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Support\Traits\RegistersNamespacedResources;
+use Nvl\Taxonomy\Actions\ListOwnerTaxonomyTermsAction;
 use Nvl\Taxonomy\Commands;
+use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
+use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
+use Nvl\Taxonomy\Services\RegisteredTaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Support\SlugGenerator;
@@ -48,6 +52,8 @@ final class TaxonomyServiceProvider extends ServiceProvider
         $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-taxonomy.php', 'taxonomy');
 
         $this->app->singleton(TaxonomyRegistry::class);
+        $this->app->bindIf(ListOwnerTaxonomyTermsContract::class, ListOwnerTaxonomyTermsAction::class);
+        $this->app->bindIf(TaxonomyBatchAuthorization::class, RegisteredTaxonomyBatchAuthorization::class);
         $this->app->scoped(SlugGenerator::class, function (Container $app): SlugGenerator {
             $generator = config('nvl-taxonomy.slugs.generator', SlugGenerator::class);
 

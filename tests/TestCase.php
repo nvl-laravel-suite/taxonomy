@@ -10,6 +10,7 @@ use Nvl\Data\Providers\DataServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
+use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
@@ -23,6 +24,16 @@ use Orchestra\Testbench\TestCase as Orchestra;
 abstract class TestCase extends Orchestra
 {
     use RefreshDatabase;
+
+    /** Verify the actual native driver before any product query evidence is collected. */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $driver = getenv('NVL_C1_TEST_DRIVER');
+        if (is_string($driver) && $driver !== '') {
+            $this->assertSame($driver, (new Term)->getConnection()->getDriverName());
+        }
+    }
 
     /**
      * Return providers required by the isolated taxonomy package application.

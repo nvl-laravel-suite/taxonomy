@@ -209,6 +209,46 @@ This package ships no management routes. Applications authorize Action calls and
 
 `TermChanged` mutation events implement `ShouldDispatchAfterCommit`. Unknown vocabularies, invalid metadata, stale revisions, ambiguous slugs, hierarchy violations, and unsafe deletes are distinct failures.
 
+## Batched owner reads
+
+Resolve `Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract` for many-owner display reads. It reloads registered persisted owners by concrete class, keeps their global scopes and live-record guards, and admits one canonical connection and tenant context. Supply at most 100 input owners and 20 registered vocabulary names. Owner capability labels remain registration references; stored and returned identities use each owner's native Laravel morph class and string key. Declared vocabulary owner allowlists remain mandatory. The model's relationship configuration does not grant an additional capability.
+
+```php
+use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
+
+$result = app(ListOwnerTaxonomyTermsContract::class)->execute(
+    $articles,
+    ['tag', 'category'],
+    locale: 'bg',
+);
+
+foreach ($articles as $article) {
+    $terms = $result->owners->{$article->getMorphClass()}->{(string) $article->getKey()};
+    foreach ($terms->vocabularies->tag as $term) {
+        $labels[] = $term->name;
+    }
+}
+```
+
+The result supplies an object at both owner map levels, an object mapping requested vocabularies to explicit term lists, and separate first-request identity order. Numeric owner keys remain JSON object properties. Term DTOs contain only id, vocabulary, structural slug, nullable parentId, attachment position, localized name, and nullable description. Position comes from the attachment pivot. No models, relationships, tree paths, metadata, or lazy translation queries enter the public result. Localization uses the declared finite locale chain, including deterministic AnyAvailable fallback when configured, and preserves non-null empty copy.
+
+The default `Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization` adapter preserves explicitly registered owner/vocabulary capability admission. Bind a host SQL adapter for private deployments; provider defaults use bindIf and preserve existing host bindings. Its four query-free methods authorize the loaded owner batch, constrain attachments, constrain terms, and independently express complete correlated host-owner/attachment/term visibility. Each SQL method receives its own nested AND group inside mandatory exact identities, registered vocabulary, live-record, connection, and tenant predicates. Imperative per-owner policies require an explicit SQL adapter; do not call single-owner actions or perform queries inside policy methods.
+
+Attachment ranking transfers at most 101 facts per exact owner/vocabulary group and throws `Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException` on visible overflow before loading term or translation payloads. The probe ceiling is 202,000 attachments and the successful payload ceiling is 200,000 term DTOs. Prefer fewer requested vocabularies for ordinary lists. Terms and translations load separately per vocabulary, with at most 10,000 term IDs in each vocabulary query, keeping PostgreSQL bindings bounded. Supported window engines are SQLite, PostgreSQL, MySQL, and MariaDB.
+
+Measured total SQL counts stay fixed at 1, 25, and 100 owners on one concrete owner class, with localized populated vocabularies:
+
+| Populated vocabularies | Disabled warm | Disabled cold | Enabled adopted Tenancy |
+| --- | --- | --- | --- |
+| One | 4 | 5 | 4 |
+| Two | 6 | 7 | 6 |
+
+The disabled measurement loads the inert Tenancy library; cold includes its first installation-state probe. Every additional concrete owner class adds one canonical reload query. Two owner classes measured 5/7 warm queries for one/two populated vocabularies; registered custom term models retain the same two loads per populated vocabulary. An empty owner input performs zero SQL. Empty admitted vocabularies skip their term/translation payload loads. Category traversal has a separate bounded hierarchy budget.
+
+The existing withAnyTerms, withAllTerms, withoutTerms, and inCategory host scopes accept an optional explicit batch policy. They retain selections and unrelated predicates, reject altered builder connections/FROM clauses/unions, and restore registered tenant and native or custom soft-delete guards even when callers remove global scopes. Any with no references matches nothing; All and Without with no references preserve the admitted host set. All checks each reference independently, so a UUID and slug may identify the same attached term. Category filters reload the root through its registered scoped term model and policy, then traverse only visible child sets bounded by the configured bulk-term limit; overflow fails explicitly instead of loading the whole vocabulary.
+
+Host filters require the owner table identifier to differ from both the requested vocabulary's registered term-model table and the canonical attachment table. They conservatively reject matching table basenames without case sensitivity, including schema-qualified and configured physical names and same-named tables in distinct schemas. Nonempty Any/All/Without and every Category filter throw `Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException` before storage SQL for those unsupported correlations. Empty-reference scopes keep their admitted host semantics because they need no term correlation. Use `Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract` for bounded display reads of overlapping owners; its captured native identity pairs remain supported.
+
 ## Verification
 
 The package tests cover UUID identifiers, stable morph aliases, translation fallback, slug stability, tree order, cycles, subtree depth, moves, merges, attachments, exclusivity, deletion policies, maintenance safety, and configured-connection behavior. CI runs the package on its supported PHP/Laravel and database matrix.

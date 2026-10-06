@@ -27,6 +27,16 @@ Treat vocabulary, parent, slug, order, metadata, and attachments as structural d
 
 ## Attach and query
 
+- For many-owner display reads, resolve `Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract` and pass at most 100 persisted owners, 20 registered vocabularies, and an optional locale. Consume its DTO maps without package-model or lazy relationship queries.
+- Keep native morph class/string owner key pairs exact; capability labels are registry references. Preserve explicit empty vocabulary lists, JSON objects at both owner levels, first-request order, structural slugs, and pivot positions.
+- Bind `Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization` for private reads. Its loaded-owner authorization and three SQL methods are query-free; complete host-owner/attachment/term visibility belongs in its correlated host method. Every policy method is nested independently inside mandatory package predicates. Never loop single-owner actions or resolve terms through a creating mutation path.
+- Rank authorized attachments before any term/translation payload load. Probe at 101 terms per owner/vocabulary, reject overflow, and keep successful groups at 100. The total probe/payload ceilings are 202,000/200,000; split term and translation ID loads by vocabulary, at most 10,000 IDs per vocabulary.
+- Resolve localized DTO copy from preloaded rows with the pure translation resolver; use the finite validated locale chain and preserve intentional empty values. Ordinary translated/display getters can reload ownership and cause N+1 queries.
+- Reuse the audited any/all/without/category scopes with an optional compatible SQL policy. Preserve selected columns and caller predicates, validate actual builder connection/FROM/unions, group caller WHERE predicates and only their WHERE bindings before live/tenant guards, and restore native/custom soft-delete columns when host scopes were removed.
+- Reject nonempty host term filters and category filters before SQL when the canonical owner table basename matches the requested vocabulary's registered term-model table or the attachment table, without case sensitivity. Compare actual configured physical tables, including schema-qualified names. Use the bounded owner reader for display of those owners; preserve empty-reference host semantics.
+- Preserve Any-empty false and All/Without-empty unchanged within the admitted host set. UUID and slug references may identify the same term; All must not equate distinct-term count with reference count. Reload category roots through the registered visible model and traverse bounded visible child sets, never the whole vocabulary.
+- Verify total warm query counts at 1/25/100 owners: 4 for one populated vocabulary and 6 for two; disabled cold adds one installation-state probe with the inert Tenancy library. Each extra owner class adds one reload; a custom registered term model keeps the per-vocabulary budget. Native runs must assert the actual driver before collecting SQL evidence.
+
 - Use `AttachTermsAction`, `DetachTermsAction`, or `SyncTermAttachmentsAction`.
 - Never mutate the polymorphic attachment table directly.
 - Register every concrete owner class with a stable alias before models boot; attachment rows persist morph aliases and UUID row keys.

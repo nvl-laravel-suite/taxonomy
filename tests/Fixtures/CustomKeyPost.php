@@ -41,7 +41,11 @@ final class CustomKeyPost extends Model
     public static function migrate(): void
     {
         Schema::create('taxonomy_custom_key_posts', function (Blueprint $table): void {
-            $table->string('post_key')->primary();
+            $key = $table->string('post_key')->primary();
+            $driver = Schema::getConnection()->getDriverName();
+            if (in_array($driver, ['mysql', 'mariadb'], true)) {
+                $key->collation($driver === 'mysql' ? 'utf8mb4_0900_bin' : 'utf8mb4_nopad_bin');
+            }
             $table->string('title');
             $table->timestamps();
         });

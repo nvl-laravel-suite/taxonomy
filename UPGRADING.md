@@ -1,5 +1,17 @@
 # Upgrading NVL Taxonomy
 
+## Bounded owner display reads
+
+Replace per-owner term and translated-name loops with the container-bound `Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract`. Pass persisted registered models, requested vocabulary names, and an optional locale. The DTO object maps preserve native morph identities, numeric keys, explicit empty vocabulary lists, and first-request order; consumers need no package-model or relationship queries.
+
+Requests accept at most 100 input owners and 20 declared vocabularies. A visible owner/vocabulary set above 100 terms now fails explicitly before term/translation transfer. Review callers with dense attachment sets rather than silently truncating them. The default batch policy preserves existing explicit owner/vocabulary capabilities; private deployments must bind a query-free SQL implementation of `Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization` before using the reader or audited host scopes.
+
+Host scopes retain their empty-reference semantics and accept an optional compatible policy. They require canonical builder storage, enforce live owner and tenant guards around caller OR clauses, and use registered visible term models for bounded category traversal. A removed host soft-delete scope does not opt deleted records into these package filters. UUID and slug references remain independent, including two references to one term. Read the measured budgets and row ceilings in [README.md](README.md#batched-owner-reads). No schema or stored-identity conversion accompanies these read APIs.
+
+Review registered owners whose table basename matches the requested vocabulary's term-model table or the attachment table, including schema-qualified names and case variants. Nonempty host term filters and category filters now reject that ambiguous correlation with `Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException` before SQL. Use the bounded owner reader for display payloads; empty host term filters retain their existing semantics.
+
+Core's disabled boundary admits registered Term subclasses on canonical storage, so these reads and filters work without loading the optional Tenancy provider. The dedicated no-provider regression checks both built-in vocabularies. This does not activate tenancy or reopen already-adopted storage.
+
 ## Tenant ownership adoption
 
 Taxonomy tenancy is opt-in through `nvl/tenancy` and is inert while

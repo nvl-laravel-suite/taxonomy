@@ -11,16 +11,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Str;
-use InvalidArgumentException;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
+use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermablePivot;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
+use Nvl\Taxonomy\Services\TaxonomyHostQueryAdapter;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -116,32 +116,9 @@ trait HasTaxonomies
      * @param  list<string|int>  $values
      * @return Builder<static>
      */
-    public function scopeWithAnyTerms(Builder $query, string $taxonomy, array $values): Builder
+    public function scopeWithAnyTerms(Builder $query, string $taxonomy, array $values, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
-        self::assertRegisteredTaxonomyOwner($query->getModel());
-        $values = array_values(array_unique($values, SORT_REGULAR));
-        self::assertScopeTermLimit($values);
-
-        if ($values === []) {
-            return $query->whereRaw('1 = 0');
-        }
-
-        [$identifiers, $slugs] = self::partitionTermReferences($values);
-
-        return $query->whereHas(Str::plural($taxonomy), function (Builder $q) use ($identifiers, $slugs): void {
-            $q->where(static function (Builder $terms) use ($identifiers, $slugs): void {
-                $model = $terms->getModel();
-
-                if ($slugs !== []) {
-                    $terms->whereIn($model->qualifyColumn('slug'), $slugs);
-                }
-
-                if ($identifiers !== []) {
-                    $method = $slugs === [] ? 'whereIn' : 'orWhereIn';
-                    $terms->{$method}($model->getQualifiedKeyName(), $identifiers);
-                }
-            });
-        });
+        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'any', $policy);
     }
 
     /**
@@ -151,32 +128,9 @@ trait HasTaxonomies
      * @param  list<string|int>  $values
      * @return Builder<static>
      */
-    public function scopeWithAllTerms(Builder $query, string $taxonomy, array $values): Builder
+    public function scopeWithAllTerms(Builder $query, string $taxonomy, array $values, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
-        self::assertRegisteredTaxonomyOwner($query->getModel());
-        $values = array_values(array_unique($values, SORT_REGULAR));
-        self::assertScopeTermLimit($values);
-
-        if ($values === []) {
-            return $query;
-        }
-
-        foreach ($values as $value) {
-            $query->whereHas(Str::plural($taxonomy), function (Builder $q) use ($value): void {
-                $reference = (string) $value;
-                $model = $q->getModel();
-
-                if (Str::isUuid($reference)) {
-                    $q->where($model->getQualifiedKeyName(), $reference);
-
-                    return;
-                }
-
-                $q->where($model->qualifyColumn('slug'), $reference);
-            });
-        }
-
-        return $query;
+        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'all', $policy);
     }
 
     /**
@@ -186,32 +140,9 @@ trait HasTaxonomies
      * @param  list<string|int>  $values
      * @return Builder<static>
      */
-    public function scopeWithoutTerms(Builder $query, string $taxonomy, array $values): Builder
+    public function scopeWithoutTerms(Builder $query, string $taxonomy, array $values, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
-        self::assertRegisteredTaxonomyOwner($query->getModel());
-        $values = array_values(array_unique($values, SORT_REGULAR));
-        self::assertScopeTermLimit($values);
-
-        if ($values === []) {
-            return $query;
-        }
-
-        [$identifiers, $slugs] = self::partitionTermReferences($values);
-
-        return $query->whereDoesntHave(Str::plural($taxonomy), function (Builder $q) use ($identifiers, $slugs): void {
-            $q->where(static function (Builder $terms) use ($identifiers, $slugs): void {
-                $model = $terms->getModel();
-
-                if ($slugs !== []) {
-                    $terms->whereIn($model->qualifyColumn('slug'), $slugs);
-                }
-
-                if ($identifiers !== []) {
-                    $method = $slugs === [] ? 'whereIn' : 'orWhereIn';
-                    $terms->{$method}($model->getQualifiedKeyName(), $identifiers);
-                }
-            });
-        });
+        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'without', $policy);
     }
 
     /**
@@ -220,25 +151,9 @@ trait HasTaxonomies
      * @param  Builder<static>  $query
      * @return Builder<static>
      */
-    public function scopeInCategory(Builder $query, Term $category, bool $includeDescendants = true): Builder
+    public function scopeInCategory(Builder $query, Term $category, bool $includeDescendants = true, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
-        self::assertRegisteredTaxonomyOwner($query->getModel());
-        $identifier = $category->getRawOriginal($category->getKeyName());
-        if (! is_string($identifier)) {
-            throw new TenantBoundaryViolation('A canonical category identifier is required.');
-        }
-        $category = Term::query()->findOrFail($identifier);
-        $ids = [$category->id];
-
-        if ($includeDescendants) {
-            foreach ($category->descendants() as $descendant) {
-                $ids[] = $descendant->id;
-            }
-        }
-
-        return $query->whereHas(Str::plural($category->taxonomy), function (Builder $q) use ($ids): void {
-            $q->whereIn($q->getModel()->getQualifiedKeyName(), $ids);
-        });
+        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->category($query, $category, $includeDescendants, $policy);
     }
 
     /**
@@ -337,51 +252,6 @@ trait HasTaxonomies
             $taxonomies,
             static fn (mixed $taxonomy): bool => is_string($taxonomy) && $taxonomy !== '',
         )));
-    }
-
-    /**
-     * Reject unbounded taxonomy scope input before building SQL.
-     *
-     * @param  list<string|int>  $values
-     */
-    private static function assertScopeTermLimit(array $values): void
-    {
-        if (count($values) > TaxonomyConfiguration::positiveLimit('bulk_terms', 500)) {
-            throw new InvalidArgumentException('Too many taxonomy terms were supplied.');
-        }
-    }
-
-    /**
-     * Keep UUID predicates type-safe on databases with native UUID columns.
-     *
-     * @param  list<string|int>  $values
-     * @return array{0: list<string>, 1: list<string>}
-     */
-    private static function partitionTermReferences(array $values): array
-    {
-        $identifiers = [];
-        $slugs = [];
-
-        foreach ($values as $value) {
-            $reference = (string) $value;
-
-            if (Str::isUuid($reference)) {
-                $identifiers[] = $reference;
-            } else {
-                $slugs[] = $reference;
-            }
-        }
-
-        return [$identifiers, $slugs];
-    }
-
-    /** Require the consumer model to have a canonical Foundation ownership declaration. */
-    private static function assertRegisteredTaxonomyOwner(Model $model): void
-    {
-        Container::getInstance()->make(TaxonomyOwnerRegistry::class)->aliasFor($model);
-        if (config('nvl-tenancy.enabled') === true) {
-            Container::getInstance()->make(TenantResourceRegistry::class)->forModel($model);
-        }
     }
 
     /** Resolve the active tenant used by pivot correlations, preserving disabled compatibility. */

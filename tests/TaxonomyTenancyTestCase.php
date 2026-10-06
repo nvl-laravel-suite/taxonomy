@@ -28,6 +28,16 @@ abstract class TaxonomyTenancyTestCase extends Orchestra
 {
     use DatabaseMigrations;
 
+    /** Verify the native driver on the actual overridden Taxonomy fixture connection. */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $driver = getenv('NVL_C1_TEST_DRIVER');
+        if (is_string($driver) && $driver !== '') {
+            $this->assertSame($driver, (new Term)->getConnection()->getDriverName());
+        }
+    }
+
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
