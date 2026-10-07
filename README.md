@@ -42,7 +42,7 @@ See the [installation and publishing guide](https://github.com/nvl-laravel-suite
 
 ## Purpose
 
-`nvl/taxonomy` provides reusable translated vocabularies and hierarchical terms for Laravel 13 on PHP 8.4+. It supports categories, tags, ordered trees, typed metadata, polymorphic owner attachment, moves, merges, pruning, and deterministic localized display copy. It is not an arbitrary attribute, facets, or search engine.
+`nvl/taxonomy` provides reusable translated vocabularies and hierarchical terms for Laravel 12–13 on PHP 8.4+. It supports categories, tags, ordered trees, typed metadata, polymorphic owner attachment, moves, merges, pruning, and deterministic localized display copy. It is not an arbitrary attribute, facets, or search engine.
 
 The package depends on `nvl/core`, `nvl/tenancy`, and `nvl/translatable` inside the NVL family.
 
