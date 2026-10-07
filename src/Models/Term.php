@@ -61,6 +61,7 @@ class Term extends Model implements TranslatableModel
 
     /** @use HasFactory<TermFactory> */
     use HasFactory;
+
     use HasUuids;
     use Translatable;
 

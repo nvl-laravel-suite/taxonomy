@@ -38,6 +38,7 @@ final class TermTranslation extends Model
 
     /** @use HasFactory<TermTranslationFactory> */
     use HasFactory;
+
     use HasUuids;
 
     protected $fillable = [

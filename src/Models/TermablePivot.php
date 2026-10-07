@@ -22,6 +22,7 @@ final class TermablePivot extends MorphPivot
 
     /** @use HasFactory<TermableFactory> */
     use HasFactory;
+
     use HasUuids;
 
     /** @var list<string> */

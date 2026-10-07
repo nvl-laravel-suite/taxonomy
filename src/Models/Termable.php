@@ -39,6 +39,7 @@ final class Termable extends Model
 
     /** @use HasFactory<TermableFactory> */
     use HasFactory;
+
     use HasUuids;
 
     /** @var list<string> */
