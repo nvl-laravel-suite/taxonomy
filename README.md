@@ -273,7 +273,7 @@ Host filters require the owner table identifier to differ from both the requeste
 
 ## Verification
 
-The package tests cover UUID identifiers, stable morph aliases, translation fallback, slug stability, tree order, cycles, subtree depth, moves, merges, attachments, exclusivity, deletion policies, maintenance safety, and configured-connection behavior. CI runs the package on its supported PHP/Laravel and database matrix.
+The package tests cover UUID identifiers, stable morph aliases, translation fallback, slug stability, tree order, cycles, subtree depth, moves, merges, attachments, exclusivity, deletion policies, maintenance safety, and configured-connection behavior. The local Dagger gate runs PHP 8.4/Laravel 13 suites and MySQL/PostgreSQL persistence contracts. Other declared platforms need separate compatibility evidence.
 
 See [UPGRADING.md](UPGRADING.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [CHANGELOG.md](CHANGELOG.md).
 
@@ -402,7 +402,7 @@ parameters:
         exceptions: []
 ```
 
-Rules read installed public metadata without suite boot. They flag internal symbols, package model queries/writes, capability relations and owned tables; they cannot prove dynamic code or runtime authorization. Exact exceptions require `file`, `identifier`, `symbol`, and a documented `reason`. New C3/C4/E tests, archives and guide execution remain pending until the integration phase records results.
+Rules read installed public metadata without suite boot. They flag internal symbols, package model queries/writes, capability relations and owned tables; they cannot prove dynamic code or runtime authorization. Exact exceptions require `file`, `identifier`, `symbol`, and a documented `reason`. The published 5.x family is verified through the local Dagger release gate on PHP 8.4/Laravel 13, including owning suites, MySQL/PostgreSQL persistence contracts and sealed Tenancy consumers. Fresh public Composer installation, discovery and configuration/route caching are verified. PHP 8.5, Laravel 12, MariaDB and the full independent archive matrix require separate evidence. See the [verification and release policy](https://github.com/nvl-laravel-suite/laravel-suite#verification-and-releases).
 
 ### Shipped factory states
 
