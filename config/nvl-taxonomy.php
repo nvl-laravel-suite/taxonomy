@@ -5,10 +5,14 @@ declare(strict_types=1);
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
+use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\SlugGenerator;
 
 /** Complete runtime defaults; publication sections are declared in ../resources/config/sections.json. */
 return [
+
+    'models' => ['term' => Term::class],
+    'ownership' => ['owner_resources' => []],
 
     'owners' => [
         // 'articles' => \Domain\Content\Article::class,

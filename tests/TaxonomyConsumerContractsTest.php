@@ -5,14 +5,13 @@ declare(strict_types=1);
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Cache;
 use Nvl\Support\OwnerRegistry;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Exceptions\UnknownTaxonomyException;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Support\SlugGenerator;
@@ -255,8 +254,7 @@ it('rejects malformed configured and programmatic vocabulary definitions', funct
 it('validates capability aliases without installing a host morph map', function () {
     $originalMorphMap = Relation::morphMap();
     $registry = new TaxonomyOwnerRegistry(
-        app(TenantResourceRegistry::class),
-        app(TenantBoundary::class),
+        app(TaxonomyBoundary::class),
         app(OwnerRegistry::class),
     );
     $registry->register('posts', Post::class);
@@ -274,15 +272,13 @@ it('validates capability aliases without installing a host morph map', function 
         ->and(fn () => $registry->register('other-posts', Post::class))
         ->toThrow(InvalidArgumentException::class)
         ->and(fn () => (new TaxonomyOwnerRegistry(
-            app(TenantResourceRegistry::class),
-            app(TenantBoundary::class),
+            app(TaxonomyBoundary::class),
             app(OwnerRegistry::class),
         ))->register('posts', CustomKeyPost::class))
         ->toThrow(InvalidArgumentException::class);
 
     $separateRegistry = new TaxonomyOwnerRegistry(
-        app(TenantResourceRegistry::class),
-        app(TenantBoundary::class),
+        app(TaxonomyBoundary::class),
         app(OwnerRegistry::class),
     );
     $separateRegistry->register('new-posts', Post::class);
@@ -313,11 +309,7 @@ it('reports missing consumer schema without attempting data inspection', functio
         'termables' => 'missing_termables',
     ]);
 
-    $checks = (new TaxonomyDoctor(
-        app(TaxonomyRegistry::class),
-        app(TaxonomyOwnerRegistry::class),
-        app(TenantResourceRegistry::class),
-    ))->inspect();
+    $checks = app(TaxonomyDoctor::class)->inspect();
 
     expect(collect($checks)->where('passed', false))->toHaveCount(9)
         ->and(collect($checks)->pluck('key')->all())->toContain(

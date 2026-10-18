@@ -8,7 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use InvalidArgumentException;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Support\Tenancy\Contracts\TenantDirectory;
 use Nvl\Support\Tenancy\Contracts\TenantParentResolver;
@@ -50,7 +50,7 @@ final class FactoryGuard
         if (config('nvl-tenancy.enabled') === true) {
             $container = Container::getInstance();
             $resource = $container->make(TenantResourceRegistry::class)->forModel($parent);
-            $container->make(TenantBoundary::class)->assertRecord($parent, $resource->key);
+            $container->make(OwnershipBoundary::class)->assertRecord($parent, $resource->key);
         }
     }
 
@@ -96,7 +96,7 @@ final class FactoryGuard
     public static function root(Model $model, string $resource): void
     {
         if (config('nvl-tenancy.enabled') === true) {
-            $model->forceFill(Container::getInstance()->make(TenantBoundary::class)->attributes($resource));
+            $model->forceFill(Container::getInstance()->make(OwnershipBoundary::class)->attributes($resource));
         }
     }
 

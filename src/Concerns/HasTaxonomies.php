@@ -11,17 +11,18 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Str;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermablePivot;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
 use Nvl\Taxonomy\Services\TaxonomyHostQueryAdapter;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use ReflectionClass;
@@ -177,9 +178,9 @@ trait HasTaxonomies
         if ($value instanceof Term) {
             $identifier = $value->getRawOriginal($value->getKeyName());
             if (! is_string($identifier)) {
-                throw new TenantBoundaryViolation('A canonical taxonomy term identifier is required.');
+                throw TaxonomyOwnership::violation('A canonical taxonomy term identifier is required.');
             }
-            $value = Term::query()->findOrFail($identifier);
+            $value = TermModelRegistry::query()->findOrFail($identifier);
         }
 
         if ($this->relationLoaded($relation)) {
@@ -192,12 +193,12 @@ trait HasTaxonomies
             $tenant = self::currentTaxonomyTenant();
             foreach ($collection as $loadedTerm) {
                 if (! $loadedTerm instanceof Term) {
-                    throw new TenantBoundaryViolation('A loaded taxonomy relation contains an invalid term.');
+                    throw TaxonomyOwnership::violation('A loaded taxonomy relation contains an invalid term.');
                 }
-                Container::getInstance()->make(TenantBoundary::class)->assertRecord($loadedTerm, 'taxonomy.terms');
+                Container::getInstance()->make(OwnershipBoundary::class)->assertRecord($loadedTerm, 'taxonomy.terms');
                 if ($loadedTerm->getRawOriginal('taxonomy') !== $taxonomy
                     || ($tenant !== null && $loadedTerm->getRawOriginal('tenant_id') !== $tenant)) {
-                    throw new TenantBoundaryViolation('A loaded taxonomy relation contains a foreign term.');
+                    throw TaxonomyOwnership::violation('A loaded taxonomy relation contains a foreign term.');
                 }
             }
 
@@ -221,7 +222,7 @@ trait HasTaxonomies
             $termIds = [$value->id];
         } else {
             $identifier = (string) $value;
-            $terms = Term::query()->where('taxonomy', $taxonomy);
+            $terms = TermModelRegistry::query()->where('taxonomy', $taxonomy);
 
             if (Str::isUuid($identifier)) {
                 $terms->whereKey($identifier);

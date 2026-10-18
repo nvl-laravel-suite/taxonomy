@@ -8,18 +8,18 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Nvl\Support\Owners\OwnerBatch;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /** Composes mandatory authorized attachment and structural term SQL before bounds. */
 final readonly class TaxonomyBatchQueryBuilder
 {
     /** Retain canonical ownership and registered vocabulary definitions. */
-    public function __construct(private TenantBoundary $boundary, private TaxonomyRegistry $vocabularies) {}
+    public function __construct(private OwnershipBoundary $boundary, private TaxonomyRegistry $vocabularies) {}
 
     /**
      * Return the registered term model with retained scopes and nested private policy.
@@ -30,7 +30,7 @@ final readonly class TaxonomyBatchQueryBuilder
     {
         $definition = $this->vocabularies->get($vocabulary);
         $prototype = new $definition->model;
-        if ($prototype->getConnection() !== (new Term)->getConnection()) {
+        if ($prototype->getConnection() !== TermModelRegistry::newInstance()->getConnection()) {
             throw new TaxonomyBatchReadException('Registered taxonomy terms must share the canonical package connection.');
         }
         $query = $this->boundary->query($prototype->newQuery()->withoutEagerLoads(), 'taxonomy.terms');

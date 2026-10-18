@@ -8,12 +8,13 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
+use Nvl\Support\Ownership\Contracts\OwnershipReadiness;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Taxonomy\Data\TaxonomyDoctorCheckData;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
-use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Throwable;
@@ -30,6 +31,7 @@ final readonly class TaxonomyDoctor
         private TaxonomyRegistry $taxonomies,
         private TaxonomyOwnerRegistry $owners,
         private TenantResourceRegistry $tenantResources,
+        private OwnershipReadiness $readiness,
     ) {}
 
     /**
@@ -40,7 +42,8 @@ final readonly class TaxonomyDoctor
     public function inspect(): array
     {
         $schema = Schema::connection(TaxonomyConfiguration::connection());
-        $tenantColumns = config('nvl-tenancy.enabled') === true ? ['tenant_id'] : [];
+        $owned = TaxonomyOwnership::declared();
+        $tenantColumns = $owned ? ['owner_scope_key'] : (config('nvl-tenancy.enabled') === true ? ['tenant_id'] : []);
         $tables = [
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)) => [
                 'id', 'taxonomy', 'parent_id', 'parent_key', 'slug', 'position', 'meta',
@@ -81,16 +84,16 @@ final readonly class TaxonomyDoctor
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
             [
                 $tenantEnabled ? ['tenant_id', 'taxonomy', 'id'] : ['taxonomy', 'id'],
-                $tenantEnabled ? ['tenant_id', 'taxonomy', 'parent_key', 'slug'] : ['taxonomy', 'parent_key', 'slug'],
+                $owned ? ['owner_scope_key', 'taxonomy', 'parent_key', 'slug'] : ($tenantEnabled ? ['tenant_id', 'taxonomy', 'parent_key', 'slug'] : ['taxonomy', 'parent_key', 'slug']),
             ],
         );
         $checks[] = $this->indexCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)),
-            [$tenantEnabled ? ['tenant_id', 'term_id', 'locale'] : ['term_id', 'locale']],
+            [$owned ? ['owner_scope_key', 'term_id', 'locale'] : ($tenantEnabled ? ['tenant_id', 'term_id', 'locale'] : ['term_id', 'locale'])],
         );
         $checks[] = $this->indexCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
-            [$tenantEnabled ? ['tenant_id', 'term_id', 'termable_type', 'termable_id'] : ['term_id', 'termable_type', 'termable_id']],
+            [$owned ? ['owner_scope_key', 'term_id', 'termable_type', 'termable_id'] : ($tenantEnabled ? ['tenant_id', 'term_id', 'termable_type', 'termable_id'] : ['term_id', 'termable_type', 'termable_id'])],
         );
         $checks[] = $this->foreignKeyCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
@@ -133,6 +136,20 @@ final readonly class TaxonomyDoctor
                 }
             }
         }
+        if ($owned) {
+            $ready = true;
+            try {
+                foreach (['taxonomy.terms', 'taxonomy.translations', 'taxonomy.attachments'] as $resource) {
+                    $this->readiness->assertActive($resource);
+                }
+                foreach ($this->owners->all() as $ownerClass) {
+                    TaxonomyOwnership::resource(new $ownerClass);
+                }
+            } catch (Throwable) {
+                $ready = false;
+            }
+            $checks[] = new TaxonomyDoctorCheckData(key: 'schema.ownership', severity: 'error', passed: $ready, message: $ready ? 'Canonical ownership storage is active.' : 'Canonical ownership storage is not ready.');
+        }
         $checks[] = new TaxonomyDoctorCheckData(
             key: 'registry.tenant_owners',
             severity: 'error',
@@ -158,7 +175,7 @@ final readonly class TaxonomyDoctor
 
             $modelConnection = (new ($definition->model))->getConnectionName();
 
-            if ($modelConnection !== (new Term)->getConnectionName()) {
+            if ($modelConnection !== TermModelRegistry::newInstance()->getConnectionName()) {
                 $connectionMismatches[] = $definition->taxonomy;
             }
         }
@@ -349,8 +366,8 @@ final readonly class TaxonomyDoctor
      */
     private function dataChecks(): array
     {
-        $connection = DB::connection((new Term)->getConnectionName());
-        $terms = (new Term)->getTable();
+        $connection = DB::connection(TermModelRegistry::newInstance()->getConnectionName());
+        $terms = TermModelRegistry::newInstance()->getTable();
         $termables = (new Termable)->getTable();
         $translations = (new TermTranslation)->getTable();
         $parentKeyQuery = $connection->table($terms);
@@ -377,16 +394,17 @@ final readonly class TaxonomyDoctor
             ->whereColumn('attachment.taxonomy', '!=', 'term.taxonomy')
             ->count();
         $tenantMismatches = 0;
-        if (config('nvl-tenancy.enabled') === true) {
+        if (TaxonomyOwnership::active()) {
+            $scope = TaxonomyOwnership::declared() ? 'owner_scope_key' : 'tenant_id';
             $tenantMismatches += $connection->table("{$terms} as child")
                 ->join("{$terms} as parent", 'parent.id', '=', 'child.parent_id')
-                ->whereColumn('child.tenant_id', '!=', 'parent.tenant_id')->count();
+                ->whereColumn("child.{$scope}", '!=', "parent.{$scope}")->count();
             $tenantMismatches += $connection->table("{$termables} as attachment")
                 ->join("{$terms} as term", 'term.id', '=', 'attachment.term_id')
-                ->whereColumn('attachment.tenant_id', '!=', 'term.tenant_id')->count();
+                ->whereColumn("attachment.{$scope}", '!=', "term.{$scope}")->count();
             $tenantMismatches += $connection->table("{$translations} as translation")
                 ->join("{$terms} as term", 'term.id', '=', 'translation.term_id')
-                ->whereColumn('translation.tenant_id', '!=', 'term.tenant_id')->count();
+                ->whereColumn("translation.{$scope}", '!=', "term.{$scope}")->count();
         }
         $orphanTranslations = $connection->table("{$translations} as translation")
             ->leftJoin("{$terms} as term", 'term.id', '=', 'translation.term_id')

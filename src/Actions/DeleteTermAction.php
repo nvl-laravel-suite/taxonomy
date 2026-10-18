@@ -15,6 +15,7 @@ use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermHierarchy;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Services\TermModelResolver;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
@@ -43,7 +44,7 @@ final readonly class DeleteTermAction implements DeleteTermContract
         DeleteTermStrategy $strategy = DeleteTermStrategy::Restrict,
         ?string $reparentTo = null,
     ): bool {
-        $connection = (new Term)->getConnectionName();
+        $connection = TermModelRegistry::newInstance()->getConnectionName();
 
         return DB::connection($connection)->transaction(function () use (
             $term,

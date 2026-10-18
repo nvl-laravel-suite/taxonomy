@@ -33,7 +33,7 @@ final readonly class TermMergeValidator
         int $expectedSourceRevision,
         int $expectedDestinationRevision,
     ): TermMergeContext {
-        $terms = Term::query()
+        $terms = TermModelRegistry::query()
             ->whereKey([$sourceId, $destinationId])
             ->orderBy('id')
             ->lockForUpdate()

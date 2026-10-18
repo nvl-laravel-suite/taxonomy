@@ -7,10 +7,11 @@ namespace Nvl\Taxonomy\Actions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use LogicException;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Contracts\DetachTermsContract;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Services\TermAttachmentWriter;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -25,7 +26,7 @@ final readonly class DetachTermsAction implements DetachTermsContract
      */
     public function __construct(
         private TermAttachmentWriter $attachments,
-        private TenantBoundary $boundary,
+        private OwnershipBoundary $boundary,
     ) {}
 
     /**
@@ -35,7 +36,7 @@ final readonly class DetachTermsAction implements DetachTermsContract
      */
     public function execute(Model $owner, string $taxonomy, array $terms = []): int
     {
-        $connection = (new Term)->getConnectionName();
+        $connection = TermModelRegistry::newInstance()->getConnectionName();
         $lock = TaxonomyConfiguration::lock(
             TaxonomyConfiguration::attachmentLockName($this->boundary, $owner, $taxonomy),
             TaxonomyConfiguration::lockSeconds(),

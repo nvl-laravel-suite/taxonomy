@@ -12,6 +12,7 @@ use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Services\TermModelResolver;
 use Nvl\Taxonomy\Services\TermWriter;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
@@ -50,7 +51,7 @@ final readonly class UpdateTermAction implements UpdateTermContract
         if (! is_string($termId)) {
             throw new InvalidArgumentException('A canonical taxonomy term identifier is required.');
         }
-        $connection = (new Term)->getConnectionName();
+        $connection = TermModelRegistry::newInstance()->getConnectionName();
 
         return DB::connection($connection)->transaction(function () use (
             $termId,

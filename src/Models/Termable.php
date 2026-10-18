@@ -11,9 +11,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Traits\HasOwnership;
+use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Database\Factories\TermableFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -33,9 +37,16 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  *
  * @api
  */
-final class Termable extends Model
+final class Termable extends Model implements Ownable
 {
     use GuardsTenantOwnership;
+    use HasOwnership;
+
+    /** Explicit host subclasses opt roots into ownership; dependent metadata is fixed by the registrar. */
+    public static function ownershipDefinition(): OwnershipDefinition
+    {
+        return OwnershipDefinition::unscoped();
+    }
 
     /** @use HasFactory<TermableFactory> */
     use HasFactory;
@@ -69,7 +80,7 @@ final class Termable extends Model
      */
     public function term(): BelongsTo
     {
-        return $this->belongsTo(Term::class, 'term_id');
+        return $this->belongsTo(TermModelRegistry::modelClass(), 'term_id');
     }
 
     /**

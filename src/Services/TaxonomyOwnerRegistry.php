@@ -7,12 +7,10 @@ namespace Nvl\Taxonomy\Services;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Nvl\Support\OwnerRegistry;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Contracts\TenantParentResolver;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Support\Tenancy\Exceptions\TenantConfigurationInvalid;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
-use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 
 /**
  * Resolves capability references and native morph identities for Taxonomy owners.
@@ -26,8 +24,7 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
 
     /** Create the canonical owner registry. */
     public function __construct(
-        private readonly TenantResourceRegistry $resources,
-        private readonly TenantBoundary $boundary,
+        private readonly OwnershipBoundary $boundary,
         private readonly OwnerRegistry $identitiesRegistry,
     ) {}
 
@@ -50,6 +47,8 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
             );
         }
 
+        $model = $this->identitiesRegistry->reference($reference, "nvl-taxonomy.owners.{$alias}", $alias);
+
         $registeredModel = $this->owners[$alias] ?? null;
 
         if ($registeredModel !== null && $registeredModel !== $model) {
@@ -66,7 +65,6 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
             );
         }
 
-        $this->identitiesRegistry->reference($reference, "nvl-taxonomy.owners.{$alias}", $alias);
         $this->owners[$alias] = $model;
         ksort($this->owners);
 
@@ -98,19 +96,19 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
         $identifier = $owner->getRawOriginal($owner->getKeyName());
 
         if (! $owner->exists || (! is_string($identifier) && ! is_int($identifier))) {
-            throw new TenantBoundaryViolation('Taxonomy owners must be persisted canonical records.');
+            throw TaxonomyOwnership::violation('Taxonomy owners must be persisted canonical records.');
         }
 
         $query = $canonical->newQuery()->whereKey($identifier);
         $resource = null;
 
-        if (config('nvl-tenancy.enabled') === true) {
-            if ($canonical->getConnection() !== (new Term)->getConnection()) {
+        if (TaxonomyOwnership::active()) {
+            if ($canonical->getConnection() !== TermModelRegistry::newInstance()->getConnection()) {
                 throw new TenantConfigurationInvalid('Taxonomy owners must share the Taxonomy connection.');
             }
 
-            $resource = $this->resources->forModel($owner);
-            $this->boundary->query($query, $resource->key);
+            $resource = TaxonomyOwnership::resource($owner);
+            $this->boundary->query($query, $resource);
         }
 
         if ($lock) {
@@ -120,15 +118,15 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
         $resolved = $query->first();
 
         if (! $resolved instanceof Model) {
-            if (config('nvl-tenancy.enabled') === true) {
-                throw new TenantBoundaryViolation('The canonical taxonomy owner is unavailable.');
+            if (TaxonomyOwnership::active()) {
+                throw TaxonomyOwnership::violation('The canonical taxonomy owner is unavailable.');
             }
 
             throw new InvalidArgumentException('The canonical taxonomy owner is unavailable.');
         }
 
         if ($resource !== null) {
-            $this->boundary->assertRecord($resolved, $resource->key);
+            $this->boundary->assertRecord($resolved, $resource);
         }
 
         return $resolved;

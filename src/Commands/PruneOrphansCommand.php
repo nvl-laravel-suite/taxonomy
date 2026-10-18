@@ -6,14 +6,14 @@ namespace Nvl\Taxonomy\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Contracts\TenantRunner;
 use Nvl\Support\Tenancy\ValueObjects\TenantId;
 use Nvl\Taxonomy\Actions\DeleteTermAction;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
-use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
@@ -39,7 +39,7 @@ final class PruneOrphansCommand extends Command
         DeleteTermAction $delete,
         TaxonomyRegistry $taxonomies,
         TenantRunner $runner,
-        TenantBoundary $boundary,
+        OwnershipBoundary $boundary,
     ): int {
         $tenant = $this->option('tenant');
         if (config('nvl-tenancy.enabled') === true) {
@@ -62,9 +62,9 @@ final class PruneOrphansCommand extends Command
     private function handleForTenant(
         DeleteTermAction $delete,
         TaxonomyRegistry $taxonomies,
-        TenantBoundary $boundary,
+        OwnershipBoundary $boundary,
     ): int {
-        $query = Term::query()
+        $query = TermModelRegistry::query()
             ->whereDoesntHave('attachments')
             ->whereDoesntHave('children');
         $taxonomy = $this->argument('taxonomy');

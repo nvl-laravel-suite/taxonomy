@@ -5,7 +5,9 @@
             "common": [
                 "locks.seconds",
                 "migrations.enabled",
+                "models.term",
                 "owners",
+                "ownership.owner_resources",
                 "storage.connection"
             ],
             "advanced": [

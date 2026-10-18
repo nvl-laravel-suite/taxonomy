@@ -4,17 +4,14 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
-use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use InvalidArgumentException;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Support\Owners\OwnerIdentity;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
-use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Relations\ExactTaxonomyText;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
@@ -23,11 +20,9 @@ final readonly class TaxonomyBatchOwnerAdmission
 {
     /** Retain the registered capability and ownership runtimes. */
     public function __construct(
-        private Repository $configuration,
         private TaxonomyOwnerRegistry $owners,
         private TaxonomyRegistry $vocabularies,
-        private TenantResourceRegistry $resources,
-        private TenantBoundary $boundary,
+        private OwnershipBoundary $boundary,
     ) {}
 
     /**
@@ -73,7 +68,7 @@ final readonly class TaxonomyBatchOwnerAdmission
     {
         $this->owners->aliasFor($owner);
         $prototype = new ($owner::class);
-        $connection = (new Term)->getConnection();
+        $connection = TermModelRegistry::newInstance()->getConnection();
         if (($prototype->getConnectionName() !== null && $owner->getConnectionName() !== $prototype->getConnectionName())
             || ($owner->getConnectionName() !== null && $owner->getConnectionName() !== $prototype->getConnection()->getName())
             || $owner->getTable() !== $prototype->getTable()
@@ -81,8 +76,8 @@ final readonly class TaxonomyBatchOwnerAdmission
             || $owner->getConnection() !== $connection) {
             $this->unavailable();
         }
-        if ($this->configuration->get('nvl-tenancy.enabled') === true) {
-            $this->resources->forModel($prototype);
+        if (TaxonomyOwnership::active()) {
+            TaxonomyOwnership::resource($prototype);
         }
     }
 
@@ -117,8 +112,8 @@ final readonly class TaxonomyBatchOwnerAdmission
             }
             $query->whereNull($column);
         }
-        if ($this->configuration->get('nvl-tenancy.enabled') === true) {
-            $this->boundary->query($query, $this->resources->forModel($owner)->key);
+        if (TaxonomyOwnership::active()) {
+            $this->boundary->query($query, TaxonomyOwnership::resource($owner));
         }
 
         return $query;
@@ -180,8 +175,8 @@ final readonly class TaxonomyBatchOwnerAdmission
     /** Fail with the existing enabled or disabled canonical owner denial semantics. */
     private function unavailable(): never
     {
-        if ($this->configuration->get('nvl-tenancy.enabled') === true) {
-            throw new TenantBoundaryViolation('The canonical taxonomy owner is unavailable in the active storage scope.');
+        if (TaxonomyOwnership::active()) {
+            throw TaxonomyOwnership::violation('The canonical taxonomy owner is unavailable in the active storage scope.');
         }
 
         throw new InvalidArgumentException('The canonical taxonomy owner is unavailable.');

@@ -9,14 +9,15 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
 use Nvl\Support\Events\DomainEventDispatcher;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Taxonomy\Contracts\MergeTermsContract;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Services\TermMergeValidator;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -71,9 +72,9 @@ final readonly class MergeTermsAction implements MergeTermsContract
             );
             $source = $context->source;
             $destination = $context->destination;
-            $tenant = $source->getRawOriginal('tenant_id');
+            $tenant = TaxonomyOwnership::declared() ? $source->getRawOriginal('owner_scope_key') : $source->getRawOriginal('tenant_id');
             if (config('nvl-tenancy.enabled') === true && ! is_string($tenant)) {
-                throw new TenantBoundaryViolation('A merged Taxonomy term lacks tenant ownership.');
+                throw TaxonomyOwnership::violation('A merged Taxonomy term lacks tenant ownership.');
             }
 
             $table = (new Termable)->getTable();
@@ -81,7 +82,7 @@ final readonly class MergeTermsAction implements MergeTermsContract
             $destinationAttachments = $database
                 ->table($table)
                 ->where('term_id', $destination->id)
-                ->when(is_string($tenant), static fn ($query) => $query->where('tenant_id', $tenant))
+                ->when(is_string($tenant), static fn ($query) => $query->where(TaxonomyOwnership::declared() ? 'owner_scope_key' : 'tenant_id', $tenant))
                 ->lockForUpdate()
                 ->get(['termable_type', 'termable_id']);
             $destinationAttachmentKeys = [];
@@ -92,7 +93,7 @@ final readonly class MergeTermsAction implements MergeTermsContract
 
             $database->table($table)
                 ->where('term_id', $source->id)
-                ->when(is_string($tenant), static fn ($query) => $query->where('tenant_id', $tenant))
+                ->when(is_string($tenant), static fn ($query) => $query->where(TaxonomyOwnership::declared() ? 'owner_scope_key' : 'tenant_id', $tenant))
                 ->lockForUpdate()
                 ->orderBy('id')
                 ->chunkById(250, function ($attachments) use (
@@ -119,13 +120,13 @@ final readonly class MergeTermsAction implements MergeTermsContract
 
                     if ($duplicates !== []) {
                         $database->table($table)->whereIn('id', $duplicates)
-                            ->when(is_string($tenant), static fn ($query) => $query->where('tenant_id', $tenant))
+                            ->when(is_string($tenant), static fn ($query) => $query->where(TaxonomyOwnership::declared() ? 'owner_scope_key' : 'tenant_id', $tenant))
                             ->delete();
                     }
 
                     if ($transferable !== []) {
                         $database->table($table)->whereIn('id', $transferable)
-                            ->when(is_string($tenant), static fn ($query) => $query->where('tenant_id', $tenant))
+                            ->when(is_string($tenant), static fn ($query) => $query->where(TaxonomyOwnership::declared() ? 'owner_scope_key' : 'tenant_id', $tenant))
                             ->update([
                                 'term_id' => $destination->id,
                                 'updated_at' => now(),
@@ -166,7 +167,7 @@ final readonly class MergeTermsAction implements MergeTermsContract
 
     private function connectionFor(): ?string
     {
-        return (new Term)->getConnectionName();
+        return TermModelRegistry::newInstance()->getConnectionName();
     }
 
     private function attachmentKey(object $attachment): string
@@ -204,12 +205,12 @@ final readonly class MergeTermsAction implements MergeTermsContract
         $identifier = $attributes['termable_id'] ?? null;
         $modelClass = is_string($type) ? ($this->owners->all()[$type] ?? null) : null;
         if (! is_string($modelClass) || (! is_string($identifier) && ! is_int($identifier))) {
-            throw new TenantBoundaryViolation('A Taxonomy attachment has an unknown canonical owner.');
+            throw TaxonomyOwnership::violation('A Taxonomy attachment has an unknown canonical owner.');
         }
         $owner = (new $modelClass)->newQueryWithoutScopes()->whereKey($identifier)->first();
         if (! $owner instanceof Model
-            || $this->owners->resolve($owner, lock: true)->getRawOriginal('tenant_id') !== $tenant) {
-            throw new TenantBoundaryViolation('A Taxonomy attachment belongs to another tenant.');
+            || $this->owners->resolve($owner, lock: true)->getRawOriginal(TaxonomyOwnership::declared() ? 'owner_scope_key' : 'tenant_id') !== $tenant) {
+            throw TaxonomyOwnership::violation('A Taxonomy attachment belongs to another tenant.');
         }
     }
 }

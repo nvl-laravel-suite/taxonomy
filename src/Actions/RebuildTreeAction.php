@@ -10,6 +10,7 @@ use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
@@ -30,7 +31,7 @@ final readonly class RebuildTreeAction
      */
     public function execute(?string $taxonomy = null, bool $dryRun = false): int
     {
-        $connection = (new Term)->getConnectionName();
+        $connection = TermModelRegistry::newInstance()->getConnectionName();
 
         return DB::connection($connection)->transaction(function () use ($taxonomy, $dryRun): int {
             $changes = 0;

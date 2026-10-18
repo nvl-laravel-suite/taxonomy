@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Services;
 
 use InvalidArgumentException;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
@@ -19,7 +19,7 @@ final readonly class TermModelResolver
      */
     public function __construct(
         private TaxonomyRegistry $taxonomies,
-        private TenantBoundary $boundary,
+        private OwnershipBoundary $boundary,
     ) {}
 
     /**
@@ -35,7 +35,7 @@ final readonly class TermModelResolver
             throw new InvalidArgumentException('A canonical taxonomy term identifier is required.');
         }
 
-        $baseTerm = Term::query()->lockForUpdate()->findOrFail($id);
+        $baseTerm = TermModelRegistry::query()->lockForUpdate()->findOrFail($id);
         $this->boundary->assertRecord($baseTerm, 'taxonomy.terms');
         $taxonomy = $baseTerm->taxonomy;
 

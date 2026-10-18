@@ -7,6 +7,7 @@ namespace Nvl\Taxonomy\Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\TermTranslation;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 
 /**
  * Builds TermTranslation fixture rows and their declared package parents.
@@ -38,7 +39,7 @@ final class TermTranslationFactory extends Factory
             }
 
             if ($model->getAttribute('term_id') !== null) {
-                $parent = Term::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('term_id')));
+                $parent = TermModelRegistry::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('term_id')));
                 FactoryGuard::parent($parent, $model);
                 FactoryGuard::inherit($model, $parent);
             }

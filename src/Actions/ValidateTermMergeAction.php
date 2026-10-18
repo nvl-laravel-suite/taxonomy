@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TermMergeValidator;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -56,6 +57,6 @@ final readonly class ValidateTermMergeAction
 
     private function connectionFor(): ?string
     {
-        return (new Term)->getConnectionName();
+        return TermModelRegistry::newInstance()->getConnectionName();
     }
 }

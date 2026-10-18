@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 
 /**
  * Builds Termable fixture rows and their declared package parents.
@@ -42,7 +43,7 @@ final class TermableFactory extends Factory
             $owner = FactoryGuard::owner($model, 'termable_type', 'termable_id');
             FactoryGuard::inherit($model, $owner);
             if ($model->getAttribute('term_id') !== null) {
-                $parent = Term::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('term_id')));
+                $parent = TermModelRegistry::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('term_id')));
                 FactoryGuard::parent($parent, $model);
                 if (config('nvl-tenancy.enabled') === true && $owner->getRawOriginal('tenant_id') !== $parent->getRawOriginal('tenant_id')) {
                     throw new InvalidArgumentException('Fixture owner and parent tenancy must agree.');
@@ -66,7 +67,7 @@ final class TermableFactory extends Factory
             'term_id' => Term::factory(),
             'termable_type' => null,
             'termable_id' => null,
-            'taxonomy' => fn (array $attributes): string => $attributes['term_id'] === null ? 'category' : Term::query()->findOrFail(FactoryGuard::identifier($attributes['term_id']))->taxonomy,
+            'taxonomy' => fn (array $attributes): string => $attributes['term_id'] === null ? 'category' : TermModelRegistry::query()->findOrFail(FactoryGuard::identifier($attributes['term_id']))->taxonomy,
             'position' => 0,
         ];
     }

@@ -7,10 +7,10 @@ namespace Nvl\Taxonomy\Tenancy;
 use Nvl\Support\Tenancy\Enums\TenantResourceKind;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Tenancy\ValueObjects\TenantResourceDefinition;
-use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 
 /** Registers Taxonomy's immutable tenant-owned tree graph. */
 final readonly class TaxonomyTenancyResources
@@ -19,7 +19,7 @@ final readonly class TaxonomyTenancyResources
     public function register(TenantResourceRegistry $resources): void
     {
         $resources->registerParentResolver('taxonomy.attachments', TaxonomyOwnerRegistry::class);
-        $resources->register(new TenantResourceDefinition('taxonomy.terms', 'taxonomy', Term::class));
+        $resources->register(new TenantResourceDefinition('taxonomy.terms', 'taxonomy', TermModelRegistry::modelClass()));
         $resources->register(new TenantResourceDefinition(
             'taxonomy.attachments',
             'taxonomy',

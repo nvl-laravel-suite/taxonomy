@@ -10,9 +10,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Traits\HasOwnership;
+use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Database\Factories\TermTranslationFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -32,9 +36,16 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  *
  * @nvl-consumer-read id
  */
-final class TermTranslation extends Model
+final class TermTranslation extends Model implements Ownable
 {
     use GuardsTenantOwnership;
+    use HasOwnership;
+
+    /** Explicit host subclasses opt roots into ownership; dependent metadata is fixed by the registrar. */
+    public static function ownershipDefinition(): OwnershipDefinition
+    {
+        return OwnershipDefinition::unscoped();
+    }
 
     /** @use HasFactory<TermTranslationFactory> */
     use HasFactory;
@@ -71,7 +82,7 @@ final class TermTranslation extends Model
      */
     public function term(): BelongsTo
     {
-        return $this->belongsTo(Term::class, 'term_id');
+        return $this->belongsTo(TermModelRegistry::modelClass(), 'term_id');
     }
 
     /**

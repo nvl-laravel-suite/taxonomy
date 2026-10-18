@@ -9,8 +9,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Nvl\Support\Events\DomainEventDispatcher;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Taxonomy\Contracts\TermResolverContract;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
@@ -18,6 +16,8 @@ use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException;
 use Nvl\Taxonomy\Exceptions\ClosedVocabularyException;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Translatable\Services\ContentLocale;
@@ -37,7 +37,7 @@ final readonly class TermResolver implements TermResolverContract
         private SlugGenerator $slugs,
         private ContentLocale $contentLocale,
         private TermWriter $writer,
-        private TenantBoundary $boundary,
+        private OwnershipBoundary $boundary,
         private DomainEventDispatcher $domainEvents,
     ) {}
 
@@ -119,8 +119,8 @@ final readonly class TermResolver implements TermResolverContract
             $candidate = $byId->get($modelReferenceId);
 
             if (! $candidate instanceof Term) {
-                if (config('nvl-tenancy.enabled') === true) {
-                    throw new TenantBoundaryViolation(
+                if (TaxonomyOwnership::active()) {
+                    throw TaxonomyOwnership::violation(
                         "Term [{$modelReferenceId}] is unavailable in the current tenant boundary.",
                     );
                 }

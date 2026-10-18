@@ -9,10 +9,12 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
+use Nvl\Support\Ownership\Contracts\OwnershipModelPersistence;
 use Nvl\Taxonomy\Exceptions\InvalidTermOperationException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -29,6 +31,8 @@ final readonly class TermAttachmentWriter
         private TaxonomyRegistry $taxonomies,
         private TaxonomyOwnerRegistry $owners,
         private TermResolver $terms,
+        private OwnershipBoundary $boundary,
+        private OwnershipModelPersistence $persistence,
     ) {}
 
     /**
@@ -37,6 +41,24 @@ final readonly class TermAttachmentWriter
      * @param  list<Term|string>  $references
      */
     public function sync(Model $owner, string $taxonomy, array $references): void
+    {
+        if (TaxonomyOwnership::declared()) {
+            $canonical = $this->owners->resolve($owner, lock: true);
+            $this->persistence->save($canonical, function () use ($canonical, $taxonomy, $references): bool {
+                $this->syncRecords($canonical, $taxonomy, $references);
+
+                return true;
+            });
+
+            return;
+        }
+        $this->syncRecords($owner, $taxonomy, $references);
+    }
+
+    /** Persist the admitted attachment set under its actual host source lease.
+     * @param  list<Term|string>  $references
+     */
+    private function syncRecords(Model $owner, string $taxonomy, array $references): void
     {
         [$definition, $ownerAlias, $ownerId, $tenant] = $this->context($owner, $taxonomy, lock: true);
         $this->assertBulkLimit($references);
@@ -63,6 +85,7 @@ final readonly class TermAttachmentWriter
         foreach ($ids as $position => $termId) {
             $rows[] = [
                 'id' => (string) Str::uuid(),
+                ...(TaxonomyOwnership::declared() ? $this->boundary->attributes('taxonomy.attachments') : []),
                 ...($tenant === null ? [] : ['tenant_id' => $tenant]),
                 'term_id' => $termId,
                 'termable_type' => $ownerAlias,
@@ -74,7 +97,7 @@ final readonly class TermAttachmentWriter
             ];
         }
 
-        DB::connection((new Term)->getConnectionName())
+        DB::connection(TermModelRegistry::newInstance()->getConnectionName())
             ->table((new Termable)->getTable())
             ->insert($rows);
     }
@@ -107,6 +130,25 @@ final readonly class TermAttachmentWriter
      * @param  list<Term|string>  $references
      */
     public function detach(Model $owner, string $taxonomy, array $references = []): int
+    {
+        if (! TaxonomyOwnership::declared()) {
+            return $this->detachRecords($owner, $taxonomy, $references);
+        }
+        $canonical = $this->owners->resolve($owner, lock: true);
+        $deleted = 0;
+        $this->persistence->save($canonical, function () use ($canonical, $taxonomy, $references, &$deleted): bool {
+            $deleted = $this->detachRecords($canonical, $taxonomy, $references);
+
+            return true;
+        });
+
+        return $deleted;
+    }
+
+    /** Remove admitted attachments while the source lease remains active.
+     * @param  list<Term|string>  $references
+     */
+    private function detachRecords(Model $owner, string $taxonomy, array $references): int
     {
         [, $ownerAlias, $ownerId, $tenant] = $this->context($owner, $taxonomy, lock: true);
         $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy, $tenant);
@@ -154,9 +196,9 @@ final readonly class TermAttachmentWriter
             );
         }
 
-        $tenant = $owner->getRawOriginal('tenant_id');
+        $tenant = config('nvl-tenancy.enabled') === true ? $owner->getRawOriginal('tenant_id') : null;
         if (config('nvl-tenancy.enabled') === true && ! is_string($tenant)) {
-            throw new TenantBoundaryViolation('The canonical taxonomy owner lacks tenant ownership.');
+            throw TaxonomyOwnership::violation('The canonical taxonomy owner lacks tenant ownership.');
         }
 
         return [
@@ -172,11 +214,14 @@ final readonly class TermAttachmentWriter
      */
     private function ownerQuery(string $ownerAlias, string $ownerId, string $taxonomy, ?string $tenant)
     {
-        $query = DB::connection((new Term)->getConnectionName())
+        $query = DB::connection(TermModelRegistry::newInstance()->getConnectionName())
             ->table((new Termable)->getTable())
             ->where('termable_type', $ownerAlias)
             ->where('termable_id', $ownerId)
             ->where('taxonomy', $taxonomy);
+        if (TaxonomyOwnership::declared()) {
+            $query->where('owner_scope_key', $this->boundary->attributes('taxonomy.attachments')['owner_scope_key']);
+        }
         if ($tenant !== null) {
             $query->where('tenant_id', $tenant);
         }

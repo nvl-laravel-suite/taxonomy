@@ -7,11 +7,13 @@ namespace Nvl\Taxonomy\Services;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
+use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -31,7 +33,8 @@ final readonly class TermWriter
         private TaxonomyRegistry $taxonomies,
         private TermHierarchy $hierarchy,
         private SlugGenerator $slugs,
-        private TenantBoundary $boundary,
+        private OwnershipBoundary $boundary,
+        private OwnershipWriter $ownershipWriter,
     ) {}
 
     /**
@@ -42,9 +45,17 @@ final readonly class TermWriter
         $definition = $this->taxonomies->get($data->taxonomy);
 
         $this->validate($data);
-        $term = new ($definition->model)($this->baseAttributes($data));
-        $term->forceFill($this->boundary->attributes('taxonomy.terms'));
-        $term->save();
+        if (TaxonomyOwnership::declared()) {
+            $term = $this->ownershipWriter->create($definition->model, function (array $ownership) use ($definition, $data): Term {
+                $term = new ($definition->model)($this->baseAttributes($data));
+                $term->forceFill($ownership)->save();
+
+                return $term;
+            });
+        } else {
+            $term = new ($definition->model)($this->baseAttributes($data));
+            $term->forceFill($this->boundary->attributes('taxonomy.terms'))->save();
+        }
         $this->translations->replace($term, $data->translations);
 
         return $term->refresh()->load('translations');
@@ -140,7 +151,7 @@ final readonly class TermWriter
             }
         }
 
-        $duplicate = Term::query()
+        $duplicate = TermModelRegistry::query()
             ->where('taxonomy', $data->taxonomy)
             ->where('parent_key', $data->parentId ?? '__root__')
             ->where('slug', $data->slug)

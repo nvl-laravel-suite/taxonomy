@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Commands;
 
 use Illuminate\Console\Command;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Contracts\TenantRunner;
 use Nvl\Support\Tenancy\ValueObjects\TenantId;
 use Nvl\Taxonomy\Actions\RebuildTreeAction;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -26,7 +26,7 @@ final class RebuildTreeCommand extends Command
     /**
      * Preview and optionally normalize sibling positions.
      */
-    public function handle(RebuildTreeAction $rebuild, TenantRunner $runner, TenantBoundary $boundary): int
+    public function handle(RebuildTreeAction $rebuild, TenantRunner $runner, OwnershipBoundary $boundary): int
     {
         $tenant = $this->option('tenant');
         if (config('nvl-tenancy.enabled') === true) {
@@ -46,7 +46,7 @@ final class RebuildTreeCommand extends Command
     }
 
     /** Rebuild the current tenant's tree under a tenant-keyed process lock. */
-    private function handleForTenant(RebuildTreeAction $rebuild, TenantBoundary $boundary): int
+    private function handleForTenant(RebuildTreeAction $rebuild, OwnershipBoundary $boundary): int
     {
         $taxonomy = $this->argument('taxonomy');
         $taxonomy = is_string($taxonomy) && $taxonomy !== '' ? $taxonomy : null;

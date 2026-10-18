@@ -12,6 +12,8 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Query\JoinClause;
 use InvalidArgumentException;
 use LogicException;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 
 /**
  * A polymorphic many-to-many relation whose polymorphic identifier is stored
@@ -135,6 +137,16 @@ final class StringMorphToMany extends MorphToMany
                 $this->normalizeIdentifier($this->parent->getAttribute($this->parentKey)),
             )
             ->where($this->morphType, $this->morphClass);
+    }
+
+    /** Prevent native relationship helpers from bypassing attachment workflow admission. */
+    public function newPivotStatement(): QueryBuilder
+    {
+        if (TaxonomyOwnership::declared()) {
+            throw new OwnershipViolation('Use Taxonomy attachment workflows for owned relationship mutations.');
+        }
+
+        return parent::newPivotStatement();
     }
 
     /**

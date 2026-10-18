@@ -122,3 +122,20 @@ Inject the supported focused interfaces and preserve host bindings. Returned mod
 Read docs/events.md and the package README error table. Domain events use schemaVersion=1, model-free facts and actual source-connection commit callbacks; only six declared old Event suffix aliases remain for major 5. Migrate exact listeners/fakes and suffix wildcards, drain old queued payloads, rebuild event cache and restart workers. Delivery is not a durable outbox. The Core exception renderer is opt-in, JSON-only for respondable failures, with exactly message/code/context and host-selected locale. Do not expose diagnostics or reinterpret missing bindings as authorization denial.
 
 Core package logging uses nvl/normal with CSV quiet by default, stable message keys and bounded context; incidents survive quiet. Do not mutate global logger context or log raw row/provider/content/credential payloads. Run only authorized project checks and report new acceptance as pending until actual output exists.
+
+
+## Optional model-declared ownership
+
+Use `nvl-taxonomy.models.term` for the exact canonical Term subclass. Its static
+`ownershipDefinition()` chooses an unscoped root, a native owner column, or an
+exclusive primary pivot supplied by the host. The selected root covers every
+vocabulary; vocabulary configuration still owns hierarchy and host rules.
+Declare host resource keys in `nvl-taxonomy.ownership.owner_resources` and use
+the optional Ownership runtime plus reviewed taxonomy adoption mappings for
+existing records. Attachments inherit their canonical host and must match their
+term; locale rows inherit their term; parents share owner and vocabulary.
+Use Actions for attachment, move, merge, delete and maintenance workflows.
+Owned pivot relation helpers are denied. Run commands inside an admitted native
+OwnershipRunner scope; historical --tenant flows remain compatibility only.
+Never infer a default owner, activate production during package installation,
+or query adopted tables through base/alternate models.

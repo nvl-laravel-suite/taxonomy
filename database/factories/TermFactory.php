@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 
 /**
  * Builds Term fixture rows and their declared package parents.
@@ -17,6 +18,12 @@ use Nvl\Taxonomy\Models\Term;
 final class TermFactory extends Factory
 {
     protected $model = Term::class;
+
+    /** Resolve the configured structural root for native factory construction. */
+    public function modelName(): string
+    {
+        return TermModelRegistry::modelClass();
+    }
 
     /**
      * Prepare native parent and owner facts after Laravel expands relationships.

@@ -56,7 +56,7 @@ final readonly class OwnerTaxonomyBatchReader
             }
             $definition = $this->vocabularies->get($vocabulary);
             $prototype = new $definition->model;
-            if ($prototype->getConnection() !== (new Term)->getConnection()) {
+            if ($prototype->getConnection() !== TermModelRegistry::newInstance()->getConnection()) {
                 throw new TaxonomyBatchReadException('Registered taxonomy terms require the canonical package connection.');
             }
             $translationDefinition = $prototype->translationDefinition();

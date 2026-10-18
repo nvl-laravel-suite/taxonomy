@@ -7,6 +7,7 @@ namespace Nvl\Taxonomy\Support;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Exceptions\UnknownTaxonomyException;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 
 /**
  * Validates and resolves immutable vocabulary definitions by canonical alias.
@@ -45,7 +46,8 @@ final class TaxonomyRegistry
                 );
             }
 
-            $model = $config['model'] ?? Term::class;
+            $configuredRoot = TermModelRegistry::modelClass();
+            $model = $configuredRoot !== Term::class ? $configuredRoot : ($config['model'] ?? Term::class);
             $sort = $config['sort'] ?? 'position';
 
             if (! is_string($model) || ! is_a($model, Term::class, true)) {

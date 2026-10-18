@@ -15,11 +15,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Carbon;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Contracts\Ownable;
+use Nvl\Support\Ownership\Services\OwnershipScope;
+use Nvl\Support\Ownership\Traits\HasOwnership;
+use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Database\Factories\TermFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
+use Nvl\Taxonomy\Ownership\TaxonomyTermScope;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Translatable\Contracts\TranslatableModel;
 use Nvl\Translatable\Enums\TranslationMutationPolicy;
@@ -55,9 +62,22 @@ use Nvl\Translatable\Translatable;
  * @nvl-consumer-read created_at
  * @nvl-consumer-read updated_at
  */
-class Term extends Model implements TranslatableModel
+class Term extends Model implements Ownable, TranslatableModel
 {
     use GuardsTenantOwnership;
+    use HasOwnership;
+
+    /** Preserve V1 vocabulary subclasses until this storage explicitly selects a new root. @internal */
+    public static function bootHasOwnership(): void
+    {
+        static::addGlobalScope(OwnershipScope::class, new TaxonomyTermScope);
+    }
+
+    /** Explicit host subclasses opt roots into ownership; dependent metadata is fixed by the registrar. */
+    public static function ownershipDefinition(): OwnershipDefinition
+    {
+        return OwnershipDefinition::unscoped();
+    }
 
     /** @use HasFactory<TermFactory> */
     use HasFactory;
@@ -88,7 +108,7 @@ class Term extends Model implements TranslatableModel
             foreignKey: 'term_id',
             fields: ['name', 'description'],
             mutationPolicy: TranslationMutationPolicy::DomainActionOnly,
-            ownershipResource: config('nvl-tenancy.enabled') === true ? 'taxonomy.terms' : null,
+            ownershipResource: TaxonomyOwnership::active() ? 'taxonomy.terms' : null,
         );
     }
 
@@ -295,6 +315,17 @@ class Term extends Model implements TranslatableModel
         $value = $this->translated('description', $locale);
 
         return is_string($value) ? $value : null;
+    }
+
+    /** Resolve framework route binding through the configured structural root.
+     * @param  mixed  $value
+     * @param  string|null  $field
+     */
+    public function resolveRouteBinding($value, $field = null): ?Term
+    {
+        $model = TermModelRegistry::newInstance();
+
+        return $model->newQuery()->where($field ?? $model->getRouteKeyName(), $value)->first();
     }
 
     protected static function booted(): void

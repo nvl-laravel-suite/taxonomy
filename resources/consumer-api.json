@@ -284,6 +284,7 @@
             "methods": [
                 "category",
                 "definition",
+                "modelName",
                 "tag"
             ],
             "properties": [],
@@ -384,6 +385,7 @@
             "file": "src/Events/TermChanged.php",
             "methods": [
                 "__construct",
+                "ownershipJobEnvelope",
                 "schemaVersion"
             ],
             "properties": [

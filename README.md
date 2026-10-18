@@ -443,3 +443,33 @@ The table lists enum discriminators, including any successful codes retained for
 Released under the [MIT License](LICENSE).
 
 Owner capability relations `metafields()`, `comments()`, `nvlMediaAssociations()` and `termables()` are enforced statically, not at runtime. They remain ordinary Eloquent relations for package internals. Enable `vendor/nvl/core/support/consumer-audit.neon` in the host PHPStan configuration, and use public workflow contracts and batch readers in consumer code. The static rules do not replace runtime authorization.
+
+### Optional ownership and the configured Term root
+
+Set `nvl-taxonomy.models.term` to a concrete `Term` subclass. Its
+`ownershipDefinition()` can return `OwnershipDefinition::column(Company::class,
+'company_id')` or `OwnershipDefinition::pivot(Company::class, 'term_owners',
+'term_id', 'company_id')`. The host supplies that native column/FK or exclusive
+primary pivot and installs the optional `nvl/ownership` runtime. Base models
+remain unscoped by default.
+
+The configured root is canonical across vocabularies; vocabulary definitions
+retain hierarchy, depth, ordering, openness and allowed host rules. Their older
+`model` conveniences remain available with the default unscoped root. Consumer
+hooks, casts, factories, relationships and framework bindings use the configured
+root. Alternate base models cannot access adopted storage.
+
+Declare canonical host resource keys in `nvl-taxonomy.ownership.owner_resources`.
+Attachments inherit their actual host, locale rows inherit their term, and both
+attachment terms and tree parents must share the native owner. Use attachment,
+move, merge and delete Actions; direct relationship pivot writes are rejected.
+Bulk attachment mutations hold the actual host source transaction through commit.
+Maintenance commands run inside the host's admitted `OwnershipRunner` scope;
+`--tenant` remains only for historical Tenancy installations.
+
+Existing installations use the reviewed `taxonomy` ownership adoption adapter
+with an explicit mapping for every retained term, locale and attachment. It
+preserves UUIDs and legacy provenance, restores canonical FKs, verifies tree and
+attachment ownership, and replaces global sibling uniqueness with owner-local
+uniqueness before activation. A failed verification never opens the graph.
+Disabling or removing the enforcing runtime cannot expose adopted rows.

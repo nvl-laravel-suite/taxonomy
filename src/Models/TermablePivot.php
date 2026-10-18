@@ -8,9 +8,11 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Nvl\Support\Config\PackageStorage;
+use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
 use Nvl\Taxonomy\Database\Factories\TermableFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -24,6 +26,18 @@ final class TermablePivot extends MorphPivot
     use HasFactory;
 
     use HasUuids;
+
+    /** Deny direct pivot persistence outside package workflows.
+     * @param  array<string,mixed>  $options
+     */
+    public function save(array $options = []): bool
+    {
+        if (TaxonomyOwnership::declared()) {
+            throw new OwnershipViolation('Use Taxonomy attachment workflows.');
+        }
+
+        return parent::save($options);
+    }
 
     /** @var list<string> */
     protected $fillable = [

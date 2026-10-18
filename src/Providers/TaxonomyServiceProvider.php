@@ -9,11 +9,13 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use Nvl\Data\Services\TypeScriptSourceRegistry;
+use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
 use Nvl\Support\Doctor\PackageDoctorContributor;
 use Nvl\Support\Globals\GlobalNames;
 use Nvl\Support\OwnerRegistry;
+use Nvl\Support\Ownership\Contracts\OwnershipIntegratedProvider;
+use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Providers\SupportServiceProvider;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Support\Traits\RegistersNamespacedResources;
@@ -42,10 +44,14 @@ use Nvl\Taxonomy\Contracts\UpdateTermContract;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
+use Nvl\Taxonomy\Ownership\TaxonomyAdoptionAdapter as OwnershipTaxonomyAdoptionAdapter;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Ownership\TaxonomyResourceRegistrar;
 use Nvl\Taxonomy\Services\RegisteredTaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Services\TaxonomyTree;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Services\TermResolver;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -57,7 +63,7 @@ use Nvl\Translatable\Services\TranslationResourceRegistry;
 /**
  * Registers taxonomy configuration, registries, commands, migrations, and integration resources.
  */
-final class TaxonomyServiceProvider extends ServiceProvider
+final class TaxonomyServiceProvider extends ServiceProvider implements OwnershipIntegratedProvider
 {
     use MergesPackageConfiguration;
     use RegistersNamespacedResources;
@@ -83,6 +89,8 @@ final class TaxonomyServiceProvider extends ServiceProvider
 
         $this->mergePackageConfiguration(__DIR__.'/../../config/nvl-taxonomy.php', 'taxonomy');
 
+        $this->app->singleton(TermModelRegistry::class);
+        $this->app->booting(fn () => $this->app->make(TermModelRegistry::class)->prepare());
         $this->app->singleton(TaxonomyRegistry::class);
         $this->app->bindIf(ListOwnerTaxonomyTermsContract::class, ListOwnerTaxonomyTermsAction::class);
         $this->app->bindIf(TaxonomyBatchAuthorization::class, RegisteredTaxonomyBatchAuthorization::class);
@@ -101,8 +109,7 @@ final class TaxonomyServiceProvider extends ServiceProvider
         });
         $this->app->singleton(TaxonomyOwnerRegistry::class, function (Container $app): TaxonomyOwnerRegistry {
             $registry = new TaxonomyOwnerRegistry(
-                $app->make(TenantResourceRegistry::class),
-                $app->make(TenantBoundary::class),
+                $app->make(OwnershipBoundary::class),
                 $app->make(OwnerRegistry::class),
             );
             $configuredOwners = config('nvl-taxonomy.owners', []);
@@ -138,17 +145,23 @@ final class TaxonomyServiceProvider extends ServiceProvider
         TaxonomyRegistry $taxonomies,
         TaxonomyTenancyResources $tenancyResources,
         TenantResourceRegistry $tenantResources,
-        TenantBoundary $tenantBoundary,
+        OwnershipBoundary $tenantBoundary,
     ): void {
         $this->app->make(GlobalNames::class)->translations('taxonomy', __DIR__.'/../../lang', $this->app->make('translation.loader'));
         $this->publishes([
             __DIR__.'/../../lang' => lang_path('vendor/nvl-taxonomy'),
         ], 'nvl-taxonomy-translations');
         $tenancyResources->register($tenantResources);
+        $this->app->make(TaxonomyResourceRegistrar::class)->register($this->app->make(OwnershipResourceRegistry::class));
+        if ($this->app->bound(OwnershipAdoptionRegistry::class)) {
+            $this->app->make(OwnershipAdoptionRegistry::class)->register('taxonomy', OwnershipTaxonomyAdoptionAdapter::class);
+        }
         if ($this->app->bound(TenantAdoptionRegistry::class)) {
             $this->app->make(TenantAdoptionRegistry::class)->register('taxonomy', TaxonomyAdoptionAdapter::class);
         }
-        $this->registerTenantScopes($tenantBoundary, $taxonomies);
+        if (config('nvl-tenancy.enabled') === true) {
+            $this->registerTenantScopes($tenantBoundary, $taxonomies);
+        }
         foreach ($taxonomies->all() as $definition) {
             $unknownOwners = $owners->unknownReferences($definition->allowedOwners);
 
@@ -188,7 +201,7 @@ final class TaxonomyServiceProvider extends ServiceProvider
 
         $translationResources->register(
             key: 'taxonomy.terms',
-            modelClass: Term::class,
+            modelClass: $this->app->make(TermModelRegistry::class)->termClass(),
             label: 'Taxonomy terms',
             searchableColumns: ['taxonomy', 'slug'],
             displayColumns: ['taxonomy', 'slug'],
@@ -198,7 +211,7 @@ final class TaxonomyServiceProvider extends ServiceProvider
 
     /** Register tenant predicates on every configured term model and inherited row. */
     private function registerTenantScopes(
-        TenantBoundary $boundary,
+        OwnershipBoundary $boundary,
         TaxonomyRegistry $taxonomies,
     ): void {
         $termModels = [Term::class];
