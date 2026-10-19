@@ -7,6 +7,7 @@ namespace Nvl\Taxonomy\Ownership;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
+use Nvl\Taxonomy\Compatibility\LegacyTaxonomyBoundary;
 
 /**
  * Keeps legacy vocabulary subclasses inside their existing authority until an explicit canonical root is selected.
@@ -15,7 +16,7 @@ use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
  */
 final readonly class TaxonomyBoundary implements OwnershipBoundary
 {
-    public function __construct(private OwnershipBoundary $ownership, private OwnershipBoundary $legacy) {}
+    public function __construct(private OwnershipBoundary $ownership, private LegacyTaxonomyBoundary $legacy) {}
 
     /** @template T of Model
      * @param  Builder<T>  $query
