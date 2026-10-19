@@ -3,12 +3,12 @@
 ## Quickstart
 
 ```sh
-composer require nvl/taxonomy:^5.0
+composer require nvl/taxonomy:^6.0
 php artisan nvl:install taxonomy --dry-run
 php artisan nvl:install taxonomy
 ```
 
-Required NVL dependencies: `nvl/core` (`^5.0`), `nvl/translatable` (`^5.0`). Register the categories vocabulary and host authorization/owner capability. Use batched owner readers rather than querying package-owned capability relations.
+Required NVL dependencies: `nvl/core` (`^6.0`), `nvl/translatable` (`^6.0`). Register the categories vocabulary and host authorization/owner capability. Use batched owner readers rather than querying package-owned capability relations.
 Review the published common config, select one migration owner, and run schema preflight before existing-table upgrades. The installer does not enable features or run migrations. Follow the detailed installation and capability sections below before invoking a storage/provider operation.
 
 Inject `Nvl\Taxonomy\Contracts\TaxonomyTreeContract` in a host service. After supplying the trusted inputs described above, the first public call is:
@@ -34,7 +34,7 @@ See the [installation and publishing guide](https://github.com/nvl-laravel-suite
 
 | Item | Value |
 |---|---|
-| Installed through | `composer require nvl/taxonomy:^5.0` |
+| Installed through | `composer require nvl/taxonomy:^6.0` |
 | Module identifier | `nvl/taxonomy` |
 | PHP namespace | `Nvl\Taxonomy` |
 | Service provider | `Nvl\Taxonomy\Providers\TaxonomyServiceProvider` |
@@ -49,7 +49,7 @@ The package depends on `nvl/core`, `nvl/tenancy`, and `nvl/translatable` inside 
 ## Requirements and installation
 
 ```bash
-composer require nvl/taxonomy:^5.0
+composer require nvl/taxonomy:^6.0
 php artisan migrate
 ```
 

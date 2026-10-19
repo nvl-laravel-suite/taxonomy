@@ -15,7 +15,7 @@ final readonly class LegacyTaxonomyBoundary implements OwnershipBoundary
     /** Retain only the explicitly temporary compatibility authority. */
     public function __construct(private TenantBoundary $boundary) {}
 
-    /** Preserve registered vocabulary subclasses and canonical legacy aliases.
+    /** Preserve registered vocabulary subclasses and historical morph identities.
      * @template T of Model
      *
      * @param  Builder<T>  $query
