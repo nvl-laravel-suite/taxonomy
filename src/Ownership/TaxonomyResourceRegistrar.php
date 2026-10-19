@@ -12,7 +12,11 @@ use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Services\TermModelRegistry;
 
-/** Compiles the configured structural root and its canonical host attachment graph. @internal */
+/**
+ * Compiles the configured structural root and its canonical host attachment graph.
+ *
+ * @internal
+ */
 final readonly class TaxonomyResourceRegistrar
 {
     public function __construct(private TermModelRegistry $models) {}

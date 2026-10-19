@@ -11,7 +11,9 @@ use Illuminate\Database\Eloquent\Scope;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipScope;
 
-/** Retains unadopted vocabulary subclasses through V1 while enforcing exact owned root identities. @internal
+/** Retains unadopted vocabulary subclasses through V1 while enforcing exact owned root identities.
+ * @internal
+ *
  * @implements Scope<Model>
  */
 final readonly class TaxonomyTermScope implements Scope

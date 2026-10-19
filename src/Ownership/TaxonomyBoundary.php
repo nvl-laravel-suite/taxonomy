@@ -9,7 +9,11 @@ use Illuminate\Database\Eloquent\Model;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
 use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 
-/** Keeps legacy vocabulary subclasses inside their existing authority until an explicit canonical root is selected. @internal */
+/**
+ * Keeps legacy vocabulary subclasses inside their existing authority until an explicit canonical root is selected.
+ *
+ * @internal
+ */
 final readonly class TaxonomyBoundary implements OwnershipBoundary
 {
     public function __construct(private OwnershipBoundary $ownership, private TenantBoundary $legacy) {}

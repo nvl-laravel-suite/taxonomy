@@ -19,10 +19,19 @@ use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 
-/** Adopts exact reviewed Taxonomy records without guessing primary owners from associations. @internal */
+/**
+ * Adopts exact reviewed Taxonomy records without guessing primary owners from associations.
+ *
+ * @internal
+ */
 final readonly class TaxonomyAdoptionAdapter implements OwnershipAdoptionAdapter
 {
-    public function __construct(private OwnershipResourceRegistry $resources, private OwnershipAdoptionStore $mappings, private OwnershipSchema $schema, private OwnershipDatabaseConstraints $constraints) {}
+    public function __construct(
+        private OwnershipResourceRegistry $resources,
+        private OwnershipAdoptionStore $mappings,
+        private OwnershipSchema $schema,
+        private OwnershipDatabaseConstraints $constraints,
+    ) {}
 
     /** @return list<string> */
     public function resources(): array
@@ -42,7 +51,8 @@ final readonly class TaxonomyAdoptionAdapter implements OwnershipAdoptionAdapter
                 if ($schema->hasColumn($model->getTable(), $column)) {
                     $schema->table($model->getTable(), static fn (Blueprint $table) => ($column === 'tenant_id' ? $table->uuid($column) : $table->string($column, 44))->nullable()->change());
                 }
-            }$this->schema->prepare($key);
+            }
+            $this->schema->prepare($key);
         }
         foreach ([['taxonomy.terms', ['taxonomy', 'parent_id'], 'taxonomy.terms', ['taxonomy', 'id']], ['taxonomy.translations', ['term_id'], 'taxonomy.terms', ['id']], ['taxonomy.attachments', ['taxonomy', 'term_id'], 'taxonomy.terms', ['taxonomy', 'id']]] as [$childKey,$columns,$parentKey,$parentColumns]) {
             $child = new ($this->resources->get($childKey)->model);
@@ -77,7 +87,8 @@ final readonly class TaxonomyAdoptionAdapter implements OwnershipAdoptionAdapter
             if ($index['unique'] && $index['columns'] === $columns) {
                 return;
             }
-        }$schema->table($model->getTable(), static fn (Blueprint $table) => $table->unique($columns, $name));
+        }
+        $schema->table($model->getTable(), static fn (Blueprint $table) => $table->unique($columns, $name));
     }
 
     /** Backfill bounded actual records from explicit immutable per-record mappings. */

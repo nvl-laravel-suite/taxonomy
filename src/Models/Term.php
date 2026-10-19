@@ -67,7 +67,11 @@ class Term extends Model implements Ownable, TranslatableModel
     use GuardsTenantOwnership;
     use HasOwnership;
 
-    /** Preserve V1 vocabulary subclasses until this storage explicitly selects a new root. @internal */
+    /**
+     * Preserve V1 vocabulary subclasses until this storage explicitly selects a new root.
+     *
+     * @internal
+     */
     public static function bootHasOwnership(): void
     {
         static::addGlobalScope(OwnershipScope::class, new TaxonomyTermScope);

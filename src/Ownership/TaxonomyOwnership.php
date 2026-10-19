@@ -15,7 +15,11 @@ use Nvl\Support\Ownership\ValueObjects\OwnershipSnapshot;
 use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
 use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 
-/** Resolves canonical metadata without retaining request admission. @internal */
+/**
+ * Resolves canonical metadata without retaining request admission.
+ *
+ * @internal
+ */
 final class TaxonomyOwnership
 {
     public static function declared(): bool
