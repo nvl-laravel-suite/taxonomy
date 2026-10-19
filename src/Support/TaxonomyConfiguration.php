@@ -12,7 +12,6 @@ use InvalidArgumentException;
 use Nvl\Support\Config\PackageOptions;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Contracts\OwnershipBoundary;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 
 /**
@@ -114,7 +113,7 @@ final class TaxonomyConfiguration
     /**
      * Return the stable distributed-lock key for one owner vocabulary set.
      */
-    public static function attachmentLockName(OwnershipBoundary|TenantBoundary $boundary, Model $owner, string $taxonomy): string
+    public static function attachmentLockName(OwnershipBoundary $boundary, Model $owner, string $taxonomy): string
     {
         return 'nvl:taxonomy:attachments:'.$boundary->key('taxonomy.terms', hash('sha256', implode('|', [
             $owner->getMorphClass(),

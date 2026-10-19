@@ -6,14 +6,13 @@ namespace Nvl\Taxonomy\Ownership;
 
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Support\Exceptions\BusinessException;
+use Nvl\Support\Ownership\Compatibility\LegacyOwnershipSupport;
 use Nvl\Support\Ownership\Contracts\OwnershipContext;
 use Nvl\Support\Ownership\Enums\OwnershipContextMode;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope;
 use Nvl\Support\Ownership\ValueObjects\OwnershipSnapshot;
-use Nvl\Support\Tenancy\Exceptions\TenantBoundaryViolation;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 
 /**
  * Resolves canonical metadata without retaining request admission.
@@ -30,17 +29,17 @@ final class TaxonomyOwnership
     /** Preserve the selected authority's public exception contract. */
     public static function violation(string $message): BusinessException
     {
-        return self::declared() ? new OwnershipViolation($message) : new TenantBoundaryViolation($message);
+        return self::declared() ? new OwnershipViolation($message) : app(LegacyOwnershipSupport::class)->violation($message);
     }
 
     public static function active(): bool
     {
-        return self::declared() || config('nvl-tenancy.enabled') === true;
+        return self::declared() || app(LegacyOwnershipSupport::class)->enabled();
     }
 
     public static function resource(Model $model): string
     {
-        return self::declared() ? app(OwnershipResourceRegistry::class)->forModel($model)->key : app(TenantResourceRegistry::class)->forModel($model)->key;
+        return self::declared() ? app(OwnershipResourceRegistry::class)->forModel($model)->key : app(LegacyOwnershipSupport::class)->resource($model);
     }
 
     /** Capture scalar admission; untouched graphs preserve disabled installation behavior. */
