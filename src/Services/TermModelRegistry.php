@@ -11,11 +11,13 @@ use Nvl\Support\Models\ConfiguredModelResolver;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Nvl\Support\Ownership\Exceptions\OwnershipConfigurationInvalid;
-use Nvl\Support\Ownership\Services\OwnershipScope;
 use Nvl\Taxonomy\Models\Term;
-use ReflectionMethod;
 
-/** Resolves the one configured Term extension through the shared native model identity. @api */
+/**
+ * Resolves the one configured Term extension through the shared native model identity.
+ *
+ * @api
+ */
 final class TermModelRegistry
 {
     /** @var class-string<Term>|null */
@@ -24,9 +26,14 @@ final class TermModelRegistry
     private bool $validated = false;
 
     /** Retain deployment configuration and the shared identity registry. */
-    public function __construct(private readonly Repository $configuration, private readonly OwnerRegistry $identities) {}
+    public function __construct(
+        private readonly Repository $configuration,
+        private readonly OwnerRegistry $identities,
+    ) {}
 
-    /** Resolve and freeze the concrete Term class before resource compilation. @internal
+    /** Resolve and freeze the concrete Term class before resource compilation.
+     * @internal
+     *
      * @return class-string<Term>
      */
     public function prepare(): string
@@ -59,26 +66,15 @@ final class TermModelRegistry
         }
         $model = new $class;
         $base = new Term;
-        foreach ($base->getCasts() as $attribute => $cast) {
-            if (($model->getCasts()[$attribute] ?? null) !== $cast) {
-                throw new OwnershipConfigurationInvalid('Configured Term models must retain the required casts.');
-            }
-        }
-        foreach (['save', 'delete', 'newQueryForRestoration', 'bootHasOwnership'] as $method) {
-            if ((new ReflectionMethod($class, $method))->getDeclaringClass()->getName() !== Term::class) {
-                throw new OwnershipConfigurationInvalid('Configured Term models must retain the canonical persistence hooks.');
-            }
-        }
-        if (! $model->hasGlobalScope(OwnershipScope::class)
-            || $model->getKeyName() !== $base->getKeyName() || $model->getKeyType() !== 'string' || $model->getIncrementing()) {
-            throw new OwnershipConfigurationInvalid('Configured Term models must retain the builder, UUID and ownership capabilities.');
-        }
+        (new ConfiguredModelResolver)->assertOwnershipCapabilities($model, $base);
         $this->validated = true;
 
         return $class;
     }
 
-    /** Resolve the immutable model from native framework entry points. @internal
+    /** Resolve the immutable model from native framework entry points.
+     * @internal
+     *
      * @return class-string<Term>
      */
     public static function modelClass(): string
@@ -86,7 +82,9 @@ final class TermModelRegistry
         return Container::getInstance()->make(self::class)->termClass();
     }
 
-    /** Construct the configured root. @internal
+    /** Construct the configured root.
+     * @internal
+     *
      * @param  array<string,mixed>  $attributes
      */
     public static function newInstance(array $attributes = []): Term
@@ -96,7 +94,9 @@ final class TermModelRegistry
         return new $class($attributes);
     }
 
-    /** Persist a package-authored attribute map under the exact source assignment. @internal
+    /** Persist a package-authored attribute map under the exact source assignment.
+     * @internal
+     *
      * @param  array<string, mixed>  $attributes
      */
     public static function create(array $attributes): Term
@@ -109,7 +109,9 @@ final class TermModelRegistry
         });
     }
 
-    /** Create the exact configured query. @internal
+    /** Create the exact configured query.
+     * @internal
+     *
      * @return Builder<Term>
      */
     public static function query(): Builder
