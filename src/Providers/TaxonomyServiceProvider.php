@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Providers;
 
 use Illuminate\Container\Container;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use Nvl\Data\Services\TypeScriptSourceRegistry;
@@ -16,7 +15,6 @@ use Nvl\Support\OwnerRegistry;
 use Nvl\Support\Ownership\Contracts\OwnershipIntegratedProvider;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Providers\SupportServiceProvider;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Support\Traits\RegistersNamespacedResources;
 use Nvl\Taxonomy\Actions\AttachTermsAction;
@@ -29,6 +27,7 @@ use Nvl\Taxonomy\Actions\MoveTermAction;
 use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
 use Nvl\Taxonomy\Actions\UpdateTermAction;
 use Nvl\Taxonomy\Commands;
+use Nvl\Taxonomy\Compatibility\LegacyTaxonomyIntegration;
 use Nvl\Taxonomy\Contracts\AttachTermsContract;
 use Nvl\Taxonomy\Contracts\CreateTermContract;
 use Nvl\Taxonomy\Contracts\DeleteTermContract;
@@ -41,9 +40,6 @@ use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Contracts\TaxonomyTreeContract;
 use Nvl\Taxonomy\Contracts\TermResolverContract;
 use Nvl\Taxonomy\Contracts\UpdateTermContract;
-use Nvl\Taxonomy\Models\Term;
-use Nvl\Taxonomy\Models\Termable;
-use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Ownership\TaxonomyAdoptionAdapter as OwnershipTaxonomyAdoptionAdapter;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Ownership\TaxonomyResourceRegistrar;
@@ -55,9 +51,6 @@ use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Services\TermResolver;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
-use Nvl\Taxonomy\Tenancy\TaxonomyAdoptionAdapter;
-use Nvl\Taxonomy\Tenancy\TaxonomyTenancyResources;
-use Nvl\Tenancy\Services\TenantAdoptionRegistry;
 use Nvl\Translatable\Services\TranslationResourceRegistry;
 
 /**
@@ -143,25 +136,17 @@ final class TaxonomyServiceProvider extends ServiceProvider implements Ownership
         TypeScriptSourceRegistry $typeScriptSources,
         TaxonomyOwnerRegistry $owners,
         TaxonomyRegistry $taxonomies,
-        TaxonomyTenancyResources $tenancyResources,
-        TenantResourceRegistry $tenantResources,
-        OwnershipBoundary $tenantBoundary,
     ): void {
         $this->app->make(GlobalNames::class)->translations('taxonomy', __DIR__.'/../../lang', $this->app->make('translation.loader'));
         $this->publishes([
             __DIR__.'/../../lang' => lang_path('vendor/nvl-taxonomy'),
         ], 'nvl-taxonomy-translations');
-        $tenancyResources->register($tenantResources);
+        $this->app->make(LegacyTaxonomyIntegration::class)->registerResources();
         $this->app->make(TaxonomyResourceRegistrar::class)->register($this->app->make(OwnershipResourceRegistry::class));
         if ($this->app->bound(OwnershipAdoptionRegistry::class)) {
             $this->app->make(OwnershipAdoptionRegistry::class)->register('taxonomy', OwnershipTaxonomyAdoptionAdapter::class);
         }
-        if ($this->app->bound(TenantAdoptionRegistry::class)) {
-            $this->app->make(TenantAdoptionRegistry::class)->register('taxonomy', TaxonomyAdoptionAdapter::class);
-        }
-        if (config('nvl-tenancy.enabled') === true) {
-            $this->registerTenantScopes($tenantBoundary, $taxonomies);
-        }
+        $this->app->make(LegacyTaxonomyIntegration::class)->bootScopes();
         foreach ($taxonomies->all() as $definition) {
             $unknownOwners = $owners->unknownReferences($definition->allowedOwners);
 
@@ -207,30 +192,5 @@ final class TaxonomyServiceProvider extends ServiceProvider implements Ownership
             displayColumns: ['taxonomy', 'slug'],
             orderColumn: 'position',
         );
-    }
-
-    /** Register tenant predicates on every configured term model and inherited row. */
-    private function registerTenantScopes(
-        OwnershipBoundary $boundary,
-        TaxonomyRegistry $taxonomies,
-    ): void {
-        $termModels = [Term::class];
-
-        foreach ($taxonomies->all() as $definition) {
-            $termModels[] = $definition->model;
-        }
-
-        foreach (array_unique($termModels) as $termModel) {
-            $termModel::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-                $boundary->query($query, 'taxonomy.terms');
-            });
-        }
-
-        Termable::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'taxonomy.attachments');
-        });
-        TermTranslation::addGlobalScope('tenant', static function (Builder $query) use ($boundary): void {
-            $boundary->query($query, 'taxonomy.translations');
-        });
     }
 }
