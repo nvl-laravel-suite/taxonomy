@@ -5,6 +5,13 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-10-21
+
+### Changed
+
+- Share configured Term registration, queue capture and native backfill mechanics while retaining tree, locale and canonical-parent isolation.
+- Require optional Ownership >=6.0.1 when installed so new shared backfill callers cannot resolve an older runtime. Require Core >=6.0.1 for the shared model, queue or compatibility implementation.
+
 ## [6.0.0] - 2026-10-20
 
 ### Changed
