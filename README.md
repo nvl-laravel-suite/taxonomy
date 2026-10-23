@@ -133,7 +133,53 @@ Use `MoveTermAction` for reparenting. It rejects:
 - moves beyond the configured maximum depth;
 - duplicate sibling slugs.
 
-`app(TaxonomyTree::class)->for($taxonomy, $locale)` delegates tree ordering and translation loading to the package reader and returns Term identity/result handles. The tree's loaded child/translation relationships describe internal storage state and do not grant consumer traversal or serialization. Obtain owner term display projections through `ListOwnerTaxonomyTermsContract`, or an explicitly authorized host adapter for a custom tree projection; do not query/eager-load package models or recurse through their relations in an API transformer.
+`app(TaxonomyTree::class)->for($taxonomy, $locale)` delegates tree ordering and translation loading to the package reader and returns Term identity/result handles. The tree's loaded child/translation relationships describe internal storage state and do not grant consumer traversal or serialization. Use `TaxonomyCatalogReader` for vocabulary catalogue display and `ListOwnerTaxonomyTermsContract` for attached-owner display.
+
+## Global catalogue display
+
+Inject `Nvl\Taxonomy\Contracts\TaxonomyCatalogReader` to display registered categories or tags, including terms that have no owner attachments:
+
+```php
+use Nvl\Taxonomy\Contracts\TaxonomyCatalogReader;
+
+/** @var TaxonomyCatalogReader $catalogue */
+$tree = $catalogue->tree('category', locale: 'bg', limit: 100);
+foreach ($tree as $root) {
+    $label = $root->name;
+    $metadata = $root->meta;
+    foreach ($root->children as $child) {
+        $parentId = $child->parentId;
+    }
+}
+$term = $catalogue->term('category', $termId, locale: 'bg');
+```
+
+`tree(string $taxonomy, ?string $locale = null, int $limit = 500)` returns `Illuminate\Support\Collection<int, TaxonomyTermDisplay>`. The limit must be between 1 and 500 and counts every term across the hierarchy. An oversized vocabulary throws `InvalidArgumentException` instead of returning a partial tree. The native query reads at most `limit + 1` structural rows. Root and child order follow the registered sort and stable identifier tie-breaker.
+
+`term(string $taxonomy, string $id, ?string $locale = null)` returns one `TaxonomyTermDisplay` or `null` when the UUID is missing, belongs to another vocabulary, or is outside the current ownership scope. Malformed UUIDs throw `InvalidArgumentException` before SQL. A single-term result has an empty `children` list; use `tree()` for a complete hierarchy.
+
+Each DTO exposes `id`, `vocabulary`, canonical `slug`, nullable `parentId`, structural `position`, `revision`, localized `name`, nullable `description`, nullable `meta`, and ordered `children`. These detached values can be serialized without lazy queries. A null locale uses the scoped `ContentLocale`; field fallback follows the configured finite translation chain and preserves non-null empty display copy. The reader retains native ownership and legacy tenant scopes. It does not grant cross-owner or central access.
+
+The default `TaxonomyCatalogAuthorization` admits registered vocabularies, matching the existing tree reader. For private management reads, define a host Gate ability and bind a vocabulary authorizer in a service provider:
+
+```php
+use Illuminate\Contracts\Auth\Access\Gate;
+use Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization;
+
+final readonly class CuratedTaxonomyCatalogAuthorization implements TaxonomyCatalogAuthorization
+{
+    public function __construct(private Gate $gate) {}
+
+    public function authorizeVocabulary(string $taxonomy): void
+    {
+        $this->gate->authorize('read-curated-taxonomy', $taxonomy);
+    }
+}
+
+$this->app->bind(TaxonomyCatalogAuthorization::class, CuratedTaxonomyCatalogAuthorization::class);
+```
+
+Both reader methods call the authorizer before reading term storage. Package defaults use `bindIf`, preserving a host binding registered before discovery. The authorizer receives vocabulary names; native storage builders remain inside the package. The executable regression examples are in `tests/TaxonomyCatalogReadTest.php` and `tests/Ownership/OwnershipBoundaryTest.php`.
 
 ## Attach terms
 
@@ -309,6 +355,7 @@ The provider installs conditional transient defaults (`bindIf`) for the followin
 | `MergeTermsContract` | `MergeTermsAction` |
 | `MoveTermContract` | `MoveTermAction` |
 | `SyncTermAttachmentsContract` | `SyncTermAttachmentsAction` |
+| `TaxonomyCatalogReader` | Native bounded catalogue DTO reader |
 | `UpdateTermContract` | `UpdateTermAction` |
 
 `TaxonomyTreeContract::for(string $taxonomy, ?string $locale = null)` returns `Illuminate\Database\Eloquent\Collection<int, Nvl\Taxonomy\Models\Term>`. `TermResolverContract::resolve(string $taxonomy, array $references, bool $createMissing = true)` accepts `list<Term|string>` and returns `list<Term>`. Inject these transient contracts for native localized tree/reference workflows. Resolution may create permitted open-vocabulary roots when `createMissing` is true. Registered Term model handles remain native package identities.

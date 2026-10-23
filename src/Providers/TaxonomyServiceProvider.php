@@ -37,6 +37,8 @@ use Nvl\Taxonomy\Contracts\MergeTermsContract;
 use Nvl\Taxonomy\Contracts\MoveTermContract;
 use Nvl\Taxonomy\Contracts\SyncTermAttachmentsContract;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
+use Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization;
+use Nvl\Taxonomy\Contracts\TaxonomyCatalogReader;
 use Nvl\Taxonomy\Contracts\TaxonomyTreeContract;
 use Nvl\Taxonomy\Contracts\TermResolverContract;
 use Nvl\Taxonomy\Contracts\UpdateTermContract;
@@ -44,6 +46,8 @@ use Nvl\Taxonomy\Ownership\TaxonomyAdoptionAdapter as OwnershipTaxonomyAdoptionA
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Ownership\TaxonomyResourceRegistrar;
 use Nvl\Taxonomy\Services\RegisteredTaxonomyBatchAuthorization;
+use Nvl\Taxonomy\Services\RegisteredTaxonomyCatalogAuthorization;
+use Nvl\Taxonomy\Services\TaxonomyCatalog;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Services\TaxonomyTree;
@@ -75,6 +79,8 @@ final class TaxonomyServiceProvider extends ServiceProvider implements Ownership
         $this->app->bindIf(SyncTermAttachmentsContract::class, SyncTermAttachmentsAction::class);
         $this->app->bindIf(UpdateTermContract::class, UpdateTermAction::class);
         $this->app->bindIf(TaxonomyTreeContract::class, TaxonomyTree::class);
+        $this->app->bindIf(TaxonomyCatalogReader::class, TaxonomyCatalog::class);
+        $this->app->bindIf(TaxonomyCatalogAuthorization::class, RegisteredTaxonomyCatalogAuthorization::class);
         $this->app->bindIf(TermResolverContract::class, TermResolver::class);
 
         $this->app->register(SupportServiceProvider::class);

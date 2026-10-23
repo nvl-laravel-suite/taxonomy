@@ -15,6 +15,7 @@ use Nvl\Taxonomy\Actions\MoveTermAction;
 use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
 use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
+use Nvl\Taxonomy\Contracts\TaxonomyCatalogReader;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Exceptions\InvalidParentException;
@@ -29,6 +30,27 @@ use Nvl\Taxonomy\Tests\Fixtures\OwnershipTerm;
 use Nvl\Taxonomy\Tests\OwnershipTestCase;
 
 uses(OwnershipTestCase::class);
+it('isolates catalogue projections inside the admitted native owner', function (): void {
+    $runner = app(OwnershipRunner::class);
+    $actor = OwnershipActor::firstOrFail();
+    $foreign = $runner->run(OwnershipCompany::findOrFail(8), $actor, fn () => Scenario::term('foreign-catalogue'));
+    $reader = app(TaxonomyCatalogReader::class);
+
+    expect(fn () => $reader->tree('category'))->toThrow(OwnershipException::class)
+        ->and(fn () => $reader->term('category', $foreign->id))->toThrow(OwnershipException::class);
+
+    $runner->run(OwnershipCompany::findOrFail(7), $actor, function () use ($reader, $foreign): void {
+        $local = Scenario::term('local-catalogue');
+        $child = Scenario::term('child-catalogue', $local->id);
+        $tree = $reader->tree('category', 'en', limit: 2);
+
+        expect($tree->sole()->id)->toBe($local->id)
+            ->and($tree->sole()->children[0]->id)->toBe($child->id)
+            ->and($reader->term('category', $foreign->id, 'en'))->toBeNull()
+            ->and($reader->term('category', $local->id, 'en')->name)->toBe('local-catalogue');
+    });
+});
+
 it('isolates tree moves merges pruning and retained foreign attachments', function (): void {
     $foreign = null;
     $foreignHost = null;

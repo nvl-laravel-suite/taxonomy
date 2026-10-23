@@ -192,6 +192,25 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Taxonomy\\Contracts\\TaxonomyCatalogAuthorization": {
+            "kind": "interface",
+            "file": "src/Contracts/TaxonomyCatalogAuthorization.php",
+            "methods": [
+                "authorizeVocabulary"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Contracts\\TaxonomyCatalogReader": {
+            "kind": "interface",
+            "file": "src/Contracts/TaxonomyCatalogReader.php",
+            "methods": [
+                "term",
+                "tree"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Taxonomy\\Contracts\\TaxonomyTreeContract": {
             "kind": "interface",
             "file": "src/Contracts/TaxonomyTreeContract.php",
@@ -275,6 +294,26 @@
             "properties": [
                 "order",
                 "owners"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Data\\TaxonomyTermDisplay": {
+            "kind": "class",
+            "file": "src/Data/TaxonomyTermDisplay.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "children",
+                "description",
+                "id",
+                "meta",
+                "name",
+                "parentId",
+                "position",
+                "revision",
+                "slug",
+                "vocabulary"
             ],
             "constants": []
         },

@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Services;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as BaseCollection;
+use InvalidArgumentException;
 use Nvl\Taxonomy\Contracts\TaxonomyTreeContract;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -29,13 +30,44 @@ final readonly class TaxonomyTree implements TaxonomyTreeContract
      */
     public function for(string $taxonomy, ?string $locale = null): Collection
     {
+        return $this->load($taxonomy, $locale);
+    }
+
+    /**
+     * Load a complete finite hierarchy for the native catalogue DTO reader.
+     *
+     * @internal
+     *
+     * @return Collection<int, Term>
+     */
+    public function boundedFor(string $taxonomy, ?string $locale, int $limit): Collection
+    {
+        if ($limit < 1 || $limit > 500) {
+            throw new InvalidArgumentException('Taxonomy catalogue tree limit must be between one and five hundred terms.');
+        }
+
+        return $this->load($taxonomy, $locale, $limit);
+    }
+
+    /**
+     * Load the registered model's scoped facts before constructing the hierarchy.
+     *
+     * @return Collection<int, Term>
+     */
+    private function load(string $taxonomy, ?string $locale, ?int $limit = null): Collection
+    {
         $definition = $this->taxonomies->get($taxonomy);
         $modelClass = $definition->model;
-        $terms = $modelClass::query()
+        $query = $modelClass::query()
             ->where('taxonomy', $taxonomy)
-            ->ordered($taxonomy)
-            ->withResolvedTranslations($locale)
-            ->get();
+            ->ordered($taxonomy);
+        if ($limit !== null) {
+            $query->withoutEagerLoads()->limit($limit + 1);
+        }
+        $terms = $query->withResolvedTranslations($locale)->get();
+        if ($limit !== null && $terms->count() > $limit) {
+            throw new InvalidArgumentException('Taxonomy catalogue exceeds its requested tree limit.');
+        }
         $grouped = $terms->toBase()->groupBy(
             static fn (Term $term): string => $term->parent_id ?? '__root__',
         );
