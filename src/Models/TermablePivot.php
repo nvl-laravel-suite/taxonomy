@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
-use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Concerns\GuardsOwnerScope;
 use Nvl\Taxonomy\Database\Factories\TermableFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
@@ -20,7 +20,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  */
 final class TermablePivot extends MorphPivot
 {
-    use GuardsTenantOwnership;
+    use GuardsOwnerScope;
 
     /** @use HasFactory<TermableFactory> */
     use HasFactory;

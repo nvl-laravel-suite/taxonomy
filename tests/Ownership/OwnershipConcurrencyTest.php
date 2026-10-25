@@ -5,7 +5,8 @@ declare(strict_types=1);
 use Illuminate\Container\Container;
 use Illuminate\Support\Facades\DB;
 use Nvl\Ownership\Services\OwnershipRunner;
-use Nvl\Taxonomy\Actions\MoveTermAction;
+use Nvl\Support\Enums\SystemActor;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipActor;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipCompany;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipTaxonomyScenario;
@@ -52,7 +53,7 @@ it('creates identical roots and moves concurrently in independent native owner p
                 $result = app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail($ownerId), OwnershipActor::firstOrFail(), function () use ($childrenByOwner, $ownerId): array {
                     $root = OwnershipTaxonomyScenario::term('race-root');
                     $child = $childrenByOwner[$ownerId];
-                    $moved = app(MoveTermAction::class)->execute($child, $root->id, 0, $child->revision);
+                    $moved = app(TaxonomyTerms::class)->move($child, $root->id, SystemActor::Background, 0, $child->revision);
 
                     return ['ok' => true, 'id' => $root->id, 'parent_id' => $moved->parent_id];
                 });

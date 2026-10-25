@@ -9,13 +9,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Nvl\Support\Ownership\Contracts\OwnershipReadiness;
-use Nvl\Support\Tenancy\Services\TenantResourceRegistry;
-use Nvl\Taxonomy\Data\TaxonomyDoctorCheckData;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
+use Nvl\Taxonomy\Support\TaxonomyDoctorCheck;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Throwable;
 
@@ -30,31 +29,30 @@ final readonly class TaxonomyDoctor
     public function __construct(
         private TaxonomyRegistry $taxonomies,
         private TaxonomyOwnerRegistry $owners,
-        private TenantResourceRegistry $tenantResources,
         private OwnershipReadiness $readiness,
     ) {}
 
     /**
      * Return every non-mutating taxonomy readiness check.
      *
-     * @return list<TaxonomyDoctorCheckData>
+     * @return list<TaxonomyDoctorCheck>
      */
     public function inspect(): array
     {
         $schema = Schema::connection(TaxonomyConfiguration::connection());
         $owned = TaxonomyOwnership::declared();
-        $tenantColumns = $owned ? ['owner_scope_key'] : (config('nvl-tenancy.enabled') === true ? ['tenant_id'] : []);
+        $ownerScopeColumns = $owned ? ['owner_scope_key'] : [];
         $tables = [
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)) => [
                 'id', 'taxonomy', 'parent_id', 'parent_key', 'slug', 'position', 'meta',
-                'revision', 'created_at', 'updated_at', ...$tenantColumns,
+                'revision', 'created_at', 'updated_at', ...$ownerScopeColumns,
             ],
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)) => [
-                'id', 'term_id', 'locale', 'name', 'description', 'created_at', 'updated_at', ...$tenantColumns,
+                'id', 'term_id', 'locale', 'name', 'description', 'created_at', 'updated_at', ...$ownerScopeColumns,
             ],
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)) => [
                 'id', 'term_id', 'termable_type', 'termable_id', 'taxonomy', 'position',
-                'created_at', 'updated_at', ...$tenantColumns,
+                'created_at', 'updated_at', ...$ownerScopeColumns,
             ],
         ];
         $checks = [];
@@ -68,7 +66,7 @@ final readonly class TaxonomyDoctor
                     static fn (string $column): bool => ! $schema->hasColumn($table, $column),
                 ))
                 : $required;
-            $checks[] = new TaxonomyDoctorCheckData(
+            $checks[] = new TaxonomyDoctorCheck(
                 key: "schema.{$table}",
                 severity: 'error',
                 passed: $exists && $missing === [],
@@ -79,63 +77,52 @@ final readonly class TaxonomyDoctor
             $schemaCompatible = $schemaCompatible && $exists && $missing === [];
         }
 
-        $tenantEnabled = config('nvl-tenancy.enabled') === true;
         $checks[] = $this->indexCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
             [
-                $tenantEnabled ? ['tenant_id', 'taxonomy', 'id'] : ['taxonomy', 'id'],
-                $owned ? ['owner_scope_key', 'taxonomy', 'parent_key', 'slug'] : ($tenantEnabled ? ['tenant_id', 'taxonomy', 'parent_key', 'slug'] : ['taxonomy', 'parent_key', 'slug']),
+                ['taxonomy', 'id'],
+                $owned ? ['owner_scope_key', 'taxonomy', 'parent_key', 'slug'] : ['taxonomy', 'parent_key', 'slug'],
             ],
         );
         $checks[] = $this->indexCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)),
-            [$owned ? ['owner_scope_key', 'term_id', 'locale'] : ($tenantEnabled ? ['tenant_id', 'term_id', 'locale'] : ['term_id', 'locale'])],
+            [$owned ? ['owner_scope_key', 'term_id', 'locale'] : ['term_id', 'locale']],
         );
         $checks[] = $this->indexCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
-            [$owned ? ['owner_scope_key', 'term_id', 'termable_type', 'termable_id'] : ($tenantEnabled ? ['tenant_id', 'term_id', 'termable_type', 'termable_id'] : ['term_id', 'termable_type', 'termable_id'])],
+            [$owned ? ['owner_scope_key', 'term_id', 'termable_type', 'termable_id'] : ['term_id', 'termable_type', 'termable_id']],
         );
         $checks[] = $this->foreignKeyCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
             [[
-                'columns' => $tenantEnabled ? ['tenant_id', 'taxonomy', 'parent_id'] : ['taxonomy', 'parent_id'],
+                'columns' => ['taxonomy', 'parent_id'],
                 'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
-                'foreign_columns' => $tenantEnabled ? ['tenant_id', 'taxonomy', 'id'] : ['taxonomy', 'id'],
+                'foreign_columns' => ['taxonomy', 'id'],
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)),
             [[
-                'columns' => $tenantEnabled ? ['tenant_id', 'term_id'] : ['term_id'],
+                'columns' => ['term_id'],
                 'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
-                'foreign_columns' => $tenantEnabled ? ['tenant_id', 'id'] : ['id'],
+                'foreign_columns' => ['id'],
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
             TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
             [[
-                'columns' => $tenantEnabled ? ['tenant_id', 'taxonomy', 'term_id'] : ['taxonomy', 'term_id'],
+                'columns' => ['taxonomy', 'term_id'],
                 'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
-                'foreign_columns' => $tenantEnabled ? ['tenant_id', 'taxonomy', 'id'] : ['taxonomy', 'id'],
+                'foreign_columns' => ['taxonomy', 'id'],
             ]],
         );
 
-        $checks[] = new TaxonomyDoctorCheckData(
+        $checks[] = new TaxonomyDoctorCheck(
             key: 'registry.taxonomies',
             severity: 'error',
             passed: $this->taxonomies->all() !== [],
             message: count($this->taxonomies->all()).' vocabularies are registered.',
         );
-        $unregisteredTenantOwners = [];
-        if ($tenantEnabled) {
-            foreach ($this->owners->all() as $alias => $ownerClass) {
-                try {
-                    $this->tenantResources->forModel(new $ownerClass);
-                } catch (Throwable) {
-                    $unregisteredTenantOwners[] = $alias;
-                }
-            }
-        }
         if ($owned) {
             $ready = true;
             try {
@@ -148,17 +135,9 @@ final readonly class TaxonomyDoctor
             } catch (Throwable) {
                 $ready = false;
             }
-            $checks[] = new TaxonomyDoctorCheckData(key: 'schema.ownership', severity: 'error', passed: $ready, message: $ready ? 'Canonical ownership storage is active.' : 'Canonical ownership storage is not ready.');
+            $checks[] = new TaxonomyDoctorCheck(key: 'schema.ownership', severity: 'error', passed: $ready, message: $ready ? 'Canonical ownership storage is active.' : 'Canonical ownership storage is not ready.');
         }
-        $checks[] = new TaxonomyDoctorCheckData(
-            key: 'registry.tenant_owners',
-            severity: 'error',
-            passed: $unregisteredTenantOwners === [],
-            message: $unregisteredTenantOwners === []
-                ? 'All taxonomy owners have canonical tenant resource declarations.'
-                : 'Owners lack tenant resource declarations: '.implode(', ', $unregisteredTenantOwners).'.',
-        );
-        $checks[] = new TaxonomyDoctorCheckData(
+        $checks[] = new TaxonomyDoctorCheck(
             key: 'registry.owners',
             severity: 'warning',
             passed: $this->owners->all() !== [],
@@ -180,7 +159,7 @@ final readonly class TaxonomyDoctor
             }
         }
 
-        $checks[] = new TaxonomyDoctorCheckData(
+        $checks[] = new TaxonomyDoctorCheck(
             key: 'registry.allowed_owners',
             severity: 'error',
             passed: $unknownAllowedOwners === [],
@@ -188,7 +167,7 @@ final readonly class TaxonomyDoctor
                 ? 'All allowed owner aliases are registered.'
                 : 'Unknown allowed owner aliases: '.implode(', ', $unknownAllowedOwners).'.',
         );
-        $checks[] = new TaxonomyDoctorCheckData(
+        $checks[] = new TaxonomyDoctorCheck(
             key: 'registry.model_connections',
             severity: 'error',
             passed: $connectionMismatches === [],
@@ -202,7 +181,7 @@ final readonly class TaxonomyDoctor
             try {
                 array_push($checks, ...$this->dataChecks());
             } catch (Throwable $exception) {
-                $checks[] = new TaxonomyDoctorCheckData(
+                $checks[] = new TaxonomyDoctorCheck(
                     key: 'data.inspect',
                     severity: 'error',
                     passed: false,
@@ -217,12 +196,12 @@ final readonly class TaxonomyDoctor
     /**
      * @param  list<list<string>>  $requiredUniqueColumns
      */
-    private function indexCheck(string $table, array $requiredUniqueColumns): TaxonomyDoctorCheckData
+    private function indexCheck(string $table, array $requiredUniqueColumns): TaxonomyDoctorCheck
     {
         $schema = Schema::connection(TaxonomyConfiguration::connection());
 
         if (! $schema->hasTable($table)) {
-            return new TaxonomyDoctorCheckData(
+            return new TaxonomyDoctorCheck(
                 key: "indexes.{$table}",
                 severity: 'error',
                 passed: false,
@@ -249,7 +228,7 @@ final readonly class TaxonomyDoctor
                 },
             ));
         } catch (Throwable $exception) {
-            return new TaxonomyDoctorCheckData(
+            return new TaxonomyDoctorCheck(
                 key: "indexes.{$table}",
                 severity: 'error',
                 passed: false,
@@ -257,7 +236,7 @@ final readonly class TaxonomyDoctor
             );
         }
 
-        return new TaxonomyDoctorCheckData(
+        return new TaxonomyDoctorCheck(
             key: "indexes.{$table}",
             severity: 'error',
             passed: $missing === [],
@@ -274,12 +253,12 @@ final readonly class TaxonomyDoctor
     /**
      * @param  list<array{columns: list<string>, foreign_table: string, foreign_columns: list<string>}>  $required
      */
-    private function foreignKeyCheck(string $table, array $required): TaxonomyDoctorCheckData
+    private function foreignKeyCheck(string $table, array $required): TaxonomyDoctorCheck
     {
         $schema = Schema::connection(TaxonomyConfiguration::connection());
 
         if (! $schema->hasTable($table)) {
-            return new TaxonomyDoctorCheckData(
+            return new TaxonomyDoctorCheck(
                 key: "foreign_keys.{$table}",
                 severity: 'error',
                 passed: false,
@@ -302,7 +281,7 @@ final readonly class TaxonomyDoctor
                 ),
             ));
         } catch (Throwable $exception) {
-            return new TaxonomyDoctorCheckData(
+            return new TaxonomyDoctorCheck(
                 key: "foreign_keys.{$table}",
                 severity: 'error',
                 passed: false,
@@ -310,7 +289,7 @@ final readonly class TaxonomyDoctor
             );
         }
 
-        return new TaxonomyDoctorCheckData(
+        return new TaxonomyDoctorCheck(
             key: "foreign_keys.{$table}",
             severity: 'error',
             passed: $missing === [],
@@ -362,7 +341,7 @@ final readonly class TaxonomyDoctor
     }
 
     /**
-     * @return list<TaxonomyDoctorCheckData>
+     * @return list<TaxonomyDoctorCheck>
      */
     private function dataChecks(): array
     {
@@ -393,16 +372,16 @@ final readonly class TaxonomyDoctor
             ->join("{$terms} as term", 'term.id', '=', 'attachment.term_id')
             ->whereColumn('attachment.taxonomy', '!=', 'term.taxonomy')
             ->count();
-        $tenantMismatches = 0;
+        $ownerScopeMismatches = 0;
         if (TaxonomyOwnership::active()) {
-            $scope = TaxonomyOwnership::declared() ? 'owner_scope_key' : 'tenant_id';
-            $tenantMismatches += $connection->table("{$terms} as child")
+            $scope = 'owner_scope_key';
+            $ownerScopeMismatches += $connection->table("{$terms} as child")
                 ->join("{$terms} as parent", 'parent.id', '=', 'child.parent_id')
                 ->whereColumn("child.{$scope}", '!=', "parent.{$scope}")->count();
-            $tenantMismatches += $connection->table("{$termables} as attachment")
+            $ownerScopeMismatches += $connection->table("{$termables} as attachment")
                 ->join("{$terms} as term", 'term.id', '=', 'attachment.term_id')
                 ->whereColumn("attachment.{$scope}", '!=', "term.{$scope}")->count();
-            $tenantMismatches += $connection->table("{$translations} as translation")
+            $ownerScopeMismatches += $connection->table("{$translations} as translation")
                 ->join("{$terms} as term", 'term.id', '=', 'translation.term_id')
                 ->whereColumn("translation.{$scope}", '!=', "term.{$scope}")->count();
         }
@@ -458,9 +437,9 @@ final readonly class TaxonomyDoctor
                 'attachment taxonomy mismatches',
             ),
             $this->countCheck(
-                'data.tenant_ownership',
-                $tenantMismatches,
-                'cross-tenant taxonomy relationships',
+                'data.owner_scope',
+                $ownerScopeMismatches,
+                'cross-owner taxonomy relationships',
             ),
             $this->countCheck(
                 'data.orphan_translations',
@@ -543,8 +522,8 @@ final readonly class TaxonomyDoctor
         string $key,
         int $count,
         string $description,
-    ): TaxonomyDoctorCheckData {
-        return new TaxonomyDoctorCheckData(
+    ): TaxonomyDoctorCheck {
+        return new TaxonomyDoctorCheck(
             key: $key,
             severity: 'error',
             passed: $count === 0,

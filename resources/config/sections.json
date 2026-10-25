@@ -19,7 +19,6 @@
                 "slugs.generator",
                 "slugs.locale",
                 "table_names.nvl_taxonomy_i18n",
-                "table_names.nvl_taxonomy_tenant_adoption_copies",
                 "table_names.nvl_taxonomy_termables",
                 "table_names.nvl_taxonomy_terms",
                 "taxonomies.category.allowed_owners",

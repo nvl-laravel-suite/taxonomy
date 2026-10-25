@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Cache;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\OwnerRegistry;
-use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
-use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Exceptions\UnknownTaxonomyException;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary;
+use Nvl\Taxonomy\Services\TaxonomyAssignments;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -26,8 +27,8 @@ it('supports the public owner query and inspection workflow', function () {
     $parent = Category::create(['slug' => 'guides']);
     $child = Category::create(['slug' => 'laravel', 'parent_id' => $parent->id]);
 
-    app(SyncTermAttachmentsAction::class)->execute($categorized, 'tag', ['php', 'laravel']);
-    app(SyncTermAttachmentsAction::class)->execute($categorized, 'category', [$child]);
+    app(TaxonomyAssignments::class)->sync($categorized, 'tag', ['php', 'laravel'], SystemActor::Background);
+    app(TaxonomyAssignments::class)->sync($categorized, 'category', [$child], SystemActor::Background);
 
     $tag = Tag::query()->where('slug', 'php')->firstOrFail();
     $freshOwner = $categorized->fresh();
@@ -115,7 +116,7 @@ it('executes maintenance commands through dry run locked and mutation paths', fu
         '--dry-run' => true,
     ])->assertSuccessful();
 
-    $rebuildLock = Cache::lock('nvl:taxonomy:rebuild', 3600);
+    $rebuildLock = Cache::lock('nvl:taxonomy:rebuild:'.app(TaxonomyBoundary::class)->key('taxonomy.terms', 'rebuild:category'), 3600);
     expect($rebuildLock->get())->toBeTrue();
 
     try {
@@ -137,7 +138,7 @@ it('executes maintenance commands through dry run locked and mutation paths', fu
     ])->assertSuccessful();
 
     Tag::create(['slug' => 'locked-orphan']);
-    $pruneLock = Cache::lock('nvl:taxonomy:prune', 3600);
+    $pruneLock = Cache::lock('nvl:taxonomy:prune:'.app(TaxonomyBoundary::class)->key('taxonomy.terms', 'prune:tag'), 3600);
     expect($pruneLock->get())->toBeTrue();
 
     try {
@@ -247,8 +248,11 @@ it('rejects malformed configured and programmatic vocabulary definitions', funct
             metadataRules: ['' => []],
         )))->toThrow(InvalidArgumentException::class);
 
-    expect(MutateTermPayload::rules())
-        ->toHaveKeys(['taxonomy', 'slug', 'translations', 'parentId', 'expectedRevision']);
+    expect(fn () => app(TaxonomyTerms::class)->create([
+        'taxonomy' => 'tag', 'slug' => 'unknown-field',
+        'translations' => ['en' => ['name' => 'Unknown']],
+        'unexpected' => true,
+    ], SystemActor::Background))->toThrow(InvalidArgumentException::class);
 });
 
 it('validates capability aliases without installing a host morph map', function () {

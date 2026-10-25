@@ -14,7 +14,7 @@ use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Contracts\Ownable;
 use Nvl\Support\Ownership\Traits\HasOwnership;
 use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
-use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Concerns\GuardsOwnerScope;
 use Nvl\Taxonomy\Database\Factories\TermableFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Services\TermModelRegistry;
@@ -24,7 +24,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  * Represents one polymorphic attachment row in the configured termables table.
  *
  * @property string $id
- * @property string|null $tenant_id Canonical tenant UUID inherited from the owner and term.
+ * @property string|null $owner_scope_key Canonical owner scope inherited from the owner and term.
  * @property string $term_id
  * @property string $termable_type
  * @property int|string $termable_id
@@ -39,7 +39,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  */
 final class Termable extends Model implements Ownable
 {
-    use GuardsTenantOwnership;
+    use GuardsOwnerScope;
     use HasOwnership;
 
     /** Explicit host subclasses opt roots into ownership; dependent metadata is fixed by the registrar. */

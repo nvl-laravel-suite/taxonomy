@@ -6,16 +6,16 @@ namespace Nvl\Taxonomy\Tests\Fixtures;
 
 use Nvl\Ownership\Services\OwnershipWriter;
 use Nvl\Ownership\ValueObjects\OwnershipAssignment;
-use Nvl\Taxonomy\Actions\CreateTermAction;
-use Nvl\Taxonomy\Data\MutateTermPayload;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 
 /** Constructs actual package workflow records under the admitted native owner. */
 final class OwnershipTaxonomyScenario
 {
     public static function term(string $slug = 'visible', ?string $parentId = null): Term
     {
-        return app(CreateTermAction::class)->execute(MutateTermPayload::from(['taxonomy' => 'category', 'slug' => $slug, 'parentId' => $parentId, 'translations' => ['en' => ['name' => $slug]]]));
+        return app(TaxonomyTerms::class)->create(['taxonomy' => 'category', 'slug' => $slug, 'parent_id' => $parentId, 'translations' => ['en' => ['name' => $slug]]], SystemActor::Background);
     }
 
     public static function host(): OwnershipTaxonomyOwner

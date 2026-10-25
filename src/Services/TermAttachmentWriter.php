@@ -60,7 +60,7 @@ final readonly class TermAttachmentWriter
      */
     private function syncRecords(Model $owner, string $taxonomy, array $references): void
     {
-        [$definition, $ownerAlias, $ownerId, $tenant] = $this->context($owner, $taxonomy, lock: true);
+        [$definition, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy, lock: true);
         $this->assertBulkLimit($references);
         $resolved = $this->terms->resolve($taxonomy, $references);
 
@@ -71,7 +71,7 @@ final readonly class TermAttachmentWriter
         }
 
         $ids = array_map(static fn (Term $term): string => $term->id, $resolved);
-        $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy, $tenant);
+        $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy);
         $query->lockForUpdate()->get();
         $query->delete();
 
@@ -86,7 +86,6 @@ final readonly class TermAttachmentWriter
             $rows[] = [
                 'id' => (string) Str::uuid(),
                 ...(TaxonomyOwnership::declared() ? $this->boundary->attributes('taxonomy.attachments') : []),
-                ...($tenant === null ? [] : ['tenant_id' => $tenant]),
                 'term_id' => $termId,
                 'termable_type' => $ownerAlias,
                 'termable_id' => $ownerId,
@@ -109,8 +108,8 @@ final readonly class TermAttachmentWriter
      */
     public function append(Model $owner, string $taxonomy, array $references): void
     {
-        [, $ownerAlias, $ownerId, $tenant] = $this->context($owner, $taxonomy, lock: true);
-        $current = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy, $tenant)
+        [, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy, lock: true);
+        $current = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy)
             ->orderBy('position')
             ->pluck('term_id')
             ->filter(static fn (mixed $id): bool => is_string($id))
@@ -150,8 +149,8 @@ final readonly class TermAttachmentWriter
      */
     private function detachRecords(Model $owner, string $taxonomy, array $references): int
     {
-        [, $ownerAlias, $ownerId, $tenant] = $this->context($owner, $taxonomy, lock: true);
-        $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy, $tenant);
+        [, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy, lock: true);
+        $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy);
         $ids = [];
 
         if ($references !== []) {
@@ -176,7 +175,7 @@ final readonly class TermAttachmentWriter
     }
 
     /**
-     * @return array{TaxonomyDefinition, string, string, string|null}
+     * @return array{TaxonomyDefinition, string, string}
      */
     private function context(Model $owner, string $taxonomy, bool $lock = false): array
     {
@@ -196,23 +195,17 @@ final readonly class TermAttachmentWriter
             );
         }
 
-        $tenant = config('nvl-tenancy.enabled') === true ? $owner->getRawOriginal('tenant_id') : null;
-        if (config('nvl-tenancy.enabled') === true && ! is_string($tenant)) {
-            throw TaxonomyOwnership::violation('The canonical taxonomy owner lacks tenant ownership.');
-        }
-
         return [
             $definition,
             $ownerAlias,
             TaxonomyConfiguration::modelIdentifier($owner),
-            is_string($tenant) ? $tenant : null,
         ];
     }
 
     /**
      * @return Builder
      */
-    private function ownerQuery(string $ownerAlias, string $ownerId, string $taxonomy, ?string $tenant)
+    private function ownerQuery(string $ownerAlias, string $ownerId, string $taxonomy)
     {
         $query = DB::connection(TermModelRegistry::newInstance()->getConnectionName())
             ->table((new Termable)->getTable())
@@ -221,9 +214,6 @@ final readonly class TermAttachmentWriter
             ->where('taxonomy', $taxonomy);
         if (TaxonomyOwnership::declared()) {
             $query->where('owner_scope_key', $this->boundary->attributes('taxonomy.attachments')['owner_scope_key']);
-        }
-        if ($tenant !== null) {
-            $query->where('tenant_id', $tenant);
         }
 
         return $query;

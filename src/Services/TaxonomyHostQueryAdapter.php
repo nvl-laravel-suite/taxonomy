@@ -137,7 +137,7 @@ final readonly class TaxonomyHostQueryAdapter
         foreach ($tables as $table) {
             if ($ownerName === $this->correlationName($table)) {
                 throw new TaxonomyBatchReadException(
-                    'Taxonomy host filters cannot safely correlate matching owner, registered vocabulary or attachment table names. Use ListOwnerTaxonomyTermsContract for bounded owner reads.',
+                    'Taxonomy host filters cannot safely correlate matching owner, registered vocabulary or attachment table names. Use TaxonomyReader::forOwners for bounded owner reads.',
                 );
             }
         }

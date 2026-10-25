@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Str;
-use Nvl\Support\Tenancy\Contracts\TenantContext;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Term;
@@ -63,10 +62,6 @@ trait HasTaxonomies
                     );
                     $relation->using(TermablePivot::class);
                     $relation->wherePivot('taxonomy', $taxonomy);
-                    $tenant = self::currentTaxonomyTenant();
-                    if ($tenant !== null) {
-                        $relation->wherePivot('tenant_id', $tenant);
-                    }
 
                     $relation->withPivot('position');
                     $relation->withTimestamps();
@@ -86,9 +81,6 @@ trait HasTaxonomies
             $query = Termable::query()
                 ->where('termable_type', $model->getMorphClass())
                 ->where('termable_id', TaxonomyConfiguration::modelIdentifier($canonical));
-            if (($tenant = self::currentTaxonomyTenant()) !== null) {
-                $query->where('tenant_id', $tenant);
-            }
             $query->delete();
         };
 
@@ -111,9 +103,6 @@ trait HasTaxonomies
             null,
             $this->getKeyName(),
         );
-        if (($tenant = self::currentTaxonomyTenant()) !== null) {
-            $relation->where('tenant_id', $tenant);
-        }
 
         return $relation;
     }
@@ -190,14 +179,12 @@ trait HasTaxonomies
                 return false;
             }
 
-            $tenant = self::currentTaxonomyTenant();
             foreach ($collection as $loadedTerm) {
                 if (! $loadedTerm instanceof Term) {
                     throw TaxonomyOwnership::violation('A loaded taxonomy relation contains an invalid term.');
                 }
                 Container::getInstance()->make(OwnershipBoundary::class)->assertRecord($loadedTerm, 'taxonomy.terms');
-                if ($loadedTerm->getRawOriginal('taxonomy') !== $taxonomy
-                    || ($tenant !== null && $loadedTerm->getRawOriginal('tenant_id') !== $tenant)) {
+                if ($loadedTerm->getRawOriginal('taxonomy') !== $taxonomy) {
                     throw TaxonomyOwnership::violation('A loaded taxonomy relation contains a foreign term.');
                 }
             }
@@ -238,10 +225,6 @@ trait HasTaxonomies
             ->where('termable_type', $canonicalOwner->getMorphClass())
             ->where('termable_id', TaxonomyConfiguration::modelIdentifier($canonicalOwner))
             ->where('taxonomy', $taxonomy)
-            ->when(
-                self::currentTaxonomyTenant() !== null,
-                static fn (Builder $builder) => $builder->where('tenant_id', self::currentTaxonomyTenant()),
-            )
             ->exists();
     }
 
@@ -263,15 +246,5 @@ trait HasTaxonomies
             $taxonomies,
             static fn (mixed $taxonomy): bool => is_string($taxonomy) && $taxonomy !== '',
         )));
-    }
-
-    /** Resolve the active tenant used by pivot correlations, preserving disabled compatibility. */
-    private static function currentTaxonomyTenant(): ?string
-    {
-        if (config('nvl-tenancy.enabled') !== true) {
-            return null;
-        }
-
-        return Container::getInstance()->make(TenantContext::class)->requireTenant()->value;
     }
 }

@@ -7,13 +7,13 @@ namespace Nvl\Taxonomy\Concerns;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 
 /** Prevents persisted Taxonomy ownership from changing through model writes. */
-trait GuardsTenantOwnership
+trait GuardsOwnerScope
 {
     /** Register immutable ownership enforcement for updates. */
-    protected static function bootGuardsTenantOwnership(): void
+    protected static function bootGuardsOwnerScope(): void
     {
         static::updating(static function (self $model): void {
-            if (array_key_exists('tenant_id', $model->getAttributes()) && $model->isDirty('tenant_id')) {
+            if (array_key_exists('owner_scope_key', $model->getAttributes()) && $model->isDirty('owner_scope_key')) {
                 throw TaxonomyOwnership::violation('Persisted Taxonomy ownership is immutable.');
             }
         });

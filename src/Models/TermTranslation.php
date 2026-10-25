@@ -13,7 +13,7 @@ use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Contracts\Ownable;
 use Nvl\Support\Ownership\Traits\HasOwnership;
 use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
-use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Concerns\GuardsOwnerScope;
 use Nvl\Taxonomy\Database\Factories\TermTranslationFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Services\TermModelRegistry;
@@ -23,7 +23,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  * Stores localized term names and descriptions.
  *
  * @property string $id
- * @property string|null $tenant_id Canonical tenant UUID inherited from the term.
+ * @property string|null $owner_scope_key Canonical owner scope inherited from the term.
  * @property string $term_id
  * @property string $locale
  * @property string $name
@@ -38,7 +38,7 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  */
 final class TermTranslation extends Model implements Ownable
 {
-    use GuardsTenantOwnership;
+    use GuardsOwnerScope;
     use HasOwnership;
 
     /** Explicit host subclasses opt roots into ownership; dependent metadata is fixed by the registrar. */

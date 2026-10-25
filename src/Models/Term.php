@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Models;
 
-use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -19,8 +18,7 @@ use Nvl\Support\Ownership\Contracts\Ownable;
 use Nvl\Support\Ownership\Services\OwnershipScope;
 use Nvl\Support\Ownership\Traits\HasOwnership;
 use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
-use Nvl\Support\Tenancy\Contracts\TenantContext;
-use Nvl\Taxonomy\Concerns\GuardsTenantOwnership;
+use Nvl\Taxonomy\Concerns\GuardsOwnerScope;
 use Nvl\Taxonomy\Database\Factories\TermFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
@@ -31,13 +29,14 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Translatable\Contracts\TranslatableModel;
 use Nvl\Translatable\Enums\TranslationMutationPolicy;
 use Nvl\Translatable\RelatedTranslationDefinition;
+use Nvl\Translatable\Services\TranslationResolver;
 use Nvl\Translatable\Translatable;
 
 /**
  * Structural taxonomy term whose display copy exists only in locale rows.
  *
  * @property string $id
- * @property string|null $tenant_id Canonical tenant UUID.
+ * @property string|null $owner_scope_key Canonical owner scope.
  * @property string $taxonomy
  * @property string|null $parent_id
  * @property string $parent_key
@@ -64,7 +63,7 @@ use Nvl\Translatable\Translatable;
  */
 class Term extends Model implements Ownable, TranslatableModel
 {
-    use GuardsTenantOwnership;
+    use GuardsOwnerScope;
     use HasOwnership;
 
     /**
@@ -88,6 +87,9 @@ class Term extends Model implements Ownable, TranslatableModel
 
     use HasUuids;
     use Translatable;
+
+    /** @var array<string, array{name:string, description:?string}> */
+    private array $preloadedDisplayCopy = [];
 
     /** @var array<string, mixed> */
     protected $attributes = [
@@ -210,10 +212,6 @@ class Term extends Model implements Ownable, TranslatableModel
         $related = new $type;
         $pivotColumns = ['position', 'taxonomy'];
 
-        if (config('nvl-tenancy.enabled') === true) {
-            $pivotColumns[] = 'tenant_id';
-        }
-
         $relation = new StringMorphToMany(
             $related->newQuery(),
             $this,
@@ -227,12 +225,6 @@ class Term extends Model implements Ownable, TranslatableModel
             true,
         );
         $relation->using(TermablePivot::class);
-        if (config('nvl-tenancy.enabled') === true) {
-            $relation->wherePivot(
-                'tenant_id',
-                Container::getInstance()->make(TenantContext::class)->requireTenant()->value,
-            );
-        }
 
         $relation->withPivot($pivotColumns);
         $relation->withTimestamps();
@@ -306,6 +298,9 @@ class Term extends Model implements Ownable, TranslatableModel
      */
     public function displayName(?string $locale = null): string
     {
+        if ($locale !== null && isset($this->preloadedDisplayCopy[$locale])) {
+            return $this->preloadedDisplayCopy[$locale]['name'];
+        }
         $value = $this->translated('name', $locale);
 
         return is_string($value) ? $value : '';
@@ -316,9 +311,32 @@ class Term extends Model implements Ownable, TranslatableModel
      */
     public function displayDescription(?string $locale = null): ?string
     {
+        if ($locale !== null && isset($this->preloadedDisplayCopy[$locale])) {
+            return $this->preloadedDisplayCopy[$locale]['description'];
+        }
         $value = $this->translated('description', $locale);
 
         return is_string($value) ? $value : null;
+    }
+
+    /** Resolve already scoped tree translation rows without per-node storage probes. @internal */
+    public function preloadDisplayCopy(string $locale): void
+    {
+        $rows = $this->getRelation('translations');
+        if (! $rows instanceof Collection) {
+            throw new \LogicException('Tree display copy requires eager-loaded translation rows.');
+        }
+        $definition = $this->translationDefinition();
+        $requested = $definition->assertLocale($locale);
+        $available = $rows->pluck($definition->localeKey)->filter(static fn (mixed $value): bool => is_string($value))->all();
+        $chain = $definition->localeChain($requested, array_values($available));
+        $resolver = new TranslationResolver;
+        $name = $resolver->resolve($rows, $definition, 'name', $requested, $chain)->value;
+        $description = $resolver->resolve($rows, $definition, 'description', $requested, $chain)->value;
+        $this->preloadedDisplayCopy[$requested] = [
+            'name' => is_string($name) ? $name : '',
+            'description' => is_string($description) ? $description : null,
+        ];
     }
 
     /** Resolve framework route binding through the configured structural root.

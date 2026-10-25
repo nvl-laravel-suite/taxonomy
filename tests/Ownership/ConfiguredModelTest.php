@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
-use Nvl\Taxonomy\Actions\CreateTermAction;
-use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipActor;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipCompany;
@@ -17,7 +17,7 @@ use Nvl\Taxonomy\Tests\OwnershipTestCase;
 uses(OwnershipTestCase::class);
 it('uses the configured root for actions factories relations and route binding', function (): void {
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(7), OwnershipActor::firstOrFail(), function (): void {
-        $term = app(CreateTermAction::class)->execute(MutateTermPayload::from(['taxonomy' => 'category', 'slug' => 'root', 'translations' => ['en' => ['name' => 'Root']]]));
+        $term = app(TaxonomyTerms::class)->create(['taxonomy' => 'category', 'slug' => 'root', 'translations' => ['en' => ['name' => 'Root']]], SystemActor::Background);
         expect($term::class)->toBe(OwnershipTerm::class)->and($term->meta)->toBe(['configured' => true])
             ->and(TermModelRegistry::query()->count())->toBe(1)
             ->and(Term::factory()->make()::class)->toBe(OwnershipTerm::class)

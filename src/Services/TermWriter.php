@@ -7,8 +7,8 @@ namespace Nvl\Taxonomy\Services;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Nvl\Support\Contracts\LocaleCatalog;
 use Nvl\Support\Ownership\Contracts\OwnershipWriter;
-use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Models\Term;
@@ -18,7 +18,8 @@ use Nvl\Taxonomy\Support\SlugGenerator;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Translatable\Enums\TranslationSyncMode;
-use Nvl\Translatable\Services\TranslationWriter;
+use Nvl\Translatable\Services\RelatedTranslationStore;
+use Nvl\Translatable\Services\TranslationPayloadValidator;
 
 /**
  * Persists validated term structure and dedicated translation rows.
@@ -29,7 +30,9 @@ final readonly class TermWriter
      * Create the validated structural and translation writer.
      */
     public function __construct(
-        private TranslationWriter $translations,
+        private RelatedTranslationStore $translations,
+        private TranslationPayloadValidator $translationPayloads,
+        private LocaleCatalog $locales,
         private TaxonomyRegistry $taxonomies,
         private TermHierarchy $hierarchy,
         private SlugGenerator $slugs,
@@ -40,9 +43,11 @@ final readonly class TermWriter
     /**
      * Persist one validated term and its complete translation set.
      */
-    public function create(MutateTermPayload $data): Term
+    /** @param array{taxonomy:string, slug:string, translations:array<string, array{name:string, description?:?string}>, parent_id?:?string, position?:int, meta?:?array<string, mixed>} $data */
+    public function create(array $data): Term
     {
-        $definition = $this->taxonomies->get($data->taxonomy);
+        $data = $this->normalize($data, false);
+        $definition = $this->taxonomies->get($data['taxonomy']);
 
         $this->validate($data);
         if (TaxonomyOwnership::declared()) {
@@ -56,7 +61,7 @@ final readonly class TermWriter
             $term = new ($definition->model)($this->baseAttributes($data));
             $term->forceFill($this->boundary->attributes('taxonomy.terms'))->save();
         }
-        $this->translations->replace($term, $data->translations);
+        $this->writeTranslations($term, $data['translations'], TranslationSyncMode::Replace);
 
         return $term->refresh()->load('translations');
     }
@@ -66,66 +71,68 @@ final readonly class TermWriter
      */
     public function update(
         Term $term,
-        MutateTermPayload $data,
+        array $data,
         TranslationSyncMode $mode = TranslationSyncMode::Patch,
     ): Term {
+        $data = $this->normalize($data, true, $term);
         $this->boundary->assertRecord($term, 'taxonomy.terms');
-        if ($data->expectedRevision === null || $term->revision !== $data->expectedRevision) {
+        if ($term->revision !== $data['expected_revision']) {
             throw StaleTermVersionException::forTerm($term->id);
         }
 
-        if ($term->taxonomy !== $data->taxonomy) {
+        if ($term->taxonomy !== $data['taxonomy']) {
             throw new \InvalidArgumentException('A term taxonomy is immutable.');
         }
 
-        if ($term->parent_id !== $data->parentId) {
+        if ($term->parent_id !== $data['parent_id']) {
             throw new \InvalidArgumentException(
-                'Use MoveTermAction to change a taxonomy term parent.',
+                'Use TaxonomyTerms::move to change a taxonomy term parent.',
             );
         }
 
         $this->validate($data, $term->id);
         $term->fill($this->baseAttributes($data));
         $term->save();
-        $this->translations->sync($term, $data->translations, $mode);
+        $this->writeTranslations($term, $data['translations'], $mode);
 
         return $term->refresh()->load('translations');
     }
 
-    private function validate(MutateTermPayload $data, ?string $termId = null): void
+    /** @param array<string, mixed> $data */
+    private function validate(array $data, ?string $termId = null): void
     {
-        $definition = $this->taxonomies->get($data->taxonomy);
-        $this->hierarchy->validate($data->taxonomy, $data->parentId, $termId);
-        $this->slugs->assertCanonical($data->slug);
+        $definition = $this->taxonomies->get($data['taxonomy']);
+        $this->hierarchy->validate($data['taxonomy'], $data['parent_id'], $termId);
+        $this->slugs->assertCanonical($data['slug']);
 
-        if (strlen($data->slug) > 191) {
+        if (strlen($data['slug']) > 191) {
             throw new \InvalidArgumentException(
                 'Taxonomy slugs may not exceed 191 characters.',
             );
         }
 
-        if ($data->position < 0) {
+        if ($data['position'] < 0) {
             throw new \InvalidArgumentException(
                 'Taxonomy term positions cannot be negative.',
             );
         }
 
-        if ($data->translations === []) {
+        if ($data['translations'] === []) {
             throw new \InvalidArgumentException(
                 'Taxonomy terms require at least one translation.',
             );
         }
 
-        $this->validateTranslations($data->translations);
+        $this->validateTranslations($data['translations'], $definition->model);
 
-        $json = json_encode($data->meta, JSON_THROW_ON_ERROR);
+        $json = json_encode($data['meta'], JSON_THROW_ON_ERROR);
 
         if (strlen($json) > TaxonomyConfiguration::positiveLimit('metadata_bytes', 65536)) {
             throw new \InvalidArgumentException('Taxonomy metadata exceeds the configured size limit.');
         }
 
         $this->validateMetadataDepth(
-            $data->meta,
+            $data['meta'],
             TaxonomyConfiguration::positiveLimit('metadata_depth', 8),
         );
 
@@ -136,7 +143,7 @@ final readonly class TermWriter
             );
             $unknownKeys = in_array('*', $allowedKeys, true)
                 ? []
-                : array_diff(array_keys($data->meta ?? []), $allowedKeys);
+                : array_diff(array_keys($data['meta'] ?? []), $allowedKeys);
 
             if ($unknownKeys !== []) {
                 throw new \InvalidArgumentException(
@@ -144,7 +151,7 @@ final readonly class TermWriter
                 );
             }
 
-            $validator = Validator::make($data->meta ?? [], $definition->metadataRules);
+            $validator = Validator::make($data['meta'] ?? [], $definition->metadataRules);
 
             if ($validator->fails()) {
                 throw new ValidationException($validator);
@@ -152,14 +159,14 @@ final readonly class TermWriter
         }
 
         $duplicate = TermModelRegistry::query()
-            ->where('taxonomy', $data->taxonomy)
-            ->where('parent_key', $data->parentId ?? '__root__')
-            ->where('slug', $data->slug)
+            ->where('taxonomy', $data['taxonomy'])
+            ->where('parent_key', $data['parent_id'] ?? '__root__')
+            ->where('slug', $data['slug'])
             ->when($termId !== null, static fn ($query) => $query->whereKeyNot($termId))
             ->exists();
 
         if ($duplicate) {
-            throw DuplicateSiblingSlugException::forSlug($data->taxonomy, $data->slug);
+            throw DuplicateSiblingSlugException::forSlug($data['taxonomy'], $data['slug']);
         }
     }
 
@@ -192,8 +199,10 @@ final readonly class TermWriter
      *
      * @param  array<mixed>  $translations
      */
-    private function validateTranslations(array $translations): void
+    private function validateTranslations(array $translations, string $modelClass): void
     {
+        $definition = (new $modelClass)->translationDefinition();
+        $this->translationPayloads->validate($definition, $translations);
         foreach ($translations as $locale => $translation) {
             if (! is_string($locale) || $locale === '' || ! is_array($translation)) {
                 throw new \InvalidArgumentException(
@@ -201,6 +210,7 @@ final readonly class TermWriter
                 );
             }
 
+            $definition->assertLocale($this->locales->assertSupported($locale));
             $this->validateTranslation($translation);
         }
     }
@@ -212,6 +222,9 @@ final readonly class TermWriter
      */
     private function validateTranslation(array $translation): void
     {
+        if (array_diff(array_keys($translation), ['name', 'description']) !== []) {
+            throw new \InvalidArgumentException('Unknown taxonomy translation fields.');
+        }
         $name = $translation['name'] ?? null;
         $description = $translation['description'] ?? null;
 
@@ -233,17 +246,83 @@ final readonly class TermWriter
         }
     }
 
+    /** @param array<string, array<string, mixed>> $translations */
+    private function writeTranslations(Term $term, array $translations, TranslationSyncMode $mode): void
+    {
+        $definition = $term->translationDefinition();
+        $locales = [];
+        foreach ($translations as $locale => $attributes) {
+            $normalized = $definition->assertLocale($this->locales->assertSupported($locale));
+            if (isset($locales[$normalized])) {
+                throw new \InvalidArgumentException('Duplicate normalized taxonomy translation locale.');
+            }
+            $locales[$normalized] = true;
+            $this->translations->upsert($term, $definition, $normalized, $attributes);
+        }
+        if ($mode === TranslationSyncMode::Replace) {
+            $this->translations->deleteExcept($term, $definition, array_keys($locales));
+        }
+    }
+
     /**
      * @return array<string, mixed>
      */
-    private function baseAttributes(MutateTermPayload $data): array
+    private function baseAttributes(array $data): array
     {
         return [
-            'taxonomy' => $data->taxonomy,
-            'parent_id' => $data->parentId,
-            'slug' => $data->slug,
-            'position' => $data->position,
-            'meta' => $data->meta,
+            'taxonomy' => $data['taxonomy'],
+            'parent_id' => $data['parent_id'],
+            'slug' => $data['slug'],
+            'position' => $data['position'],
+            'meta' => $data['meta'],
+        ];
+    }
+
+    /** @param array<string, mixed> $attributes
+     * @return array{taxonomy:string, slug:string, translations:array<string, array<string, mixed>>, parent_id:?string, position:int, meta:?array, expected_revision:?int}
+     */
+    private function normalize(array $attributes, bool $updating, ?Term $term = null): array
+    {
+        $allowed = ['taxonomy', 'slug', 'translations', 'parent_id', 'position', 'meta', 'expected_revision'];
+        if (array_is_list($attributes) || array_diff(array_keys($attributes), $allowed) !== []) {
+            throw new \InvalidArgumentException('Unknown taxonomy term attributes.');
+        }
+        if ($updating && (! isset($attributes['expected_revision']) || ! is_int($attributes['expected_revision']))) {
+            throw StaleTermVersionException::forTerm($term?->id ?? 'unknown');
+        }
+        foreach ($updating ? ['translations'] : ['taxonomy', 'slug', 'translations'] as $required) {
+            if (! array_key_exists($required, $attributes)) {
+                throw new \InvalidArgumentException("Missing taxonomy term attribute [{$required}].");
+            }
+        }
+        if ($updating && $term instanceof Term) {
+            $attributes = [
+                'taxonomy' => $term->taxonomy,
+                'slug' => $term->slug,
+                'parent_id' => $term->parent_id,
+                'position' => $term->position,
+                'meta' => $term->meta,
+                ...$attributes,
+            ];
+        }
+        if (! is_string($attributes['taxonomy']) || ! is_string($attributes['slug']) || ! is_array($attributes['translations'])) {
+            throw new \InvalidArgumentException('Invalid taxonomy term attributes.');
+        }
+        $parent = $attributes['parent_id'] ?? null;
+        $position = $attributes['position'] ?? 0;
+        $meta = $attributes['meta'] ?? null;
+        $revision = $attributes['expected_revision'] ?? null;
+        if (($parent !== null && ! is_string($parent)) || ! is_int($position) || ($meta !== null && ! is_array($meta)) || ($revision !== null && ! is_int($revision))) {
+            throw new \InvalidArgumentException('Invalid taxonomy term structure or expected revision.');
+        }
+        if (! $updating && array_key_exists('expected_revision', $attributes)) {
+            throw new \InvalidArgumentException('Term creation cannot supply an expected revision.');
+        }
+
+        return [
+            'taxonomy' => $attributes['taxonomy'], 'slug' => $attributes['slug'],
+            'translations' => $attributes['translations'], 'parent_id' => $parent,
+            'position' => $position, 'meta' => $meta, 'expected_revision' => $revision,
         ];
     }
 }

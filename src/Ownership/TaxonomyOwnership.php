@@ -6,7 +6,6 @@ namespace Nvl\Taxonomy\Ownership;
 
 use Illuminate\Database\Eloquent\Model;
 use Nvl\Support\Exceptions\BusinessException;
-use Nvl\Support\Ownership\Compatibility\LegacyOwnershipSupport;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Support\Ownership\Services\OwnershipQueueCapture;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
@@ -27,17 +26,17 @@ final class TaxonomyOwnership
     /** Preserve the selected authority's public exception contract. */
     public static function violation(string $message): BusinessException
     {
-        return self::declared() ? new OwnershipViolation($message) : app(LegacyOwnershipSupport::class)->violation($message);
+        return new OwnershipViolation($message);
     }
 
     public static function active(): bool
     {
-        return self::declared() || app(LegacyOwnershipSupport::class)->enabled();
+        return self::declared();
     }
 
     public static function resource(Model $model): string
     {
-        return self::declared() ? app(OwnershipResourceRegistry::class)->forModel($model)->key : app(LegacyOwnershipSupport::class)->resource($model);
+        return app(OwnershipResourceRegistry::class)->forModel($model)->key;
     }
 
     /** Capture scalar admission; untouched graphs preserve disabled installation behavior. */

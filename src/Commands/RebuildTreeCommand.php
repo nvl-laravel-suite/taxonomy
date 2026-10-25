@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Commands;
 
 use Illuminate\Console\Command;
-use Nvl\Support\Tenancy\Contracts\TenantRunner;
-use Nvl\Support\Tenancy\ValueObjects\TenantId;
-use Nvl\Taxonomy\Actions\RebuildTreeAction;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -18,7 +17,6 @@ final class RebuildTreeCommand extends Command
 {
     protected $signature = 'nvl:taxonomy:rebuild
         {taxonomy? : Optional vocabulary key}
-        {--tenant= : Canonical tenant UUID when tenancy is enabled}
         {--dry-run : Report without writing}';
 
     protected $description = 'Normalize taxonomy sibling positions';
@@ -26,40 +24,24 @@ final class RebuildTreeCommand extends Command
     /**
      * Preview and optionally normalize sibling positions.
      */
-    public function handle(RebuildTreeAction $rebuild, TenantRunner $runner, OwnershipBoundary $boundary): int
+    public function handle(TaxonomyTerms $terms, OwnershipBoundary $boundary): int
     {
-        $tenant = $this->option('tenant');
-        if (config('nvl-tenancy.enabled') === true) {
-            if (! is_string($tenant) || $tenant === '') {
-                $this->error('Enabled taxonomy maintenance requires --tenant.');
-
-                return self::FAILURE;
-            }
-
-            return $runner->run(
-                new TenantId($tenant),
-                fn (): int => $this->handleForTenant($rebuild, $boundary),
-            );
-        }
-
-        return $this->handleForTenant($rebuild, $boundary);
+        return $this->handleForOwner($terms, $boundary);
     }
 
-    /** Rebuild the current tenant's tree under a tenant-keyed process lock. */
-    private function handleForTenant(RebuildTreeAction $rebuild, OwnershipBoundary $boundary): int
+    /** Rebuild the current owner's tree under an owner-keyed process lock. */
+    private function handleForOwner(TaxonomyTerms $terms, OwnershipBoundary $boundary): int
     {
         $taxonomy = $this->argument('taxonomy');
         $taxonomy = is_string($taxonomy) && $taxonomy !== '' ? $taxonomy : null;
-        $changes = $rebuild->execute($taxonomy, dryRun: true);
+        $changes = $terms->rebuild(SystemActor::Background, $taxonomy, dryRun: true);
         $this->info("{$changes} term positions require normalization.");
 
         if ((bool) $this->option('dry-run') || $changes === 0) {
             return self::SUCCESS;
         }
 
-        $lockKey = config('nvl-tenancy.enabled') === true
-            ? 'nvl:taxonomy:rebuild:'.$boundary->key('taxonomy.terms', 'rebuild:'.($taxonomy ?? '*'))
-            : 'nvl:taxonomy:rebuild';
+        $lockKey = 'nvl:taxonomy:rebuild:'.$boundary->key('taxonomy.terms', 'rebuild:'.($taxonomy ?? '*'));
         $lock = TaxonomyConfiguration::lock($lockKey, 3600);
 
         if (! $lock->get()) {
@@ -69,7 +51,7 @@ final class RebuildTreeCommand extends Command
         }
 
         try {
-            $rebuild->execute($taxonomy);
+            $terms->rebuild(SystemActor::Background, $taxonomy);
         } finally {
             $lock->release();
         }

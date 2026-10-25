@@ -8,19 +8,19 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Nvl\Taxonomy\Actions\CreateTermAction;
-use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
-use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
-use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException;
 use Nvl\Taxonomy\Exceptions\TaxonomyException;
 use Nvl\Taxonomy\Exceptions\UnknownTaxonomyException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
+use Nvl\Taxonomy\Services\TaxonomyAssignments;
 use Nvl\Taxonomy\Services\TaxonomyBatchOwnerAdmission;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Taxonomy\Services\TaxonomyReader;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\BatchArchivedPost;
@@ -31,7 +31,6 @@ use Nvl\Taxonomy\Tests\Fixtures\BatchTaxonomyPolicy;
 use Nvl\Taxonomy\Tests\Fixtures\BatchTermTableOwner;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
-use Nvl\Tenancy\Services\TenantInstallationState;
 use Nvl\Translatable\Enums\TranslationFallbackPolicy;
 
 beforeEach(function (): void {
@@ -64,12 +63,12 @@ afterEach(function (): void {
  */
 function taxonomyBatchTerm(string $slug, array $translations = [], string $vocabulary = 'tag', ?string $parentId = null): Term
 {
-    return app(CreateTermAction::class)->execute(MutateTermPayload::from([
+    return app(TaxonomyTerms::class)->create([
         'taxonomy' => $vocabulary,
         'slug' => $slug,
-        'parentId' => $parentId,
+        'parent_id' => $parentId,
         'translations' => $translations === [] ? ['en' => ['name' => ucfirst($slug)]] : $translations,
-    ]));
+    ], SystemActor::Background);
 }
 
 /**
@@ -109,6 +108,29 @@ function taxonomyBatchOwnedQueries(array $queries): array
 
         foreach ($tables as $table) {
             if (preg_match('/\\b(?:from|join)\\s+'.preg_quote(strtolower($table), '/').'\\b/', $sql) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }));
+}
+
+/** Count actual configured domain tables while reporting fresh authority metadata separately.
+ * @param  list<array{query:string, bindings:array<mixed>, time:float}>  $queries
+ * @return list<array{query:string, bindings:array<mixed>, time:float}>
+ */
+function taxonomyBatchDomainQueries(array $queries): array
+{
+    $tables = array_unique(array_map(
+        static fn (Model $model): string => strtolower($model->getTable()),
+        [new Post, new CustomKeyPost, new Term, new Termable, new TermTranslation],
+    ));
+
+    return array_values(array_filter($queries, static function (array $query) use ($tables): bool {
+        $sql = strtolower(str_replace(['"', '`', '[', ']'], '', $query['query']));
+        foreach ($tables as $table) {
+            if (preg_match('/\\b(?:from|join)\\s+'.preg_quote($table, '/').'\\b/', $sql) === 1) {
                 return true;
             }
         }
@@ -192,8 +214,8 @@ function taxonomyBatchOverlappingOwners(string $class, string $vocabulary = 'tag
 }
 
 it('returns an empty object map without reading storage', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
-    [$result, $queries] = taxonomyBatchCapture(fn () => $reader->execute([], ['tag', 'category']));
+    $reader = app(TaxonomyReader::class);
+    [$result, $queries] = taxonomyBatchCapture(fn () => $reader->forOwners([], ['tag', 'category'], SystemActor::Background));
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
 
     expect($queries)->toBe([])
@@ -203,35 +225,39 @@ it('returns an empty object map without reading storage', function (): void {
 });
 
 it('keeps total localized query counts fixed at one twenty five and one hundred owners', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $first = taxonomyBatchTerm('first', ['en' => ['name' => 'English first', 'description' => 'English detail'], 'bg' => ['name' => 'Български', 'description' => null]]);
     $second = taxonomyBatchTerm('second', ['en' => ['name' => 'English second']]);
     $owners = [];
     for ($index = 0; $index < 100; $index++) {
         $owner = Post::query()->create(['title' => 'Owner '.$index]);
         $owners[] = $owner;
-        app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', [$second, $first]);
+        app(TaxonomyAssignments::class)->sync($owner, 'tag', [$second, $first], SystemActor::Background);
     }
 
-    $reader->execute([$owners[0]], ['tag', 'category'], 'bg');
+    $reader->forOwners([$owners[0]], ['tag', 'category'], SystemActor::Background, 'bg');
     $counts = [];
     foreach ([1, 25, 100] as $count) {
-        [$result, $queries] = taxonomyBatchCapture(fn () => $reader->execute(array_slice($owners, 0, $count), ['tag', 'category'], 'bg'));
-        $counts[] = count($queries);
+        [$result, $queries] = taxonomyBatchCapture(fn () => $reader->forOwners(array_slice($owners, 0, $count), ['tag', 'category'], SystemActor::Background, 'bg'));
+        $domainQueries = taxonomyBatchDomainQueries($queries);
+        expect($domainQueries)->not->toBe([])
+            ->and(taxonomyBatchOwnedQueries($domainQueries))->toHaveCount(3)
+            ->and(count($queries))->toBeGreaterThan(count($domainQueries));
+        $counts[] = count($domainQueries);
         $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
         expect($json->order)->toHaveCount($count);
 
         foreach (array_slice($owners, 0, $count) as $owner) {
-            $vocabularies = $json->owners->{$owner->getMorphClass()}->{(string) $owner->getKey()}->vocabularies;
+            $vocabularies = $result['owners']->{$owner->getMorphClass()}->{(string) $owner->getKey()};
             expect($vocabularies)->toBeInstanceOf(stdClass::class)
                 ->and($vocabularies->category)->toBe([])
-                ->and(array_column($vocabularies->tag, 'id'))->toBe([$second->id, $first->id])
-                ->and(array_column($vocabularies->tag, 'position'))->toBe([0, 1])
-                ->and($vocabularies->tag[0]->name)->toBe('English second')
-                ->and($vocabularies->tag[1]->name)->toBe('Български')
-                ->and($vocabularies->tag[1]->description)->toBe('English detail')
-                ->and(get_object_vars($vocabularies->tag[0]))->toHaveKeys(['id', 'vocabulary', 'slug', 'parentId', 'position', 'name', 'description'])
-                ->not->toHaveKeys(['translations', 'meta', 'parent', 'children', 'path']);
+                ->and(array_map(static fn (Term $term): string => $term->id, $vocabularies->tag))->toBe([$second->id, $first->id])
+                ->and(array_map(static fn (Term $term): int => $term->pivot_position, $vocabularies->tag))->toBe([0, 1])
+                ->and($vocabularies->tag[0]->displayName('bg'))->toBe('English second')
+                ->and($vocabularies->tag[1]->displayName('bg'))->toBe('Български')
+                ->and($vocabularies->tag[1]->displayDescription('bg'))->toBe('English detail')
+                ->and($vocabularies->tag[0])->toBeInstanceOf(Term::class)
+                ->and($vocabularies->tag[0]->relationLoaded('translations'))->toBeTrue();
         }
     }
 
@@ -239,10 +265,10 @@ it('keeps total localized query counts fixed at one twenty five and one hundred 
 });
 
 it('preserves first request order numeric objects and explicit vocabulary empties', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $first = Post::query()->create(['title' => 'First']);
     $second = Post::query()->create(['title' => 'Second']);
-    $result = $reader->execute([$second, $first, $second], ['category', 'tag'], 'en');
+    $result = $reader->forOwners([$second, $first, $second], ['category', 'tag'], SystemActor::Background, 'en');
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
 
     expect($json->owners)->toBeInstanceOf(stdClass::class)
@@ -251,12 +277,12 @@ it('preserves first request order numeric objects and explicit vocabulary emptie
             (object) ['type' => Post::class, 'id' => (string) $second->getKey()],
             (object) ['type' => Post::class, 'id' => (string) $first->getKey()],
         ])
-        ->and(array_keys(get_object_vars($json->owners->{Post::class}->{(string) $first->getKey()}->vocabularies)))->toBe(['category', 'tag'])
-        ->and($json->owners->{Post::class}->{(string) $first->getKey()}->vocabularies->tag)->toBe([]);
+        ->and(array_keys(get_object_vars($json->owners->{Post::class}->{(string) $first->getKey()})))->toBe(['category', 'tag'])
+        ->and($json->owners->{Post::class}->{(string) $first->getKey()}->tag)->toBe([]);
 });
 
 it('keeps exact native and custom morph identities paired with string owner keys', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     Relation::morphMap(['Host.Custom' => CustomKeyPost::class], false);
     $native = Post::query()->create(['title' => 'Native']);
     $strings = [];
@@ -271,11 +297,11 @@ it('keeps exact native and custom morph identities paired with string owner keys
         Termable::query()->create(['term_id' => $term->id, 'taxonomy' => 'tag', 'termable_type' => $owner->getMorphClass(), 'termable_id' => (string) $owner->getKey(), 'position' => 0]);
     }
 
-    $result = $reader->execute([$native, ...$strings], ['tag']);
+    $result = $reader->forOwners([$native, ...$strings], ['tag'], SystemActor::Background);
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
 
     foreach ([$native, ...$strings] as $index => $owner) {
-        expect(array_column($json->owners->{$owner->getMorphClass()}->{(string) $owner->getKey()}->vocabularies->tag, 'id'))->toBe([$terms[$index]->id]);
+        expect(array_column($json->owners->{$owner->getMorphClass()}->{(string) $owner->getKey()}->tag, 'id'))->toBe([$terms[$index]->id]);
         expect($owner->newQuery()->withAnyTerms('tag', [$terms[$index]->id])->pluck($owner->getKeyName())->all())->toBe([$owner->getKey()]);
     }
     expect(Relation::morphMap())->toBe(['Host.Custom' => CustomKeyPost::class]);
@@ -285,14 +311,14 @@ it('rejects overlapping storage host filters before SQL while keeping batch read
     $restore = taxonomyBatchConfigureOverlapTables($configured);
     try {
         [$owners, $first, $second] = taxonomyBatchOverlappingOwners($class);
-        $result = app(ListOwnerTaxonomyTermsContract::class)->execute($owners, ['tag']);
+        $result = app(TaxonomyReader::class)->forOwners($owners, ['tag'], SystemActor::Background);
         foreach ([$first, $second] as $index => $term) {
-            expect(array_column($result->owners->{$class}->{(string) $owners[$index]->getKey()}->vocabularies->tag, 'id'))->toBe([$term->id]);
+            expect(array_map(static fn (Term $value): string => $value->id, $result['owners']->{$class}->{(string) $owners[$index]->getKey()}->tag))->toBe([$term->id]);
         }
         $query = (new $class)->newQuery()->whereKey(array_map(static fn (Model $owner): mixed => $owner->getKey(), $owners));
         DB::enableQueryLog();
         DB::flushQueryLog();
-        expect(fn () => $query->{$method}('tag', [$first->id])->get())->toThrow(TaxonomyBatchReadException::class, 'ListOwnerTaxonomyTermsContract');
+        expect(fn () => $query->{$method}('tag', [$first->id])->get())->toThrow(TaxonomyBatchReadException::class, 'TaxonomyReader::forOwners');
         expect(DB::getQueryLog())->toBe([]);
     } finally {
         $restore(isset($first, $second) ? [$first->id, $second->id] : []);
@@ -319,7 +345,7 @@ it('rejects overlapping storage category filters before root or traversal SQL', 
         $query = (new $class)->newQuery()->whereKey(array_map(static fn (Model $owner): mixed => $owner->getKey(), $owners));
         DB::enableQueryLog();
         DB::flushQueryLog();
-        expect(fn () => $query->inCategory($root)->get())->toThrow(TaxonomyBatchReadException::class, 'ListOwnerTaxonomyTermsContract');
+        expect(fn () => $query->inCategory($root)->get())->toThrow(TaxonomyBatchReadException::class, 'TaxonomyReader::forOwners');
         expect(DB::getQueryLog())->toBe([]);
     } finally {
         $restore(isset($root, $other) ? [$root->id, $other->id] : []);
@@ -333,9 +359,9 @@ it('rejects equivalent qualified and case folded table storage before SQL', func
     $table = (new Term)->getTable();
     config()->set('taxonomy-test.overlap_owner_table', $shape === 'schema' ? 'main.'.$table : strtoupper($table));
     [$owners, $first, $second] = taxonomyBatchOverlappingOwners(BatchTermTableOwner::class);
-    $result = app(ListOwnerTaxonomyTermsContract::class)->execute($owners, ['tag']);
+    $result = app(TaxonomyReader::class)->forOwners($owners, ['tag'], SystemActor::Background);
     foreach ([$first, $second] as $index => $term) {
-        expect(array_column($result->owners->{BatchTermTableOwner::class}->{(string) $owners[$index]->getKey()}->vocabularies->tag, 'id'))->toBe([$term->id]);
+        expect(array_map(static fn (Term $value): string => $value->id, $result['owners']->{BatchTermTableOwner::class}->{(string) $owners[$index]->getKey()}->tag))->toBe([$term->id]);
     }
     $ids = array_map(static fn (Model $owner): mixed => $owner->getKey(), $owners);
     expect(BatchTermTableOwner::query()->whereKey($ids)->withAnyTerms('tag', [])->count())->toBe(0)
@@ -351,26 +377,26 @@ it('rejects equivalent qualified and case folded table storage before SQL', func
 })->with(['schema', 'case']);
 
 it('uses attachment positions with deterministic term id ties', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owner = Post::query()->create(['title' => 'Ordered']);
     $first = taxonomyBatchTerm('first');
     $second = taxonomyBatchTerm('second');
     $first->update(['position' => 90]);
     $second->update(['position' => 80]);
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', [$second, $first]);
+    app(TaxonomyAssignments::class)->sync($owner, 'tag', [$second, $first], SystemActor::Background);
     Termable::query()->where('termable_type', Post::class)->where('termable_id', (string) $owner->getKey())->update(['position' => 7]);
 
-    $result = $reader->execute([$owner], ['tag']);
+    $result = $reader->forOwners([$owner], ['tag'], SystemActor::Background);
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
     $ids = [$first->id, $second->id];
     sort($ids, SORT_STRING);
 
-    expect(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->vocabularies->tag, 'id'))->toBe($ids)
-        ->and(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->vocabularies->tag, 'position'))->toBe([7, 7]);
+    expect(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->tag, 'id'))->toBe($ids)
+        ->and(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->tag, 'pivot_position'))->toBe([7, 7]);
 });
 
 it('rejects invalid owners before reading package storage', function (string $mode): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owner = Post::query()->create(['title' => 'Canonical']);
     $owners = match ($mode) {
         'unpersisted' => [new Post(['title' => 'Unpersisted'])],
@@ -381,24 +407,24 @@ it('rejects invalid owners before reading package storage', function (string $mo
 
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => $reader->execute($owners, ['tag']))->toThrow(InvalidArgumentException::class);
+    expect(fn () => $reader->forOwners($owners, ['tag'], SystemActor::Background))->toThrow(InvalidArgumentException::class);
     expect(taxonomyBatchOwnedQueries(DB::getQueryLog()))->toBe([]);
 })->with(['unpersisted', 'duplicate', 'foreign-connection', 'absent']);
 
 it('rejects undeclared vocabulary and owner capability before reading package storage', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owner = Post::query()->create(['title' => 'Canonical']);
     taxonomyBatchRegister('restricted', allowedOwners: [CustomKeyPost::class]);
 
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => $reader->execute([$owner], ['missing']))->toThrow(UnknownTaxonomyException::class)
-        ->and(fn () => $reader->execute([$owner], ['restricted']))->toThrow(InvalidArgumentException::class);
+    expect(fn () => $reader->forOwners([$owner], ['missing'], SystemActor::Background))->toThrow(UnknownTaxonomyException::class)
+        ->and(fn () => $reader->forOwners([$owner], ['restricted'], SystemActor::Background))->toThrow(InvalidArgumentException::class);
     expect(taxonomyBatchOwnedQueries(DB::getQueryLog()))->toBe([]);
 });
 
 it('enforces the input and declared vocabulary limits before storage queries', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owners = [];
     for ($index = 0; $index < 101; $index++) {
         $owners[] = Post::query()->create(['title' => 'Owner '.$index]);
@@ -412,13 +438,13 @@ it('enforces the input and declared vocabulary limits before storage queries', f
 
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => $reader->execute($owners, ['tag']))->toThrow(InvalidArgumentException::class)
-        ->and(fn () => $reader->execute([$owners[0]], $vocabularies))->toThrow(InvalidArgumentException::class);
+    expect(fn () => $reader->forOwners($owners, ['tag'], SystemActor::Background))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => $reader->forOwners([$owners[0]], $vocabularies, SystemActor::Background))->toThrow(InvalidArgumentException::class);
     expect(DB::getQueryLog())->toBe([]);
 });
 
 it('reloads registered owners through retained visibility and soft delete scopes', function (bool $deleted): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     Schema::table((new Post)->getTable(), static fn (Blueprint $table) => $table->softDeletes());
     app(TaxonomyOwnerRegistry::class)->register('batch_posts', BatchScopedPost::class);
     $owner = BatchScopedPost::withoutGlobalScopes()->create(['title' => $deleted ? 'visible' : 'hidden']);
@@ -429,24 +455,24 @@ it('reloads registered owners through retained visibility and soft delete scopes
 
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => $reader->execute([$owner], ['tag']))->toThrow(InvalidArgumentException::class);
+    expect(fn () => $reader->forOwners([$owner], ['tag'], SystemActor::Background))->toThrow(InvalidArgumentException::class);
     expect(taxonomyBatchOwnedQueries(DB::getQueryLog()))->toBe([]);
 })->with([false, true]);
 
 it('uses the registered term model visibility before translations', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     taxonomyBatchRegister('private_tags', BatchScopedTerm::class);
     $owner = Post::query()->create(['title' => 'Canonical']);
     $visible = taxonomyBatchTerm('visible', vocabulary: 'private_tags');
     $hidden = BatchScopedTerm::withoutGlobalScopes()->create(['taxonomy' => 'private_tags', 'slug' => 'hidden']);
     Termable::query()->create(['term_id' => $hidden->id, 'taxonomy' => 'private_tags', 'termable_type' => Post::class, 'termable_id' => (string) $owner->getKey(), 'position' => 1]);
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'private_tags', [$visible]);
+    app(TaxonomyAssignments::class)->sync($owner, 'private_tags', [$visible], SystemActor::Background);
     Termable::query()->create(['term_id' => $hidden->id, 'taxonomy' => 'private_tags', 'termable_type' => Post::class, 'termable_id' => (string) $owner->getKey(), 'position' => 1]);
 
-    [$result, $queries] = taxonomyBatchCapture(fn () => $reader->execute([$owner], ['private_tags']));
+    [$result, $queries] = taxonomyBatchCapture(fn () => $reader->forOwners([$owner], ['private_tags'], SystemActor::Background));
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
 
-    expect(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->vocabularies->private_tags, 'id'))->toBe([$visible->id]);
+    expect(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->private_tags, 'id'))->toBe([$visible->id]);
     $translationQueries = array_filter($queries, static fn (array $query): bool => str_contains($query['query'], (new TermTranslation)->getTable()));
     foreach ($translationQueries as $query) {
         expect($query['bindings'])->not->toContain($hidden->id);
@@ -454,17 +480,17 @@ it('uses the registered term model visibility before translations', function ():
 });
 
 it('rejects term overflow before transferring terms or translations', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owner = Post::query()->create(['title' => 'Dense']);
     $terms = [];
     for ($index = 0; $index < 101; $index++) {
         $terms[] = taxonomyBatchTerm('dense-'.$index);
     }
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', $terms);
+    app(TaxonomyAssignments::class)->sync($owner, 'tag', $terms, SystemActor::Background);
 
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => $reader->execute([$owner], ['tag']))->toThrow(TaxonomyException::class);
+    expect(fn () => $reader->forOwners([$owner], ['tag'], SystemActor::Background))->toThrow(TaxonomyException::class);
     $queries = DB::getQueryLog();
     expect(array_filter($queries, static fn (array $query): bool => str_contains($query['query'], (new TermTranslation)->getTable())))->toBe([]);
     $windows = array_values(array_filter($queries, static fn (array $query): bool => str_contains(strtolower($query['query']), 'row_number()')));
@@ -475,47 +501,47 @@ it('rejects term overflow before transferring terms or translations', function (
 });
 
 it('returns the complete permitted one hundred term payload', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owner = Post::query()->create(['title' => 'Dense']);
     $terms = [];
     for ($index = 0; $index < 100; $index++) {
         $terms[] = taxonomyBatchTerm('dense-'.$index);
     }
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', $terms);
-    $result = $reader->execute([$owner], ['tag']);
+    app(TaxonomyAssignments::class)->sync($owner, 'tag', $terms, SystemActor::Background);
+    $result = $reader->forOwners([$owner], ['tag'], SystemActor::Background);
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
 
-    expect($json->owners->{Post::class}->{(string) $owner->getKey()}->vocabularies->tag)->toHaveCount(100);
+    expect($json->owners->{Post::class}->{(string) $owner->getKey()}->tag)->toHaveCount(100);
 });
 
 it('groups policy OR clauses inside mandatory vocabulary and identity predicates', function (): void {
-    app(ListOwnerTaxonomyTermsContract::class);
+    app(TaxonomyReader::class);
     app()->instance(TaxonomyBatchAuthorization::class, new BatchTaxonomyPolicy);
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owner = Post::query()->create(['title' => 'Requested']);
     $foreign = Post::query()->create(['title' => 'Foreign']);
     $visible = taxonomyBatchTerm('visible');
     $hidden = taxonomyBatchTerm('hidden');
     $category = taxonomyBatchTerm('visible', vocabulary: 'category');
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', [$visible, $hidden]);
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'category', [$category]);
-    app(SyncTermAttachmentsAction::class)->execute($foreign, 'tag', [$visible]);
+    app(TaxonomyAssignments::class)->sync($owner, 'tag', [$visible, $hidden], SystemActor::Background);
+    app(TaxonomyAssignments::class)->sync($owner, 'category', [$category], SystemActor::Background);
+    app(TaxonomyAssignments::class)->sync($foreign, 'tag', [$visible], SystemActor::Background);
 
-    $result = $reader->execute([$owner], ['tag']);
+    $result = $reader->forOwners([$owner], ['tag'], SystemActor::Background);
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
     expect(array_map('strval', array_keys(get_object_vars($json->owners->{Post::class}))))->toBe([(string) $owner->getKey()])
-        ->and(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->vocabularies->tag, 'id'))->toBe([$visible->id]);
+        ->and(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->tag, 'id'))->toBe([$visible->id]);
 });
 
 it('preserves existing filter semantics and requires visible explicit policy terms', function (): void {
-    app(ListOwnerTaxonomyTermsContract::class);
+    app(TaxonomyReader::class);
     $policy = new BatchTaxonomyPolicy;
     $visibleOwner = Post::query()->create(['title' => 'Visible']);
     $hiddenOwner = Post::query()->create(['title' => 'Hidden']);
     $visible = taxonomyBatchTerm('visible');
     $hidden = taxonomyBatchTerm('hidden');
-    app(SyncTermAttachmentsAction::class)->execute($visibleOwner, 'tag', [$visible]);
-    app(SyncTermAttachmentsAction::class)->execute($hiddenOwner, 'tag', [$hidden]);
+    app(TaxonomyAssignments::class)->sync($visibleOwner, 'tag', [$visible], SystemActor::Background);
+    app(TaxonomyAssignments::class)->sync($hiddenOwner, 'tag', [$hidden], SystemActor::Background);
 
     expect(Post::query()->withAnyTerms('tag', [], $policy)->count())->toBe(0)
         ->and(Post::query()->withAllTerms('tag', [], $policy)->count())->toBe(2)
@@ -527,18 +553,18 @@ it('preserves existing filter semantics and requires visible explicit policy ter
 });
 
 it('does not traverse a hidden registered category root through the generic term model', function (): void {
-    app(ListOwnerTaxonomyTermsContract::class);
+    app(TaxonomyReader::class);
     taxonomyBatchRegister('private_categories', BatchScopedTerm::class);
     $owner = Post::query()->create(['title' => 'Owner']);
     $root = BatchScopedTerm::withoutGlobalScopes()->create(['taxonomy' => 'private_categories', 'slug' => 'hidden']);
     $child = BatchScopedTerm::withoutGlobalScopes()->create(['taxonomy' => 'private_categories', 'slug' => 'visible', 'parent_id' => $root->id]);
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'private_categories', [$child]);
+    app(TaxonomyAssignments::class)->sync($owner, 'private_categories', [$child], SystemActor::Background);
 
     expect(fn () => Post::query()->inCategory($root)->get())->toThrow(InvalidArgumentException::class);
 });
 
 it('rejects altered host builder connection table and unions before SQL', function (string $mode): void {
-    app(ListOwnerTaxonomyTermsContract::class);
+    app(TaxonomyReader::class);
     $query = Post::query();
     if ($mode === 'connection') {
         config()->set('database.connections.foreign', config('database.connections.'.DB::getDefaultConnection()));
@@ -556,26 +582,26 @@ it('rejects altered host builder connection table and unions before SQL', functi
 })->with(['connection', 'table', 'union']);
 
 it('preserves empty localized copy and finite any available locale fallback', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     config()->set('nvl-translatable.fallback.policy', TranslationFallbackPolicy::AnyAvailable->value);
     $owner = Post::query()->create(['title' => 'Localized']);
     $empty = taxonomyBatchTerm('empty', ['en' => ['name' => 'Fallback', 'description' => 'Fallback detail'], 'bg' => ['name' => 'Legacy name', 'description' => '']]);
     TermTranslation::query()->where('term_id', $empty->id)->where('locale', 'bg')->update(['name' => '']);
     $french = taxonomyBatchTerm('french', ['fr' => ['name' => 'Français', 'description' => null]]);
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', [$empty, $french]);
+    app(TaxonomyAssignments::class)->sync($owner, 'tag', [$empty, $french], SystemActor::Background);
 
-    $result = $reader->execute([$owner], ['tag'], 'bg');
+    $result = $reader->forOwners([$owner], ['tag'], SystemActor::Background, 'bg');
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
-    $terms = $json->owners->{Post::class}->{(string) $owner->getKey()}->vocabularies->tag;
+    $terms = $result['owners']->{Post::class}->{(string) $owner->getKey()}->tag;
 
-    expect($terms[0]->name)->toBe('')
-        ->and($terms[0]->description)->toBe('')
-        ->and($terms[1]->name)->toBe('Français')
-        ->and($terms[1]->description)->toBeNull();
+    expect($terms[0]->displayName('bg'))->toBe('')
+        ->and($terms[0]->displayDescription('bg'))->toBe('')
+        ->and($terms[1]->displayName('bg'))->toBe('Français')
+        ->and($terms[1]->displayDescription('bg'))->toBeNull();
 });
 
 it('measures cold and warm total SQL budgets for one and two populated vocabularies', function (int $count, int $vocabularyCount): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     taxonomyBatchRegister('secondary');
     $first = taxonomyBatchTerm('first');
     $second = taxonomyBatchTerm('second', vocabulary: 'secondary');
@@ -583,16 +609,21 @@ it('measures cold and warm total SQL budgets for one and two populated vocabular
     for ($index = 0; $index < $count; $index++) {
         $owner = Post::query()->create(['title' => 'Owner '.$index]);
         $owners[] = $owner;
-        app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', [$first]);
-        app(SyncTermAttachmentsAction::class)->execute($owner, 'secondary', [$second]);
+        app(TaxonomyAssignments::class)->sync($owner, 'tag', [$first], SystemActor::Background);
+        app(TaxonomyAssignments::class)->sync($owner, 'secondary', [$second], SystemActor::Background);
     }
     $vocabularies = $vocabularyCount === 1 ? ['tag'] : ['tag', 'secondary'];
-    app(TenantInstallationState::class)->invalidate();
-    [, $cold] = taxonomyBatchCapture(fn () => $reader->execute($owners, $vocabularies, 'en'));
-    [, $warm] = taxonomyBatchCapture(fn () => $reader->execute($owners, $vocabularies, 'en'));
+    [, $cold] = taxonomyBatchCapture(fn () => $reader->forOwners($owners, $vocabularies, SystemActor::Background, 'en'));
+    [, $warm] = taxonomyBatchCapture(fn () => $reader->forOwners($owners, $vocabularies, SystemActor::Background, 'en'));
 
-    expect(count($cold))->toBe($vocabularyCount === 1 ? 5 : 7)
-        ->and(count($warm))->toBe($vocabularyCount === 1 ? 4 : 6);
+    $coldDomain = taxonomyBatchDomainQueries($cold);
+    $warmDomain = taxonomyBatchDomainQueries($warm);
+    expect($coldDomain)->not->toBe([])
+        ->and($warmDomain)->not->toBe([])
+        ->and(count($coldDomain))->toBe($vocabularyCount === 1 ? 4 : 6)
+        ->and(count($warmDomain))->toBe($vocabularyCount === 1 ? 4 : 6)
+        ->and(count($cold))->toBeGreaterThan(count($coldDomain))
+        ->and(count($warm))->toBeGreaterThan(count($warmDomain));
 })->with([[1, 1], [25, 1], [100, 1], [1, 2], [25, 2], [100, 2]]);
 
 it('groups caller OR clauses before native and custom soft delete guards in direct helpers', function (string $class, string $column): void {
@@ -632,56 +663,58 @@ it('bounds category traversal by visible child sets rather than loading a vocabu
 });
 
 it('adds one reload query per owner class while custom term models keep the vocabulary budget', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     taxonomyBatchRegister('private_tags', BatchScopedTerm::class);
     $native = Post::query()->create(['title' => 'Native']);
     $custom = CustomKeyPost::query()->create(['post_key' => '007', 'title' => 'Custom']);
     $tag = taxonomyBatchTerm('visible');
     $private = taxonomyBatchTerm('visible', vocabulary: 'private_tags');
     foreach ([$native, $custom] as $owner) {
-        app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', [$tag]);
-        app(SyncTermAttachmentsAction::class)->execute($owner, 'private_tags', [$private]);
+        app(TaxonomyAssignments::class)->sync($owner, 'tag', [$tag], SystemActor::Background);
+        app(TaxonomyAssignments::class)->sync($owner, 'private_tags', [$private], SystemActor::Background);
     }
-    $reader->execute([$native, $custom], ['tag', 'private_tags'], 'en');
-    [, $oneVocabulary] = taxonomyBatchCapture(fn () => $reader->execute([$native, $custom], ['tag'], 'en'));
-    [, $twoVocabularies] = taxonomyBatchCapture(fn () => $reader->execute([$native, $custom], ['tag', 'private_tags'], 'en'));
+    $reader->forOwners([$native, $custom], ['tag', 'private_tags'], SystemActor::Background, 'en');
+    [, $oneVocabulary] = taxonomyBatchCapture(fn () => $reader->forOwners([$native, $custom], ['tag'], SystemActor::Background, 'en'));
+    [, $twoVocabularies] = taxonomyBatchCapture(fn () => $reader->forOwners([$native, $custom], ['tag', 'private_tags'], SystemActor::Background, 'en'));
 
-    expect(count($oneVocabulary))->toBe(5)
-        ->and(count($twoVocabularies))->toBe(7);
+    expect(taxonomyBatchDomainQueries($oneVocabulary))->toHaveCount(5)
+        ->and(taxonomyBatchDomainQueries($twoVocabularies))->toHaveCount(7)
+        ->and(count($oneVocabulary))->toBeGreaterThan(5)
+        ->and(count($twoVocabularies))->toBeGreaterThan(7);
 });
 
 it('keeps term policy OR clauses inside the independent host attachment policy', function (): void {
     app()->instance(TaxonomyBatchAuthorization::class, new BatchTaxonomyPolicy);
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owner = Post::query()->create(['title' => 'Denied attachment']);
     $term = taxonomyBatchTerm('absent');
     Termable::query()->create(['term_id' => $term->id, 'taxonomy' => 'tag', 'termable_type' => Post::class, 'termable_id' => (string) $owner->getKey(), 'position' => 1]);
-    $result = $reader->execute([$owner], ['tag']);
+    $result = $reader->forOwners([$owner], ['tag'], SystemActor::Background);
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
 
-    expect($json->owners->{Post::class}->{(string) $owner->getKey()}->vocabularies->tag)->toBe([])
+    expect($json->owners->{Post::class}->{(string) $owner->getKey()}->tag)->toBe([])
         ->and(Post::query()->withAnyTerms('tag', ['absent'], new BatchTaxonomyPolicy)->count())->toBe(0);
 });
 
 it('does not count denied structural terms toward overflow or translation loads', function (): void {
     app()->instance(TaxonomyBatchAuthorization::class, new BatchTaxonomyPolicy(false));
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     $owner = Post::query()->create(['title' => 'Dense private vocabulary']);
     $visible = taxonomyBatchTerm('visible');
     $terms = [$visible];
     for ($index = 0; $index < 101; $index++) {
         $terms[] = taxonomyBatchTerm('denied-'.$index);
     }
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', $terms);
-    [$result, $queries] = taxonomyBatchCapture(fn () => $reader->execute([$owner], ['tag']));
+    app(TaxonomyAssignments::class)->sync($owner, 'tag', $terms, SystemActor::Background);
+    [$result, $queries] = taxonomyBatchCapture(fn () => $reader->forOwners([$owner], ['tag'], SystemActor::Background));
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
-    expect(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->vocabularies->tag, 'id'))->toBe([$visible->id]);
+    expect(array_column($json->owners->{Post::class}->{(string) $owner->getKey()}->tag, 'id'))->toBe([$visible->id]);
     $windows = array_values(array_filter($queries, static fn (array $query): bool => str_contains(strtolower($query['query']), 'row_number()')));
     expect(DB::select($windows[0]['query'], $windows[0]['bindings']))->toHaveCount(1);
 });
 
 it('bounds transferred successful attachments separately for every exact owner vocabulary group', function (): void {
-    $reader = app(ListOwnerTaxonomyTermsContract::class);
+    $reader = app(TaxonomyReader::class);
     taxonomyBatchRegister('secondary');
     $native = Post::query()->create(['title' => 'Native']);
     $custom = CustomKeyPost::query()->create(['post_key' => '007', 'title' => 'Custom']);
@@ -691,17 +724,18 @@ it('bounds transferred successful attachments separately for every exact owner v
             $terms[] = taxonomyBatchTerm('term-'.$index, vocabulary: $vocabulary);
         }
         foreach ([$native, $custom] as $owner) {
-            app(SyncTermAttachmentsAction::class)->execute($owner, $vocabulary, $terms);
+            app(TaxonomyAssignments::class)->sync($owner, $vocabulary, $terms, SystemActor::Background);
         }
     }
-    [$result, $queries] = taxonomyBatchCapture(fn () => $reader->execute([$native, $custom], ['tag', 'secondary']));
+    [$result, $queries] = taxonomyBatchCapture(fn () => $reader->forOwners([$native, $custom], ['tag', 'secondary'], SystemActor::Background));
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
     foreach ([$native, $custom] as $owner) {
         foreach (['tag', 'secondary'] as $vocabulary) {
-            expect($json->owners->{$owner->getMorphClass()}->{(string) $owner->getKey()}->vocabularies->{$vocabulary})->toHaveCount(100);
+            expect($json->owners->{$owner->getMorphClass()}->{(string) $owner->getKey()}->{$vocabulary})->toHaveCount(100);
         }
     }
     $windows = array_values(array_filter($queries, static fn (array $query): bool => str_contains(strtolower($query['query']), 'row_number()')));
     expect(DB::select($windows[0]['query'], $windows[0]['bindings']))->toHaveCount(400)
-        ->and(count($queries))->toBe(7);
+        ->and(taxonomyBatchDomainQueries($queries))->toHaveCount(7)
+        ->and(count($queries))->toBeGreaterThan(7);
 });

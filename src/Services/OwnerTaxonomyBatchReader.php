@@ -8,20 +8,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Nvl\Support\Owners\OwnerBatch;
-use Nvl\Support\Owners\OwnerResultMap;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
-use Nvl\Taxonomy\Data\OwnerTaxonomyTerm;
-use Nvl\Taxonomy\Data\OwnerTaxonomyTermList;
-use Nvl\Taxonomy\Data\OwnerTaxonomyTerms;
 use Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Translatable\Services\ContentLocale;
 use Nvl\Translatable\Services\RelatedTranslationStore;
-use Nvl\Translatable\Services\TranslationResolver;
 use stdClass;
 
-/** Reads bounded authorized attachment facts and projects pure preloaded DTOs. */
+/** Reads bounded authorized attachment facts and preloads native term models. */
 final readonly class OwnerTaxonomyBatchReader
 {
     /** Retain canonical admission, SQL policy and translation projection dependencies. */
@@ -32,7 +27,6 @@ final readonly class OwnerTaxonomyBatchReader
         private TaxonomyBatchAuthorization $policy,
         private ContentLocale $locale,
         private RelatedTranslationStore $translations,
-        private TranslationResolver $resolver,
     ) {}
 
     /**
@@ -41,7 +35,7 @@ final readonly class OwnerTaxonomyBatchReader
      * @param  list<Model>  $owners
      * @param  array<array-key, mixed>  $vocabularies
      */
-    public function read(array $owners, array $vocabularies, ?string $locale = null): OwnerTaxonomyTerms
+    public function read(array $owners, array $vocabularies, ?string $locale = null): array
     {
         $input = OwnerBatch::fromModels($owners);
         if (! array_is_list($vocabularies) || count($vocabularies) > 20) {
@@ -64,10 +58,10 @@ final readonly class OwnerTaxonomyBatchReader
             $requested[$vocabulary] = true;
         }
         $vocabularies = array_keys($requested);
-        /** @var array<string, array<array-key, OwnerTaxonomyTermList>> $values */
+        /** @var array<string, array<array-key, stdClass>> $values */
         $values = [];
         if ($input->isEmpty()) {
-            return OwnerTaxonomyTerms::fromMap(new OwnerResultMap($input, $values));
+            return ['owners' => new stdClass, 'order' => []];
         }
         $admitted = $this->owners->admit($input, $vocabularies);
         $this->policy->authorizeOwners($admitted, $vocabularies);
@@ -76,10 +70,10 @@ final readonly class OwnerTaxonomyBatchReader
             foreach ($vocabularies as $vocabulary) {
                 $empty->{$vocabulary} = [];
             }
-            $values[$identity->type][$identity->id] = new OwnerTaxonomyTermList($empty);
+            $values[$identity->type][$identity->id] = $empty;
         }
         if ($vocabularies === []) {
-            return OwnerTaxonomyTerms::fromMap(new OwnerResultMap($admitted, $values));
+            return $this->result($admitted, $values);
         }
         /** @var Collection<int, stdClass&object{id: string, term_id: string, termable_type: string, termable_id: string, taxonomy: string, position: int, nvl_taxonomy_rank: int}> $facts */
         $facts = $this->queries->probe($this->queries->batch($admitted, $vocabularies, $this->policy))->get();
@@ -124,27 +118,30 @@ final readonly class OwnerTaxonomyBatchReader
             if (! $term instanceof Term) {
                 continue;
             }
-            $definition = $term->translationDefinition();
-            /** @var Collection<int, Model> $rows */
-            $rows = new Collection($displayRows[$fact->taxonomy][$fact->term_id] ?? []);
-            $name = $this->resolver->resolve($rows, $definition, 'name', $definition->assertLocale($locale), $locales[$fact->taxonomy])->value;
-            $description = $this->resolver->resolve($rows, $definition, 'description', $definition->assertLocale($locale), $locales[$fact->taxonomy])->value;
-            $list = $values[$fact->termable_type][$fact->termable_id]->vocabularies->{$fact->taxonomy};
-            if (! is_array($list) || ! array_is_list($list)) {
-                throw new TaxonomyBatchReadException('A requested taxonomy vocabulary requires an ordered DTO list.');
-            }
-            $list[] = new OwnerTaxonomyTerm(
-                $term->id,
-                $fact->taxonomy,
-                $term->slug,
-                $term->parent_id,
-                $fact->position,
-                is_string($name) ? $name : '',
-                is_string($description) ? $description : null,
-            );
-            $values[$fact->termable_type][$fact->termable_id]->vocabularies->{$fact->taxonomy} = $list;
+            $rows = new \Illuminate\Database\Eloquent\Collection($displayRows[$fact->taxonomy][$fact->term_id] ?? []);
+            $term->setRelation('translations', $rows);
+            $attached = clone $term;
+            $attached->preloadDisplayCopy($locale);
+            $attached->setAttribute('pivot_position', $fact->position);
+            $values[$fact->termable_type][$fact->termable_id]->{$fact->taxonomy}[] = $attached;
         }
 
-        return OwnerTaxonomyTerms::fromMap(new OwnerResultMap($admitted, $values));
+        return $this->result($admitted, $values);
+    }
+
+    /** @param array<string, array<array-key, stdClass>> $values
+     * @return array{owners: stdClass, order: list<array{type: string, id: string}>}
+     */
+    private function result(OwnerBatch $batch, array $values): array
+    {
+        $owners = new stdClass;
+        $order = [];
+        foreach ($batch->identities() as $identity) {
+            $owners->{$identity->type} ??= new stdClass;
+            $owners->{$identity->type}->{$identity->id} = $values[$identity->type][$identity->id];
+            $order[] = ['type' => $identity->type, 'id' => $identity->id];
+        }
+
+        return ['owners' => $owners, 'order' => $order];
     }
 }

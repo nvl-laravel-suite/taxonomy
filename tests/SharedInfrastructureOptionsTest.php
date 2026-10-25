@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Cache;
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
-use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
+use Nvl\Support\Enums\SystemActor;
+use Nvl\Taxonomy\Ownership\TaxonomyBoundary;
+use Nvl\Taxonomy\Services\TaxonomyAssignments;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
 use Nvl\Taxonomy\Tests\TestCase;
@@ -20,7 +21,7 @@ it('uses the inherited Core store for taxonomy attachment locking', function ():
     $repository = Cache::store('shared-taxonomy-locks');
     Cache::shouldReceive('store')->with('shared-taxonomy-locks')->once()->andReturn($repository);
     $owner = Post::create(['title' => 'Categorized']);
-    app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', ['shared']);
+    app(TaxonomyAssignments::class)->sync($owner, 'tag', ['shared'], SystemActor::Background);
 
     expect($owner->tags()->sole()->slug)->toBe('shared')
         ->and(TaxonomyConfiguration::lockStore())->toBe('shared-taxonomy-locks');
@@ -35,9 +36,9 @@ it('preserves foreign attachment locks while serializing the owned vocabulary se
     expect($foreignLock->get())->toBeTrue();
 
     try {
-        app(SyncTermAttachmentsAction::class)->execute($owner, 'tag', ['namespaced']);
+        app(TaxonomyAssignments::class)->sync($owner, 'tag', ['namespaced'], SystemActor::Background);
         expect($owner->tags()->sole()->slug)->toBe('namespaced')
-            ->and(TaxonomyConfiguration::attachmentLockName(app(TenantBoundary::class), $owner, 'tag'))
+            ->and(TaxonomyConfiguration::attachmentLockName(app(TaxonomyBoundary::class), $owner, 'tag'))
             ->toBe('nvl:taxonomy:attachments:'.$identity)
             ->and(Cache::store(TaxonomyConfiguration::lockStore())->lock($foreignKey, 30)->get())->toBeFalse();
     } finally {

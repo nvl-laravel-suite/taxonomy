@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 use Nvl\Ownership\Services\OwnershipRunner;
-use Nvl\Taxonomy\Actions\CreateTermAction;
-use Nvl\Taxonomy\Data\MutateTermPayload;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Models\TermTranslation;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipActor;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipCompany;
@@ -18,7 +18,7 @@ it('rolls back structural and localized rows together on the actual package sour
         }
     });
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(7), OwnershipActor::firstOrFail(), function (): void {
-        expect(fn () => app(CreateTermAction::class)->execute(MutateTermPayload::from(['taxonomy' => 'category', 'slug' => 'rollback', 'translations' => ['en' => ['name' => 'First'], 'bg' => ['name' => 'Second']]])))->toThrow(RuntimeException::class, 'Translation persistence failed.');
+        expect(fn () => app(TaxonomyTerms::class)->create(['taxonomy' => 'category', 'slug' => 'rollback', 'translations' => ['en' => ['name' => 'First'], 'bg' => ['name' => 'Second']]], SystemActor::Background))->toThrow(RuntimeException::class, 'Translation persistence failed.');
         expect(TermModelRegistry::query()->count())->toBe(0)->and(TermTranslation::query()->count())->toBe(0);
     });
 });

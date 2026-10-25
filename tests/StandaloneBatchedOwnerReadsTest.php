@@ -2,19 +2,17 @@
 
 declare(strict_types=1);
 
-use Nvl\Support\Tenancy\Contracts\TenantBoundary;
-use Nvl\Support\Tenancy\Services\DisabledTenantBoundary;
-use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
+use Nvl\Taxonomy\Services\TaxonomyReader;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
 
 it('reads registered term subclasses with only required providers', function (string $operation): void {
-    expect($this->app->providerIsLoaded('Nvl\\Tenancy\\Providers\\TenancyServiceProvider'))->toBeFalse()
-        ->and(app(TenantBoundary::class))->toBeInstanceOf(DisabledTenantBoundary::class);
+    expect($this->app->providerIsLoaded('Nvl\\Tenancy\\Providers\\TenancyServiceProvider'))->toBeFalse();
     $owner = Post::query()->create(['title' => 'Standalone owner']);
     $ids = [];
     foreach (['tag', 'category'] as $vocabulary) {
@@ -28,13 +26,13 @@ it('reads registered term subclasses with only required providers', function (st
     }
 
     if ($operation === 'batch') {
-        $result = app(ListOwnerTaxonomyTermsContract::class)->execute([$owner], ['tag', 'category'], 'en');
-        $terms = $result->owners->{$owner->getMorphClass()}->{(string) $owner->getKey()}->vocabularies;
+        $result = app(TaxonomyReader::class)->forOwners([$owner], ['tag', 'category'], SystemActor::Background, 'en');
+        $terms = $result['owners']->{$owner->getMorphClass()}->{(string) $owner->getKey()};
         expect($terms->tag[0]->id)->toBe($ids['tag'])
-            ->and($terms->tag[0]->name)->toBe('Visible tag')
-            ->and($terms->tag[0]->position)->toBe(3)
+            ->and($terms->tag[0]->displayName('en'))->toBe('Visible tag')
+            ->and($terms->tag[0]->pivot_position)->toBe(3)
             ->and($terms->category[0]->id)->toBe($ids['category'])
-            ->and($terms->category[0]->name)->toBe('Visible category');
+            ->and($terms->category[0]->displayName('en'))->toBe('Visible category');
 
         return;
     }

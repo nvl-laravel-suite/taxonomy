@@ -6,21 +6,19 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Contracts\OwnershipQueuedJob;
 use Nvl\Support\Ownership\Exceptions\OwnershipException;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
-use Nvl\Taxonomy\Actions\DeleteTermAction;
-use Nvl\Taxonomy\Actions\MergeTermsAction;
-use Nvl\Taxonomy\Actions\MoveTermAction;
-use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
-use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
-use Nvl\Taxonomy\Contracts\TaxonomyCatalogReader;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Exceptions\InvalidParentException;
 use Nvl\Taxonomy\Exceptions\TermNotFoundException;
 use Nvl\Taxonomy\Models\Termable;
+use Nvl\Taxonomy\Services\TaxonomyAssignments;
+use Nvl\Taxonomy\Services\TaxonomyReader;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\BatchTaxonomyPolicy;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipActor;
@@ -34,20 +32,20 @@ it('isolates catalogue projections inside the admitted native owner', function (
     $runner = app(OwnershipRunner::class);
     $actor = OwnershipActor::firstOrFail();
     $foreign = $runner->run(OwnershipCompany::findOrFail(8), $actor, fn () => Scenario::term('foreign-catalogue'));
-    $reader = app(TaxonomyCatalogReader::class);
+    $reader = app(TaxonomyReader::class);
 
-    expect(fn () => $reader->tree('category'))->toThrow(OwnershipException::class)
-        ->and(fn () => $reader->term('category', $foreign->id))->toThrow(OwnershipException::class);
+    expect(fn () => $reader->tree('category', SystemActor::Background))->toThrow(OwnershipException::class)
+        ->and(fn () => $reader->term('category', $foreign->id, SystemActor::Background))->toThrow(OwnershipException::class);
 
     $runner->run(OwnershipCompany::findOrFail(7), $actor, function () use ($reader, $foreign): void {
         $local = Scenario::term('local-catalogue');
         $child = Scenario::term('child-catalogue', $local->id);
-        $tree = $reader->tree('category', 'en', limit: 2);
+        $tree = $reader->tree('category', SystemActor::Background, 'en', limit: 2);
 
         expect($tree->sole()->id)->toBe($local->id)
             ->and($tree->sole()->children[0]->id)->toBe($child->id)
-            ->and($reader->term('category', $foreign->id, 'en'))->toBeNull()
-            ->and($reader->term('category', $local->id, 'en')->name)->toBe('local-catalogue');
+            ->and($reader->term('category', $foreign->id, SystemActor::Background, 'en'))->toBeNull()
+            ->and($reader->term('category', $local->id, SystemActor::Background, 'en')->displayName('en'))->toBe('local-catalogue');
     });
 });
 
@@ -57,25 +55,25 @@ it('isolates tree moves merges pruning and retained foreign attachments', functi
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(8), OwnershipActor::firstOrFail(), function () use (&$foreign, &$foreignHost): void {
         $foreign = Scenario::term();
         $foreignHost = Scenario::host();
-        app(SyncTermAttachmentsAction::class)->execute($foreignHost, 'category', [$foreign]);
+        app(TaxonomyAssignments::class)->sync($foreignHost, 'category', [$foreign], SystemActor::Background);
     });
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(7), OwnershipActor::firstOrFail(), function () use ($foreign, $foreignHost): void {
         $source = Scenario::term();
         $destination = Scenario::term('destination');
         $child = Scenario::term('child', $source->id);
         $host = Scenario::host();
-        app(SyncTermAttachmentsAction::class)->execute($host, 'category', [$source]);
+        app(TaxonomyAssignments::class)->sync($host, 'category', [$source], SystemActor::Background);
         expect(TermModelRegistry::query()->count())->toBe(3)->and(TermModelRegistry::query()->find($foreign->id))->toBeNull();
         $alias = 'laravel_reserved_999';
         $aliased = TermModelRegistry::query()->from($source->getTable().' as '.$alias)->where($alias.'.id', $foreign->id)->orWhereRaw('1=1')->paginate(2);
         expect($aliased->total())->toBe(3)->and($aliased->getCollection()->pluck('id')->all())->not->toContain($foreign->id);
-        expect(fn () => app(MoveTermAction::class)->execute($child, $foreign->id, 0, $child->revision))->toThrow(InvalidParentException::class);
-        expect(fn () => app(MergeTermsAction::class)->execute($source, $foreign, $source->revision, $foreign->revision))->toThrow(TermNotFoundException::class);
-        expect(fn () => app(SyncTermAttachmentsAction::class)->execute($host, 'category', [$foreign]))->toThrow(OwnershipViolation::class);
-        expect(fn () => app(SyncTermAttachmentsAction::class)->execute($foreignHost, 'category', [$source]))->toThrow(OwnershipViolation::class);
-        $merged = app(MergeTermsAction::class)->execute($source, $destination, $source->revision, $destination->revision);
+        expect(fn () => app(TaxonomyTerms::class)->move($child, $foreign->id, SystemActor::Background, 0, $child->revision))->toThrow(InvalidParentException::class);
+        expect(fn () => app(TaxonomyTerms::class)->merge($source, $foreign, SystemActor::Background, $source->revision, $foreign->revision))->toThrow(TermNotFoundException::class);
+        expect(fn () => app(TaxonomyAssignments::class)->sync($host, 'category', [$foreign], SystemActor::Background))->toThrow(OwnershipViolation::class);
+        expect(fn () => app(TaxonomyAssignments::class)->sync($foreignHost, 'category', [$source], SystemActor::Background))->toThrow(OwnershipViolation::class);
+        $merged = app(TaxonomyTerms::class)->merge($source, $destination, SystemActor::Background, $source->revision, $destination->revision);
         expect($child->fresh()->parent_id)->toBe($destination->id)->and(Termable::query()->firstOrFail()->term_id)->toBe($destination->id);
-        app(DeleteTermAction::class)->execute($merged, $merged->revision, DeleteTermStrategy::Cascade);
+        app(TaxonomyTerms::class)->delete($merged, $merged->revision, SystemActor::Background, DeleteTermStrategy::Cascade);
         expect(TermModelRegistry::query()->count())->toBe(0);
         $this->artisan('nvl:taxonomy:prune', ['--force' => true])->assertSuccessful();
     });
@@ -93,7 +91,7 @@ it('rejects raw cross owner tree references attachment pivots and direct relatio
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(7), OwnershipActor::firstOrFail(), function () use ($foreign): void {
         $local = Scenario::term();
         $host = Scenario::host();
-        app(SyncTermAttachmentsAction::class)->execute($host, 'category', [$local]);
+        app(TaxonomyAssignments::class)->sync($host, 'category', [$local], SystemActor::Background);
         expect(fn () => DB::transaction(fn () => DB::table($local->getTable())->where('id', $local->id)->update(['parent_id' => $foreign->id])))->toThrow(QueryException::class);
         $row = Termable::query()->firstOrFail()->getRawOriginal();
         $row['id'] = (string) Str::uuid();
@@ -105,28 +103,29 @@ it('rejects raw cross owner tree references attachment pivots and direct relatio
         expect(fn () => $locale->saveQuietly())->toThrow(OwnershipViolation::class);
     });
 });
-it('keeps authorized reads bounded for one and twenty five hosts and scopes before pagination', function (): void {
+it('keeps authorized reads bounded for one twenty five and one hundred hosts and scopes before pagination', function (): void {
     app()->bind(TaxonomyBatchAuthorization::class, fn () => new BatchTaxonomyPolicy(false));
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(7), OwnershipActor::firstOrFail(), function (): void {
         $term = Scenario::term();
         $hosts = [];
-        for ($i = 0; $i < 25; $i++) {
+        for ($i = 0; $i < 100; $i++) {
             $host = Scenario::host();
             $hosts[] = $host;
-            app(SyncTermAttachmentsAction::class)->execute($host, 'category', [$term]);
+            app(TaxonomyAssignments::class)->sync($host, 'category', [$term], SystemActor::Background);
         }
         $measure = function (array $hosts): int {
             DB::enableQueryLog();
             DB::flushQueryLog();
-            $result = app(ListOwnerTaxonomyTermsContract::class)->execute($hosts, ['category'], 'en');
+            $result = app(TaxonomyReader::class)->forOwners($hosts, ['category'], SystemActor::Background, 'en');
             $count = count(DB::getQueryLog());
             DB::disableQueryLog();
-            expect($result->order)->toHaveCount(count($hosts));
+            expect($result['order'])->toHaveCount(count($hosts));
 
             return $count;
         };
         $one = $measure([$hosts[0]]);
-        expect($measure($hosts))->toBeLessThanOrEqual($one + 2);
+        expect($measure(array_slice($hosts, 0, 25)))->toBeLessThanOrEqual($one + 2)
+            ->and($measure($hosts))->toBeLessThanOrEqual($one + 2);
         expect(TermModelRegistry::query()->orderBy('id')->paginate(1)->total())->toBe(1);
     });
 });
@@ -156,7 +155,7 @@ it('keeps bulk attachment writes inside the actual source lease through commit c
                 $source->commit();
             }
         });
-        expect(fn () => app(SyncTermAttachmentsAction::class)->execute($host, 'category', [$term]))->toThrow(OwnershipViolation::class);
+        expect(fn () => app(TaxonomyAssignments::class)->sync($host, 'category', [$term], SystemActor::Background))->toThrow(OwnershipViolation::class);
     });
     expect(DB::table((new Termable)->getTable())->count())->toBe(0);
 });
@@ -169,7 +168,7 @@ it('rejects raw host identities belonging to another native owner', function ():
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(7), OwnershipActor::firstOrFail(), function () use ($foreignHost): void {
         $term = Scenario::term();
         $host = Scenario::host();
-        app(SyncTermAttachmentsAction::class)->execute($host, 'category', [$term]);
+        app(TaxonomyAssignments::class)->sync($host, 'category', [$term], SystemActor::Background);
         $row = Termable::query()->firstOrFail()->getRawOriginal();
         $row['id'] = (string) Str::uuid();
         $row['termable_id'] = $foreignHost->id;

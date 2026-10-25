@@ -48,11 +48,6 @@ final readonly class TaxonomyAdoptionAdapter implements OwnershipAdoptionAdapter
         $schema = $connection->getSchemaBuilder();
         foreach ($this->resources() as $key) {
             $model = new ($this->resources->get($key)->model);
-            foreach (['tenant_id', 'ownership_key'] as $column) {
-                if ($schema->hasColumn($model->getTable(), $column)) {
-                    $schema->table($model->getTable(), static fn (Blueprint $table) => ($column === 'tenant_id' ? $table->uuid($column) : $table->string($column, 44))->nullable()->change());
-                }
-            }
             $this->schema->prepare($key);
         }
         foreach ([['taxonomy.terms', ['taxonomy', 'parent_id'], 'taxonomy.terms', ['taxonomy', 'id']], ['taxonomy.translations', ['term_id'], 'taxonomy.terms', ['id']], ['taxonomy.attachments', ['taxonomy', 'term_id'], 'taxonomy.terms', ['taxonomy', 'id']]] as [$childKey,$columns,$parentKey,$parentColumns]) {
@@ -71,7 +66,7 @@ final readonly class TaxonomyAdoptionAdapter implements OwnershipAdoptionAdapter
             }
         }
         foreach ($schema->getIndexes($root->getTable()) as $index) {
-            if ($index['unique'] && in_array($index['columns'], [['taxonomy', 'parent_key', 'slug'], ['tenant_id', 'taxonomy', 'parent_key', 'slug']], true)) {
+            if ($index['unique'] && $index['columns'] === ['taxonomy', 'parent_key', 'slug']) {
                 $schema->table($root->getTable(), static fn (Blueprint $table) => $table->dropUnique($index['name']));
             }
         }

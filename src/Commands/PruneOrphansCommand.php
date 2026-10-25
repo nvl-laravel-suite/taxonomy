@@ -6,13 +6,12 @@ namespace Nvl\Taxonomy\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Nvl\Support\Tenancy\Contracts\TenantRunner;
-use Nvl\Support\Tenancy\ValueObjects\TenantId;
-use Nvl\Taxonomy\Actions\DeleteTermAction;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -24,7 +23,6 @@ final class PruneOrphansCommand extends Command
 {
     protected $signature = 'nvl:taxonomy:prune
         {taxonomy? : Optional vocabulary key}
-        {--tenant= : Canonical tenant UUID when tenancy is enabled}
         {--dry-run : Report without deleting}
         {--include-closed : Also prune canonical terms from closed vocabularies}
         {--force : Skip confirmation}
@@ -35,32 +33,14 @@ final class PruneOrphansCommand extends Command
     /**
      * Safely prune eligible orphan leaves in bounded chunks.
      */
-    public function handle(
-        DeleteTermAction $delete,
-        TaxonomyRegistry $taxonomies,
-        TenantRunner $runner,
-        OwnershipBoundary $boundary,
-    ): int {
-        $tenant = $this->option('tenant');
-        if (config('nvl-tenancy.enabled') === true) {
-            if (! is_string($tenant) || $tenant === '') {
-                $this->error('Enabled taxonomy maintenance requires --tenant.');
-
-                return self::FAILURE;
-            }
-
-            return $runner->run(
-                new TenantId($tenant),
-                fn (): int => $this->handleForTenant($delete, $taxonomies, $boundary),
-            );
-        }
-
-        return $this->handleForTenant($delete, $taxonomies, $boundary);
+    public function handle(TaxonomyTerms $terms, TaxonomyRegistry $taxonomies, OwnershipBoundary $boundary): int
+    {
+        return $this->handleForOwner($terms, $taxonomies, $boundary);
     }
 
-    /** Prune the current tenant without mistaking foreign attachments for absence. */
-    private function handleForTenant(
-        DeleteTermAction $delete,
+    /** Prune the current owner without mistaking foreign attachments for absence. */
+    private function handleForOwner(
+        TaxonomyTerms $terms,
         TaxonomyRegistry $taxonomies,
         OwnershipBoundary $boundary,
     ): int {
@@ -103,9 +83,7 @@ final class PruneOrphansCommand extends Command
             return self::FAILURE;
         }
 
-        $lockKey = config('nvl-tenancy.enabled') === true
-            ? 'nvl:taxonomy:prune:'.$boundary->key('taxonomy.terms', 'prune:'.(is_string($taxonomy) ? $taxonomy : '*'))
-            : 'nvl:taxonomy:prune';
+        $lockKey = 'nvl:taxonomy:prune:'.$boundary->key('taxonomy.terms', 'prune:'.(is_string($taxonomy) ? $taxonomy : '*'));
         $lock = TaxonomyConfiguration::lock($lockKey, 3600);
 
         if (! $lock->get()) {
@@ -118,12 +96,13 @@ final class PruneOrphansCommand extends Command
             $skipped = 0;
             $query->orderBy('id')->chunkById(
                 max(1, (int) $this->option('chunk')),
-                function ($terms) use ($delete, &$skipped): void {
-                    foreach ($terms as $term) {
+                function ($batch) use ($terms, &$skipped): void {
+                    foreach ($batch as $term) {
                         try {
-                            $delete->execute(
+                            $terms->delete(
                                 $term,
                                 $term->revision,
+                                SystemActor::Background,
                                 DeleteTermStrategy::Restrict,
                             );
                         } catch (ModelNotFoundException|StaleTermVersionException|UnsafeTermDeletionException) {

@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Nvl\Data\Providers\DataServiceProvider;
+use Illuminate\Support\Facades\Gate;
 use Nvl\Ownership\Contracts\CentralAccess;
 use Nvl\Ownership\Contracts\OwnerAccess;
 use Nvl\Ownership\Contracts\OwnershipAdoptionAccess;
@@ -19,6 +19,7 @@ use Nvl\Ownership\Services\OwnershipAdoptionCoordinator;
 use Nvl\Ownership\Services\OwnershipAdoptionRegistry;
 use Nvl\Ownership\ValueObjects\OwnershipMapping;
 use Nvl\Ownership\ValueObjects\OwnershipOperation;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\Services\OwnershipStorageTables;
 use Nvl\Support\Ownership\ValueObjects\OwnershipResourceDefinition;
@@ -49,7 +50,7 @@ abstract class OwnershipTestCase extends TestCase
     /** @return list<class-string> */
     protected function getPackageProviders($app): array
     {
-        return [LocaleServiceProvider::class, SupportServiceProvider::class, TranslatableServiceProvider::class, DataServiceProvider::class, OwnershipServiceProvider::class, TaxonomyServiceProvider::class];
+        return [LocaleServiceProvider::class, SupportServiceProvider::class, TranslatableServiceProvider::class, OwnershipServiceProvider::class, TaxonomyServiceProvider::class];
     }
 
     /** @return class-string<Term> */
@@ -93,6 +94,9 @@ abstract class OwnershipTestCase extends TestCase
     {
         $this->originalMorphMap = Relation::morphMap();
         parent::setUp();
+        foreach (['create', 'update', 'delete', 'move', 'merge', 'rebuild', 'assign', 'resolve', 'read'] as $ability) {
+            Gate::define('taxonomy.'.$ability, static fn (mixed $actor): bool => $actor === SystemActor::Background);
+        }
         $connection = TermModelRegistry::newInstance()->getConnection();
         $schema = $connection->getSchemaBuilder();
         $actorSchema = DB::getSchemaBuilder();

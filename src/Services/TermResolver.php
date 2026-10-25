@@ -9,8 +9,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Nvl\Support\Events\DomainEventDispatcher;
-use Nvl\Taxonomy\Contracts\TermResolverContract;
-use Nvl\Taxonomy\Data\MutateTermPayload;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException;
@@ -27,7 +25,7 @@ use Nvl\Translatable\Services\ContentLocale;
  *
  * @api
  */
-final readonly class TermResolver implements TermResolverContract
+final readonly class TermResolver
 {
     /**
      * Create the batched term reference resolver.
@@ -121,7 +119,7 @@ final readonly class TermResolver implements TermResolverContract
             if (! $candidate instanceof Term) {
                 if (TaxonomyOwnership::active()) {
                     throw TaxonomyOwnership::violation(
-                        "Term [{$modelReferenceId}] is unavailable in the current tenant boundary.",
+                        "Term [{$modelReferenceId}] is unavailable in the current owner boundary.",
                     );
                 }
 
@@ -182,13 +180,13 @@ final readonly class TermResolver implements TermResolverContract
             try {
                 $created = $database->transaction(
                     function () use ($taxonomy, $slug, $name): Term {
-                        $created = $this->writer->create(MutateTermPayload::from([
+                        $created = $this->writer->create([
                             'taxonomy' => $taxonomy,
                             'slug' => $slug,
                             'translations' => [
                                 $this->contentLocale->get() => ['name' => $name],
                             ],
-                        ]));
+                        ]);
                         $this->domainEvents->dispatch(new TermChanged(
                             $created->id,
                             $created->taxonomy,

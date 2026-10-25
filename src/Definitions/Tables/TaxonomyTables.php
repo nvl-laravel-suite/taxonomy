@@ -17,8 +17,6 @@ final class TaxonomyTables
 
     public const string Termables = 'nvl_taxonomy_termables';
 
-    public const string TenantAdoptionCopies = 'nvl_taxonomy_tenant_adoption_copies';
-
     /** Return one configured logical or historical package table. */
     public static function get(string $key): string
     {

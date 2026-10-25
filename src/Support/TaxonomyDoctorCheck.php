@@ -2,16 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Nvl\Taxonomy\Data;
-
-use Spatie\LaravelData\Data;
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
+namespace Nvl\Taxonomy\Support;
 
 /**
  * One non-mutating Taxonomy readiness check.
  */
-#[TypeScript]
-final class TaxonomyDoctorCheckData extends Data
+final readonly class TaxonomyDoctorCheck
 {
     /**
      * Create one immutable diagnostic result.

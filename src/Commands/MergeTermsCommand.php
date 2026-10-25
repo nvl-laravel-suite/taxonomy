@@ -6,12 +6,10 @@ namespace Nvl\Taxonomy\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
-use Nvl\Support\Tenancy\Contracts\TenantRunner;
-use Nvl\Support\Tenancy\ValueObjects\TenantId;
-use Nvl\Taxonomy\Actions\MergeTermsAction;
-use Nvl\Taxonomy\Actions\ValidateTermMergeAction;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
@@ -23,7 +21,6 @@ final class MergeTermsCommand extends Command
         {taxonomy : Registered vocabulary key}
         {source : Source UUID or slug}
         {destination : Destination UUID or slug}
-        {--tenant= : Canonical tenant UUID when tenancy is enabled}
         {--dry-run : Validate and report without mutation}
         {--force : Skip confirmation}';
 
@@ -32,33 +29,14 @@ final class MergeTermsCommand extends Command
     /**
      * Execute or preview one revision-checked term merge.
      */
-    public function handle(
-        MergeTermsAction $merge,
-        ValidateTermMergeAction $validate,
-        TaxonomyRegistry $taxonomies,
-        TenantRunner $runner,
-    ): int {
-        $tenant = $this->option('tenant');
-        if (config('nvl-tenancy.enabled') === true) {
-            if (! is_string($tenant) || $tenant === '') {
-                $this->error('Enabled taxonomy maintenance requires --tenant.');
-
-                return self::FAILURE;
-            }
-
-            return $runner->run(
-                new TenantId($tenant),
-                fn (): int => $this->handleForTenant($merge, $validate, $taxonomies),
-            );
-        }
-
-        return $this->handleForTenant($merge, $validate, $taxonomies);
+    public function handle(TaxonomyTerms $terms, TaxonomyRegistry $taxonomies): int
+    {
+        return $this->handleForOwner($terms, $taxonomies);
     }
 
     /** Execute the merge inside the already-established ownership boundary. */
-    private function handleForTenant(
-        MergeTermsAction $merge,
-        ValidateTermMergeAction $validate,
+    private function handleForOwner(
+        TaxonomyTerms $terms,
         TaxonomyRegistry $taxonomies,
     ): int {
         $taxonomy = (string) $this->argument('taxonomy');
@@ -89,9 +67,10 @@ final class MergeTermsCommand extends Command
         );
 
         if ((bool) $this->option('dry-run')) {
-            $validate->execute(
+            $terms->validateMerge(
                 $source,
                 $destination,
+                SystemActor::Background,
                 $source->revision,
                 $destination->revision,
             );
@@ -104,9 +83,10 @@ final class MergeTermsCommand extends Command
             return self::FAILURE;
         }
 
-        $merge->execute(
+        $terms->merge(
             $source,
             $destination,
+            SystemActor::Background,
             $source->revision,
             $destination->revision,
         );

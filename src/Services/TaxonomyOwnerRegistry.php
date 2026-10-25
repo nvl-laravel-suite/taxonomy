@@ -7,8 +7,6 @@ namespace Nvl\Taxonomy\Services;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Nvl\Support\OwnerRegistry;
-use Nvl\Support\Tenancy\Contracts\TenantParentResolver;
-use Nvl\Support\Tenancy\Exceptions\TenantConfigurationInvalid;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 
@@ -17,7 +15,7 @@ use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
  *
  * @api
  */
-final class TaxonomyOwnerRegistry implements TenantParentResolver
+final class TaxonomyOwnerRegistry
 {
     /** @var array<string, class-string<Model>> */
     private array $owners = [];
@@ -86,7 +84,7 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
         );
     }
 
-    /** Reload one registered owner through its declared tenant resource. */
+    /** Reload one registered owner through its declared owner resource. */
     public function resolve(Model $owner, bool $lock = false): Model
     {
         $this->aliasFor($owner);
@@ -104,7 +102,7 @@ final class TaxonomyOwnerRegistry implements TenantParentResolver
 
         if (TaxonomyOwnership::active()) {
             if ($canonical->getConnection() !== TermModelRegistry::newInstance()->getConnection()) {
-                throw new TenantConfigurationInvalid('Taxonomy owners must share the Taxonomy connection.');
+                throw new InvalidArgumentException('Taxonomy owners must share the Taxonomy connection.');
             }
 
             $resource = TaxonomyOwnership::resource($owner);

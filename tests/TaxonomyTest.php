@@ -5,18 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Nvl\Taxonomy\Actions\AttachTermsAction;
-use Nvl\Taxonomy\Actions\CreateTermAction;
-use Nvl\Taxonomy\Actions\DeleteTermAction;
-use Nvl\Taxonomy\Actions\DetachTermsAction;
-use Nvl\Taxonomy\Actions\MergeTermsAction;
-use Nvl\Taxonomy\Actions\MoveTermAction;
-use Nvl\Taxonomy\Actions\RebuildTreeAction;
-use Nvl\Taxonomy\Actions\ResolveTermsAction;
-use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
-use Nvl\Taxonomy\Actions\UpdateTermAction;
-use Nvl\Taxonomy\Actions\ValidateTermMergeAction;
-use Nvl\Taxonomy\Data\MutateTermPayload;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
@@ -32,8 +21,11 @@ use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
+use Nvl\Taxonomy\Services\TaxonomyAssignments;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Taxonomy\Services\TaxonomyReader;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TaxonomyTree;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -85,7 +77,7 @@ it('keeps specialized term models inside their immutable vocabularies', function
 it('can sync open vocabularies like tags', function () {
     $post = Post::create(['title' => 'My Post']);
 
-    app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['laravel', 'php']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel', 'php'], SystemActor::Background);
 
     expect($post->tags)->toHaveCount(2)
         ->and($post->tags->pluck('slug')->toArray())->toContain('laravel', 'php');
@@ -93,7 +85,7 @@ it('can sync open vocabularies like tags', function () {
 
 it('matches all-term scopes when multiple references identify the same term', function () {
     $post = Post::create(['title' => 'Aliased scope']);
-    app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['laravel']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
     $term = $post->tags()->firstOrFail();
 
     expect(Post::query()->withAllTerms('tag', [$term->id, $term->slug])->count())->toBe(1)
@@ -105,7 +97,7 @@ it('matches all-term scopes when multiple references identify the same term', fu
 it('throws on closed vocabularies when term does not exist', function () {
     $post = Post::create(['title' => 'My Post']);
 
-    app(SyncTermAttachmentsAction::class)->execute($post, 'category', ['news']);
+    app(TaxonomyAssignments::class)->sync($post, 'category', ['news'], SystemActor::Background);
 })->throws(ClosedVocabularyException::class);
 
 it('detaches old terms on exclusive taxonomies', function () {
@@ -113,10 +105,10 @@ it('detaches old terms on exclusive taxonomies', function () {
     $cat1 = Category::create(['name' => 'News', 'slug' => 'news']);
     $cat2 = Category::create(['name' => 'Updates', 'slug' => 'updates']);
 
-    app(SyncTermAttachmentsAction::class)->execute($post, 'category', [$cat1]);
+    app(TaxonomyAssignments::class)->sync($post, 'category', [$cat1], SystemActor::Background);
     expect($post->categories)->toHaveCount(1);
 
-    app(SyncTermAttachmentsAction::class)->execute($post, 'category', [$cat2]);
+    app(TaxonomyAssignments::class)->sync($post, 'category', [$cat2], SystemActor::Background);
     $post->load('categories'); // refresh the relationship
     expect($post->categories)->toHaveCount(1)
         ->and($post->categories->first()->id)->toBe($cat2->id);
@@ -125,8 +117,8 @@ it('detaches old terms on exclusive taxonomies', function () {
 it('does not detach old terms on non-exclusive taxonomies', function () {
     $post = Post::create(['title' => 'My Post']);
 
-    app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['laravel']);
-    app(AttachTermsAction::class)->execute($post, 'tag', ['php']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
+    app(TaxonomyAssignments::class)->attach($post, 'tag', ['php'], SystemActor::Background);
 
     $post->load('tags');
     expect($post->tags)->toHaveCount(2);
@@ -134,7 +126,7 @@ it('does not detach old terms on non-exclusive taxonomies', function () {
 
 it('removes raw attachment rows when an owning model is deleted', function () {
     $post = Post::create(['title' => 'Disposable post']);
-    app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['laravel']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
 
     $this->assertDatabaseCount(config('nvl-taxonomy.table_names.termables', 'termables'), 1);
 
@@ -160,7 +152,7 @@ it('queries category subtrees with qualified relationship columns', function () 
     $post = Post::create(['title' => 'Categorized post']);
     $parent = Category::create(['slug' => 'section']);
     $child = Category::create(['slug' => 'subsection', 'parent_id' => $parent->id]);
-    app(SyncTermAttachmentsAction::class)->execute($post, 'category', [$child]);
+    app(TaxonomyAssignments::class)->sync($post, 'category', [$child], SystemActor::Background);
 
     expect(Post::query()->inCategory($parent)->count())->toBe(1);
 });
@@ -169,22 +161,20 @@ it('creates dedicated term translations with deterministic field fallback', func
     config()->set('nvl-translatable.locales', ['en', 'bg']);
     config()->set('nvl-translatable.fallback_locales', ['en']);
 
-    $term = app(CreateTermAction::class)->execute(
-        MutateTermPayload::from([
-            'taxonomy' => 'category',
-            'slug' => 'electronics',
-            'translations' => [
-                'en' => [
-                    'name' => 'Electronics',
-                    'description' => 'Devices and equipment',
-                ],
-                'bg' => [
-                    'name' => 'Електроника',
-                    'description' => null,
-                ],
+    $term = app(TaxonomyTerms::class)->create([
+        'taxonomy' => 'category',
+        'slug' => 'electronics',
+        'translations' => [
+            'en' => [
+                'name' => 'Electronics',
+                'description' => 'Devices and equipment',
             ],
-        ]),
-    );
+            'bg' => [
+                'name' => 'Електроника',
+                'description' => null,
+            ],
+        ],
+    ], SystemActor::Background);
 
     expect($term->translations)->toHaveCount(2)
         ->and($term->displayName('bg'))->toBe('Електроника')
@@ -196,46 +186,39 @@ it('patches and replaces translated term copy through explicit update modes', fu
     config()->set('nvl-translatable.locales', ['en', 'bg']);
     config()->set('nvl-translatable.fallback_locales', ['en']);
 
-    $term = app(CreateTermAction::class)->execute(MutateTermPayload::from([
+    $term = app(TaxonomyTerms::class)->create([
         'taxonomy' => 'category',
         'slug' => 'localized-update',
         'translations' => [
             'en' => ['name' => 'English'],
             'bg' => ['name' => 'Български'],
         ],
-    ]));
+    ], SystemActor::Background);
 
-    $patched = app(UpdateTermAction::class)->execute(
-        $term,
-        MutateTermPayload::from([
-            'taxonomy' => 'category',
-            'slug' => 'localized-update',
-            'translations' => [
-                'en' => [
-                    'name' => 'Updated English',
-                    'description' => 'Patched description',
-                ],
+    $patched = app(TaxonomyTerms::class)->update($term, [
+        'taxonomy' => 'category',
+        'slug' => 'localized-update',
+        'translations' => [
+            'en' => [
+                'name' => 'Updated English',
+                'description' => 'Patched description',
             ],
-            'expectedRevision' => $term->revision,
-        ]),
-    );
+        ],
+        'expected_revision' => $term->revision,
+    ], SystemActor::Background);
 
     expect($patched->translations->pluck('locale')->all())
         ->toEqualCanonicalizing(['en', 'bg'])
         ->and($patched->displayName('bg'))->toBe('Български');
 
-    $replaced = app(UpdateTermAction::class)->execute(
-        $patched,
-        MutateTermPayload::from([
-            'taxonomy' => 'category',
-            'slug' => 'localized-update',
-            'translations' => [
-                'en' => ['name' => 'English only'],
-            ],
-            'expectedRevision' => $patched->revision,
-        ]),
-        TranslationSyncMode::Replace,
-    );
+    $replaced = app(TaxonomyTerms::class)->update($patched, [
+        'taxonomy' => 'category',
+        'slug' => 'localized-update',
+        'translations' => [
+            'en' => ['name' => 'English only'],
+        ],
+        'expected_revision' => $patched->revision,
+    ], SystemActor::Background, TranslationSyncMode::Replace);
 
     expect($replaced->translations->pluck('locale')->all())->toBe(['en'])
         ->and($replaced->displayName('en'))->toBe('English only');
@@ -245,22 +228,20 @@ it('stores localized copy only in dedicated translation rows', function () {
     config()->set('nvl-translatable.locales', ['en', 'bg']);
     config()->set('nvl-translatable.fallback_locales', ['en']);
 
-    $term = app(CreateTermAction::class)->execute(
-        MutateTermPayload::from([
-            'taxonomy' => 'category',
-            'slug' => 'deterministic',
-            'translations' => [
-                'bg' => [
-                    'name' => 'Български',
-                    'description' => 'Българско описание',
-                ],
-                'en' => [
-                    'name' => 'English',
-                    'description' => 'English description',
-                ],
+    $term = app(TaxonomyTerms::class)->create([
+        'taxonomy' => 'category',
+        'slug' => 'deterministic',
+        'translations' => [
+            'bg' => [
+                'name' => 'Български',
+                'description' => 'Българско описание',
             ],
-        ]),
-    );
+            'en' => [
+                'name' => 'English',
+                'description' => 'English description',
+            ],
+        ],
+    ], SystemActor::Background);
 
     expect($term->getAttributes())->not->toHaveKeys(['name', 'description'])
         ->and($term->displayName('en'))->toBe('English')
@@ -290,18 +271,16 @@ it('rolls back term creation on the configured taxonomy connection when translat
         $termsMigration->up();
         $translationsMigration->up();
 
-        expect(fn () => app(CreateTermAction::class)->execute(
-            MutateTermPayload::from([
-                'taxonomy' => 'category',
-                'slug' => 'invalid-copy',
-                'translations' => [
-                    'en' => [
-                        'name' => 'Invalid copy',
-                        'undeclared' => 'must fail',
-                    ],
+        expect(fn () => app(TaxonomyTerms::class)->create([
+            'taxonomy' => 'category',
+            'slug' => 'invalid-copy',
+            'translations' => [
+                'en' => [
+                    'name' => 'Invalid copy',
+                    'undeclared' => 'must fail',
                 ],
-            ]),
-        ))->toThrow(InvalidTranslatableFieldException::class)
+            ],
+        ], SystemActor::Background))->toThrow(InvalidTranslatableFieldException::class)
             ->and(Term::query()->count())->toBe(0);
     } finally {
         DB::purge($connection);
@@ -314,7 +293,7 @@ it('uses the request scoped content locale when creating open vocabulary terms',
     app(ContentLocale::class)->set('bg');
 
     $post = Post::create(['title' => 'Localized post']);
-    app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['Новини']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['Новини'], SystemActor::Background);
 
     $tag = $post->tags()->firstOrFail();
 
@@ -324,42 +303,37 @@ it('uses the request scoped content locale when creating open vocabulary terms',
 
 it('uses UUID keys, prevents cycles and stale writes, and exposes a healthy doctor', function () {
     config()->set('nvl-translatable.locales', ['en']);
-    $create = app(CreateTermAction::class);
-    $parent = $create->execute(MutateTermPayload::from([
+    $create = app(TaxonomyTerms::class);
+    $parent = $create->create([
         'taxonomy' => 'category',
         'slug' => 'parent',
         'translations' => ['en' => ['name' => 'Parent']],
-    ]));
-    $child = $create->execute(MutateTermPayload::from([
+    ], SystemActor::Background);
+    $child = $create->create([
         'taxonomy' => 'category',
         'slug' => 'child',
-        'parentId' => $parent->id,
+        'parent_id' => $parent->id,
         'translations' => ['en' => ['name' => 'Child']],
-    ]));
+    ], SystemActor::Background);
     $revision = $parent->revision;
 
     expect($parent->id)->toBeUuid()
         ->and($parent->parent_id)->toBeNull()
-        ->and(fn () => app(MoveTermAction::class)->execute(
-            $parent,
-            $child->id,
-            0,
-            $revision,
-        ))->toThrow(CircularHierarchyException::class);
+        ->and(fn () => app(TaxonomyTerms::class)->move($parent, $child->id, SystemActor::Background, 0, $revision))->toThrow(CircularHierarchyException::class);
 
-    $updated = app(UpdateTermAction::class)->execute($parent, MutateTermPayload::from([
+    $updated = app(TaxonomyTerms::class)->update($parent, [
         'taxonomy' => 'category',
         'slug' => 'parent-updated',
         'translations' => ['en' => ['name' => 'Updated']],
-        'expectedRevision' => $revision,
-    ]));
+        'expected_revision' => $revision,
+    ], SystemActor::Background);
 
-    expect(fn () => app(UpdateTermAction::class)->execute($parent, MutateTermPayload::from([
+    expect(fn () => app(TaxonomyTerms::class)->update($parent, [
         'taxonomy' => 'category',
         'slug' => 'stale',
         'translations' => ['en' => ['name' => 'Stale']],
-        'expectedRevision' => $revision,
-    ])))->toThrow(StaleTermVersionException::class)
+        'expected_revision' => $revision,
+    ], SystemActor::Background))->toThrow(StaleTermVersionException::class)
         ->and($updated->revision)->toBeGreaterThan($revision)
         ->and(collect(app(TaxonomyDoctor::class)->inspect())
             ->reject(static fn ($check): bool => $check->passed)
@@ -370,26 +344,19 @@ it('uses UUID keys, prevents cycles and stale writes, and exposes a healthy doct
 it('synchronizes registered owner attachments and enforces deletion strategies', function () {
     config()->set('nvl-translatable.locales', ['en']);
     $post = Post::create(['title' => 'Attachment owner']);
-    $term = app(CreateTermAction::class)->execute(MutateTermPayload::from([
+    $term = app(TaxonomyTerms::class)->create([
         'taxonomy' => 'tag',
         'slug' => 'laravel',
         'translations' => ['en' => ['name' => 'Laravel']],
-    ]));
+    ], SystemActor::Background);
 
-    app(SyncTermAttachmentsAction::class)->execute($post, 'tag', [$term]);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', [$term], SystemActor::Background);
 
     expect($post->fresh()?->tags)->toHaveCount(1)
         ->and($term->entries(Post::class)->get())->toHaveCount(1)
         ->and($term->entries(Post::class)->first()?->getKey())->toBe($post->getKey())
-        ->and(fn () => app(DeleteTermAction::class)->execute(
-            $term,
-            $term->revision,
-        ))->toThrow(UnsafeTermDeletionException::class)
-        ->and(app(DeleteTermAction::class)->execute(
-            $term,
-            $term->revision,
-            DeleteTermStrategy::Detach,
-        ))->toBeTrue();
+        ->and(fn () => app(TaxonomyTerms::class)->delete($term, $term->revision, SystemActor::Background))->toThrow(UnsafeTermDeletionException::class)
+        ->and(app(TaxonomyTerms::class)->delete($term, $term->revision, SystemActor::Background, DeleteTermStrategy::Detach))->toBeTrue();
 });
 
 it('isolates attachment mutations by owner and vocabulary', function () {
@@ -397,10 +364,10 @@ it('isolates attachment mutations by owner and vocabulary', function () {
     $secondPost = Post::create(['title' => 'Second owner']);
     $category = Category::create(['slug' => 'isolated-category']);
 
-    app(SyncTermAttachmentsAction::class)->execute($firstPost, 'tag', ['shared-tag']);
-    app(SyncTermAttachmentsAction::class)->execute($secondPost, 'tag', ['shared-tag']);
-    app(SyncTermAttachmentsAction::class)->execute($firstPost, 'category', [$category]);
-    app(DetachTermsAction::class)->execute($firstPost, 'tag');
+    app(TaxonomyAssignments::class)->sync($firstPost, 'tag', ['shared-tag'], SystemActor::Background);
+    app(TaxonomyAssignments::class)->sync($secondPost, 'tag', ['shared-tag'], SystemActor::Background);
+    app(TaxonomyAssignments::class)->sync($firstPost, 'category', [$category], SystemActor::Background);
+    app(TaxonomyAssignments::class)->detach($firstPost, 'tag', [], SystemActor::Background);
 
     expect($firstPost->fresh()?->tags)->toHaveCount(0)
         ->and($firstPost->fresh()?->categories)->toHaveCount(1)
@@ -416,12 +383,7 @@ it('reparents children and cascades complete subtrees through explicit delete st
         'parent_id' => $reparentedRoot->id,
     ]);
 
-    expect(app(DeleteTermAction::class)->execute(
-        $reparentedRoot,
-        $reparentedRoot->revision,
-        DeleteTermStrategy::Reparent,
-        $destination->id,
-    ))->toBeTrue()
+    expect(app(TaxonomyTerms::class)->delete($reparentedRoot, $reparentedRoot->revision, SystemActor::Background, DeleteTermStrategy::Reparent, $destination->id))->toBeTrue()
         ->and($reparentedChild->refresh()->parent_id)->toBe($destination->id);
 
     $cascadeRoot = Category::create(['slug' => 'cascade-root']);
@@ -434,13 +396,9 @@ it('reparents children and cascades complete subtrees through explicit delete st
         'parent_id' => $cascadeChild->id,
     ]);
     $post = Post::create(['title' => 'Cascade owner']);
-    app(SyncTermAttachmentsAction::class)->execute($post, 'category', [$cascadeLeaf]);
+    app(TaxonomyAssignments::class)->sync($post, 'category', [$cascadeLeaf], SystemActor::Background);
 
-    expect(app(DeleteTermAction::class)->execute(
-        $cascadeRoot,
-        $cascadeRoot->revision,
-        DeleteTermStrategy::Cascade,
-    ))->toBeTrue()
+    expect(app(TaxonomyTerms::class)->delete($cascadeRoot, $cascadeRoot->revision, SystemActor::Background, DeleteTermStrategy::Cascade))->toBeTrue()
         ->and(Category::query()->whereKey([
             $cascadeRoot->id,
             $cascadeChild->id,
@@ -452,7 +410,7 @@ it('reparents children and cascades complete subtrees through explicit delete st
 
 it('stores stable owner aliases and UUID-backed attachment rows', function () {
     $post = Post::create(['title' => 'Stable owner']);
-    app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['laravel']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
 
     $row = DB::table(config('nvl-taxonomy.table_names.termables', 'termables'))->first();
 
@@ -468,7 +426,7 @@ it('resolves raw attachment relations through custom owner primary keys', functi
         'title' => 'Custom key owner',
     ]);
 
-    app(SyncTermAttachmentsAction::class)->execute($post, 'tag', ['laravel']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
 
     expect($post->tags()->sole()->slug)->toBe('laravel')
         ->and($post->termables()->sole()->termable_id)->toBe('custom-post-1');
@@ -490,29 +448,25 @@ it('rejects multiple exclusive terms without replacing the current attachment', 
     $first = Category::create(['slug' => 'first']);
     $second = Category::create(['slug' => 'second']);
 
-    app(SyncTermAttachmentsAction::class)->execute($post, 'category', [$first]);
+    app(TaxonomyAssignments::class)->sync($post, 'category', [$first], SystemActor::Background);
 
-    expect(fn () => app(SyncTermAttachmentsAction::class)->execute(
-        $post,
-        'category',
-        [$first, $second],
-    ))->toThrow(InvalidArgumentException::class)
+    expect(fn () => app(TaxonomyAssignments::class)->sync($post, 'category', [$first, $second], SystemActor::Background))->toThrow(InvalidArgumentException::class)
         ->and($post->fresh()?->categories()->pluck(TaxonomyTables::get(TaxonomyTables::Terms).'.id')->all())->toBe([$first->id]);
 });
 
 it('requires optimistic revisions for every update', function () {
     config()->set('nvl-translatable.locales', ['en']);
-    $term = app(CreateTermAction::class)->execute(MutateTermPayload::from([
+    $term = app(TaxonomyTerms::class)->create([
         'taxonomy' => 'tag',
         'slug' => 'revisioned',
         'translations' => ['en' => ['name' => 'Revisioned']],
-    ]));
+    ], SystemActor::Background);
 
-    app(UpdateTermAction::class)->execute($term, MutateTermPayload::from([
+    app(TaxonomyTerms::class)->update($term, [
         'taxonomy' => 'tag',
         'slug' => 'revisioned',
         'translations' => ['en' => ['name' => 'Changed']],
-    ]));
+    ], SystemActor::Background);
 })->throws(StaleTermVersionException::class);
 
 it('validates the deepest descendant when moving a subtree', function () {
@@ -522,22 +476,8 @@ it('validates the deepest descendant when moving a subtree', function () {
     $otherRoot = Category::create(['slug' => 'other']);
 
     expect($leaf->ancestors()->pluck('id')->all())->toBe([$middle->id, $root->id])
-        ->and(fn () => app(UpdateTermAction::class)->execute(
-            $middle,
-            new MutateTermPayload(
-                taxonomy: 'category',
-                slug: 'middle',
-                translations: ['en' => ['name' => 'Middle']],
-                parentId: $otherRoot->id,
-                expectedRevision: $middle->revision,
-            ),
-        ))->toThrow(InvalidArgumentException::class)
-        ->and(fn () => app(MoveTermAction::class)->execute(
-            $root,
-            $otherRoot->id,
-            0,
-            $root->revision,
-        ))->toThrow(MaximumDepthExceededException::class);
+        ->and(fn () => app(TaxonomyTerms::class)->update($middle, ['taxonomy' => 'category', 'slug' => 'middle', 'translations' => ['en' => ['name' => 'Middle']], 'parent_id' => $otherRoot->id, 'expected_revision' => $middle->revision], SystemActor::Background))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => app(TaxonomyTerms::class)->move($root, $otherRoot->id, SystemActor::Background, 0, $root->revision))->toThrow(MaximumDepthExceededException::class);
 });
 
 it('requires UUID references when hierarchical slugs are ambiguous', function () {
@@ -546,17 +486,17 @@ it('requires UUID references when hierarchical slugs are ambiguous', function ()
     Category::create(['slug' => 'shared', 'parent_id' => $firstRoot->id]);
     Category::create(['slug' => 'shared', 'parent_id' => $secondRoot->id]);
 
-    app(ResolveTermsAction::class)->execute('category', ['shared']);
+    app(TaxonomyReader::class)->resolve('category', ['shared'], SystemActor::Background);
 })->throws(AmbiguousTermReferenceException::class);
 
 it('normalizes root positions independently for each taxonomy', function () {
     $tag = Tag::create(['slug' => 'tag-root', 'position' => 8]);
     $category = Category::create(['slug' => 'category-root', 'position' => 9]);
 
-    expect(app(RebuildTreeAction::class)->execute(dryRun: true))->toBe(2)
+    expect(app(TaxonomyTerms::class)->rebuild(SystemActor::Background, dryRun: true))->toBe(2)
         ->and($tag->refresh()->position)->toBe(8)
         ->and($category->refresh()->position)->toBe(9)
-        ->and(app(RebuildTreeAction::class)->execute())->toBe(2)
+        ->and(app(TaxonomyTerms::class)->rebuild(SystemActor::Background))->toBe(2)
         ->and($tag->refresh()->position)->toBe(0)
         ->and($category->refresh()->position)->toBe(0);
 });
@@ -576,44 +516,32 @@ it('enforces metadata depth and canonical slug contracts', function () {
     config()->set('nvl-translatable.locales', ['en']);
     config()->set('nvl-taxonomy.limits.metadata_depth', 2);
 
-    expect(fn () => app(CreateTermAction::class)->execute(MutateTermPayload::from([
+    expect(fn () => app(TaxonomyTerms::class)->create([
         'taxonomy' => 'tag',
         'slug' => 'Bad Slug',
         'translations' => ['en' => ['name' => 'Bad']],
-    ])))->toThrow(InvalidArgumentException::class)
-        ->and(fn () => app(CreateTermAction::class)->execute(MutateTermPayload::from([
+    ], SystemActor::Background))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => app(TaxonomyTerms::class)->create([
             'taxonomy' => 'tag',
             'slug' => 'deep',
             'meta' => ['one' => ['two' => ['three' => true]]],
             'translations' => ['en' => ['name' => 'Deep']],
-        ])))->toThrow(InvalidArgumentException::class)
-        ->and(fn () => app(CreateTermAction::class)->execute(new MutateTermPayload(
-            taxonomy: 'tag',
-            slug: 'untranslated',
-            translations: [],
-        )))->toThrow(InvalidArgumentException::class);
+        ], SystemActor::Background))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => app(TaxonomyTerms::class)->create(['taxonomy' => 'tag', 'slug' => 'untranslated', 'translations' => []], SystemActor::Background))->toThrow(InvalidArgumentException::class);
 });
 
 it('checks bulk limits before creating open-vocabulary terms', function () {
     config()->set('nvl-taxonomy.limits.bulk_terms', 1);
     $post = Post::create(['title' => 'Limited']);
 
-    expect(fn () => app(SyncTermAttachmentsAction::class)->execute(
-        $post,
-        'tag',
-        ['one', 'two'],
-    ))->toThrow(InvalidArgumentException::class)
+    expect(fn () => app(TaxonomyAssignments::class)->sync($post, 'tag', ['one', 'two'], SystemActor::Background))->toThrow(InvalidArgumentException::class)
         ->and(Tag::query()->count())->toBe(0);
 });
 
 it('preserves mixed reference order and rejects sibling collisions on moves', function () {
     $post = Post::create(['title' => 'Ordered terms']);
     $existing = Tag::create(['slug' => 'existing']);
-    app(SyncTermAttachmentsAction::class)->execute(
-        $post,
-        'tag',
-        ['created-first', $existing],
-    );
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['created-first', $existing], SystemActor::Background);
 
     $firstRoot = Category::create(['slug' => 'first-root']);
     $secondRoot = Category::create(['slug' => 'second-root']);
@@ -621,12 +549,7 @@ it('preserves mixed reference order and rejects sibling collisions on moves', fu
     $moving = Category::create(['slug' => 'duplicate', 'parent_id' => $secondRoot->id]);
 
     expect($post->tags()->pluck('slug')->all())->toBe(['created-first', 'existing'])
-        ->and(fn () => app(MoveTermAction::class)->execute(
-            $moving,
-            $firstRoot->id,
-            0,
-            $moving->revision,
-        ))->toThrow(DuplicateSiblingSlugException::class);
+        ->and(fn () => app(TaxonomyTerms::class)->move($moving, $firstRoot->id, SystemActor::Background, 0, $moving->revision))->toThrow(DuplicateSiblingSlugException::class);
 });
 
 it('supports generic trees, no-op unknown detaches, and merge invariants', function () {
@@ -634,16 +557,11 @@ it('supports generic trees, no-op unknown detaches, and merge invariants', funct
     $source = Category::create(['slug' => 'source']);
     $destination = Category::create(['slug' => 'destination']);
     $child = Category::create(['slug' => 'child', 'parent_id' => $source->id]);
-    app(SyncTermAttachmentsAction::class)->execute($post, 'category', [$source]);
+    app(TaxonomyAssignments::class)->sync($post, 'category', [$source], SystemActor::Background);
 
-    expect(app(DetachTermsAction::class)->execute($post, 'category', ['unknown']))->toBe(0);
+    expect(app(TaxonomyAssignments::class)->detach($post, 'category', ['unknown'], SystemActor::Background))->toBe(0);
 
-    $merged = app(MergeTermsAction::class)->execute(
-        $source,
-        $destination,
-        $source->revision,
-        $destination->revision,
-    );
+    $merged = app(TaxonomyTerms::class)->merge($source, $destination, SystemActor::Background, $source->revision, $destination->revision);
     $tree = app(TaxonomyTree::class)->for('category');
 
     expect($post->fresh()?->categories()->first()?->id)->toBe($destination->id)
@@ -655,12 +573,12 @@ it('supports generic trees, no-op unknown detaches, and merge invariants', funct
 
 it('loads localized trees without per-node translation queries', function () {
     config()->set('nvl-translatable.locales', ['en']);
-    $create = app(CreateTermAction::class);
-    $root = $create->execute(MutateTermPayload::from([
+    $create = app(TaxonomyTerms::class);
+    $root = $create->create([
         'taxonomy' => 'category',
         'slug' => 'query-root',
         'translations' => ['en' => ['name' => 'Query root']],
-    ]));
+    ], SystemActor::Background);
     $measure = static function (): array {
         DB::flushQueryLog();
         DB::enableQueryLog();
@@ -684,12 +602,12 @@ it('loads localized trees without per-node translation queries', function () {
     [$singleQueryCount] = $measure();
 
     foreach (range(1, 24) as $index) {
-        $create->execute(MutateTermPayload::from([
+        $create->create([
             'taxonomy' => 'category',
             'slug' => "query-child-{$index}",
-            'parentId' => $root->id,
+            'parent_id' => $root->id,
             'translations' => ['en' => ['name' => "Query child {$index}"]],
-        ]));
+        ], SystemActor::Background);
     }
 
     [$populatedQueryCount, $names] = $measure();
@@ -708,11 +626,11 @@ it('discards term events when an outer transaction rolls back', function () {
     $connection->beginTransaction();
 
     try {
-        app(CreateTermAction::class)->execute(MutateTermPayload::from([
+        app(TaxonomyTerms::class)->create([
             'taxonomy' => 'tag',
             'slug' => 'rolled-back-event',
             'translations' => ['en' => ['name' => 'Rolled back']],
-        ]));
+        ], SystemActor::Background);
 
         Event::assertNotDispatched(TermChanged::class);
         $connection->rollBack();
@@ -730,11 +648,11 @@ it('emits one committed event with the resulting term revision', function () {
     config()->set('nvl-translatable.locales', ['en']);
     Event::fake([TermChanged::class]);
 
-    $term = app(CreateTermAction::class)->execute(MutateTermPayload::from([
+    $term = app(TaxonomyTerms::class)->create([
         'taxonomy' => 'tag',
         'slug' => 'committed-event',
         'translations' => ['en' => ['name' => 'Committed']],
-    ]));
+    ], SystemActor::Background);
 
     Event::assertDispatched(
         TermChanged::class,
@@ -755,11 +673,7 @@ it('does not swallow non-unique database failures while creating open terms', fu
     $post = Post::create(['title' => 'Failed open term']);
 
     try {
-        expect(fn () => app(SyncTermAttachmentsAction::class)->execute(
-            $post,
-            'tag',
-            ['must-rollback'],
-        ))->toThrow(QueryException::class)
+        expect(fn () => app(TaxonomyAssignments::class)->sync($post, 'tag', ['must-rollback'], SystemActor::Background))->toThrow(QueryException::class)
             ->and(Tag::query()->where('slug', 'must-rollback')->exists())->toBeFalse()
             ->and(DB::table(TaxonomyTables::Termables)->count())->toBe(0);
     } finally {
@@ -772,21 +686,13 @@ it('rejects stale term and owner instances before writing attachments', function
     $staleTerm = Tag::create(['slug' => 'stale-term']);
     Tag::query()->whereKey($staleTerm->id)->delete();
 
-    expect(fn () => app(SyncTermAttachmentsAction::class)->execute(
-        $post,
-        'tag',
-        [$staleTerm],
-    ))->toThrow(InvalidArgumentException::class)
+    expect(fn () => app(TaxonomyAssignments::class)->sync($post, 'tag', [$staleTerm], SystemActor::Background))->toThrow(InvalidArgumentException::class)
         ->and(DB::table(TaxonomyTables::Termables)->count())->toBe(0);
 
     $staleOwner = Post::create(['title' => 'Stale owner']);
     Post::query()->whereKey($staleOwner->getKey())->delete();
 
-    expect(fn () => app(SyncTermAttachmentsAction::class)->execute(
-        $staleOwner,
-        'tag',
-        ['must-not-exist'],
-    ))->toThrow(InvalidArgumentException::class)
+    expect(fn () => app(TaxonomyAssignments::class)->sync($staleOwner, 'tag', ['must-not-exist'], SystemActor::Background))->toThrow(InvalidArgumentException::class)
         ->and(Tag::query()->where('slug', 'must-not-exist')->exists())->toBeFalse();
 });
 
@@ -818,16 +724,12 @@ it('reserves UUID syntax for identifiers and bounds translation descriptions', f
     config()->set('nvl-translatable.locales', ['en']);
     config()->set('nvl-taxonomy.limits.description_chars', 3);
 
-    expect(fn () => app(CreateTermAction::class)->execute(MutateTermPayload::from([
+    expect(fn () => app(TaxonomyTerms::class)->create([
         'taxonomy' => 'tag',
         'slug' => 'c59c7d68-2b00-45b5-b926-66ba5157e830',
         'translations' => ['en' => ['name' => 'Reserved']],
-    ])))->toThrow(InvalidArgumentException::class)
-        ->and(fn () => app(CreateTermAction::class)->execute(new MutateTermPayload(
-            taxonomy: 'tag',
-            slug: 'bounded-description',
-            translations: ['en' => ['name' => 'Bounded', 'description' => 'four']],
-        )))->toThrow(InvalidArgumentException::class);
+    ], SystemActor::Background))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => app(TaxonomyTerms::class)->create(['taxonomy' => 'tag', 'slug' => 'bounded-description', 'translations' => ['en' => ['name' => 'Bounded', 'description' => 'four']]], SystemActor::Background))->toThrow(InvalidArgumentException::class);
 });
 
 it('validates multi-child merge hierarchy in a constant number of term reads', function () {
@@ -847,12 +749,7 @@ it('validates multi-child merge hierarchy in a constant number of term reads', f
         DB::connection()->getQueryGrammar()->wrapTable(TaxonomyTables::get(TaxonomyTables::Terms)),
     );
 
-    app(ValidateTermMergeAction::class)->execute(
-        $source,
-        $destination,
-        $source->revision,
-        $destination->revision,
-    );
+    app(TaxonomyTerms::class)->validateMerge($source, $destination, SystemActor::Background, $source->revision, $destination->revision);
 
     $termReads = collect(DB::getQueryLog())
         ->filter(static fn (array $query): bool => str_contains(
@@ -868,12 +765,7 @@ it('validates multi-child merge hierarchy in a constant number of term reads', f
 it('rejects negative move positions and invalid doctor formats', function () {
     $term = Category::create(['slug' => 'positioned']);
 
-    expect(fn () => app(MoveTermAction::class)->execute(
-        $term,
-        null,
-        -1,
-        $term->revision,
-    ))->toThrow(InvalidArgumentException::class);
+    expect(fn () => app(TaxonomyTerms::class)->move($term, null, SystemActor::Background, -1, $term->revision))->toThrow(InvalidArgumentException::class);
 
     $this->artisan('nvl:taxonomy:doctor', ['--format' => 'yaml'])
         ->expectsOutput('The taxonomy doctor format must be [text] or [json].')
@@ -884,12 +776,7 @@ it('preserves configured term subclasses across hierarchy relations', function (
     $parent = Category::create(['slug' => 'typed-parent']);
     $child = Category::create(['slug' => 'typed-child', 'parent_id' => $parent->id]);
     $descendant = $parent->descendants()->first();
-    $moved = app(MoveTermAction::class)->execute(
-        $child,
-        null,
-        0,
-        $child->revision,
-    );
+    $moved = app(TaxonomyTerms::class)->move($child, null, SystemActor::Background, 0, $child->revision);
 
     expect($child->parent)->toBeInstanceOf(Category::class)
         ->and($descendant)->toBeInstanceOf(Category::class)
@@ -922,52 +809,38 @@ it('keeps move merge delete and attachments on the configured connection', funct
             (require __DIR__.'/../database/migrations/'.$migration)->up();
         }
 
-        $create = app(CreateTermAction::class);
-        $firstRoot = $create->execute(MutateTermPayload::from([
+        $create = app(TaxonomyTerms::class);
+        $firstRoot = $create->create([
             'taxonomy' => 'category',
             'slug' => 'first-root',
             'translations' => ['en' => ['name' => 'First root']],
-        ]));
-        $secondRoot = $create->execute(MutateTermPayload::from([
+        ], SystemActor::Background);
+        $secondRoot = $create->create([
             'taxonomy' => 'category',
             'slug' => 'second-root',
             'translations' => ['en' => ['name' => 'Second root']],
-        ]));
-        $child = $create->execute(MutateTermPayload::from([
+        ], SystemActor::Background);
+        $child = $create->create([
             'taxonomy' => 'category',
             'slug' => 'child',
-            'parentId' => $firstRoot->id,
+            'parent_id' => $firstRoot->id,
             'translations' => ['en' => ['name' => 'Child']],
-        ]));
-        $moved = app(MoveTermAction::class)->execute(
-            $child,
-            $secondRoot->id,
-            0,
-            $child->revision,
-        );
-        $source = $create->execute(MutateTermPayload::from([
+        ], SystemActor::Background);
+        $moved = app(TaxonomyTerms::class)->move($child, $secondRoot->id, SystemActor::Background, 0, $child->revision);
+        $source = $create->create([
             'taxonomy' => 'tag',
             'slug' => 'source',
             'translations' => ['en' => ['name' => 'Source']],
-        ]));
-        $destination = $create->execute(MutateTermPayload::from([
+        ], SystemActor::Background);
+        $destination = $create->create([
             'taxonomy' => 'tag',
             'slug' => 'destination',
             'translations' => ['en' => ['name' => 'Destination']],
-        ]));
+        ], SystemActor::Background);
         $post = Post::create(['title' => 'Cross-connection owner']);
-        app(SyncTermAttachmentsAction::class)->execute($post, 'tag', [$source]);
-        app(MergeTermsAction::class)->execute(
-            $source,
-            $destination,
-            $source->revision,
-            $destination->revision,
-        );
-        app(DeleteTermAction::class)->execute(
-            $moved,
-            $moved->revision,
-            DeleteTermStrategy::Restrict,
-        );
+        app(TaxonomyAssignments::class)->sync($post, 'tag', [$source], SystemActor::Background);
+        app(TaxonomyTerms::class)->merge($source, $destination, SystemActor::Background, $source->revision, $destination->revision);
+        app(TaxonomyTerms::class)->delete($moved, $moved->revision, SystemActor::Background, DeleteTermStrategy::Restrict);
 
         expect($moved->getConnectionName())->toBe($connection)
             ->and(DB::connection($connection)->table(TaxonomyTables::get(TaxonomyTables::Terms))->where('id', $child->id)->exists())->toBeFalse()

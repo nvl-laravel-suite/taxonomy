@@ -4,154 +4,69 @@ declare(strict_types=1);
 
 use Illuminate\Config\Repository;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Filesystem\FilesystemServiceProvider;
 use Illuminate\Foundation\Application;
-use Nvl\Taxonomy\Actions\AttachTermsAction;
-use Nvl\Taxonomy\Actions\CreateTermAction;
-use Nvl\Taxonomy\Actions\DeleteTermAction;
-use Nvl\Taxonomy\Actions\DetachTermsAction;
-use Nvl\Taxonomy\Actions\ListOwnerTaxonomyTermsAction;
-use Nvl\Taxonomy\Actions\MergeTermsAction;
-use Nvl\Taxonomy\Actions\MoveTermAction;
-use Nvl\Taxonomy\Actions\SyncTermAttachmentsAction;
-use Nvl\Taxonomy\Actions\UpdateTermAction;
-use Nvl\Taxonomy\Contracts\AttachTermsContract;
-use Nvl\Taxonomy\Contracts\CreateTermContract;
-use Nvl\Taxonomy\Contracts\DeleteTermContract;
-use Nvl\Taxonomy\Contracts\DetachTermsContract;
-use Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract;
-use Nvl\Taxonomy\Contracts\MergeTermsContract;
-use Nvl\Taxonomy\Contracts\MoveTermContract;
-use Nvl\Taxonomy\Contracts\SyncTermAttachmentsContract;
-use Nvl\Taxonomy\Contracts\TaxonomyTreeContract;
-use Nvl\Taxonomy\Contracts\TermResolverContract;
-use Nvl\Taxonomy\Contracts\UpdateTermContract;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
-use Nvl\Taxonomy\Services\TaxonomyTree;
-use Nvl\Taxonomy\Services\TermResolver;
+use Nvl\Taxonomy\Services\TaxonomyAssignments;
+use Nvl\Taxonomy\Services\TaxonomyReader;
+use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Tests\TestCase;
 
 uses(TestCase::class);
 
-/** @return list<array{class-string, class-string}> */
-function nvlConsumerBindingsForTaxonomy(): array
+/** @return array<class-string, list<string>> */
+function nvlNativeTaxonomyServices(): array
 {
     return [
-        [AttachTermsContract::class, AttachTermsAction::class],
-        [CreateTermContract::class, CreateTermAction::class],
-        [DeleteTermContract::class, DeleteTermAction::class],
-        [DetachTermsContract::class, DetachTermsAction::class],
-        [ListOwnerTaxonomyTermsContract::class, ListOwnerTaxonomyTermsAction::class],
-        [MergeTermsContract::class, MergeTermsAction::class],
-        [MoveTermContract::class, MoveTermAction::class],
-        [SyncTermAttachmentsContract::class, SyncTermAttachmentsAction::class],
-        [TaxonomyTreeContract::class, TaxonomyTree::class],
-        [TermResolverContract::class, TermResolver::class],
-        [UpdateTermContract::class, UpdateTermAction::class],
+        TaxonomyTerms::class => ['create', 'update', 'delete', 'move', 'merge', 'rebuild'],
+        TaxonomyAssignments::class => ['attach', 'detach', 'sync'],
+        TaxonomyReader::class => ['resolve', 'forOwners', 'tree', 'term'],
     ];
 }
 
-test('published workflow contracts retain native signatures attributes and generic documentation', function (): void {
-    $genericDocumentation = static function (string|false $documentation): array {
-        if ($documentation === false) {
-            return [];
+test('published native workflows have explicit actor inputs and typed results', function (): void {
+    foreach (nvlNativeTaxonomyServices() as $service => $operations) {
+        $class = new ReflectionClass($service);
+        expect($class->isFinal())->toBeTrue();
+        foreach ($operations as $operation) {
+            $method = $class->getMethod($operation);
+            $actors = array_values(array_filter($method->getParameters(), static fn (ReflectionParameter $parameter): bool => $parameter->getName() === 'actor'));
+            expect($method->isPublic())->toBeTrue()
+                ->and($method->isStatic())->toBeFalse()
+                ->and($method->hasReturnType())->toBeTrue()
+                ->and($actors)->toHaveCount(1)
+                ->and((string) $actors[0]->getType())->toBe(Authenticatable::class.'|'.SystemActor::class);
         }
-        preg_match_all('/@param\s+([^\r\n]+?)\s+(\$[A-Za-z_][A-Za-z0-9_]*)\b/', $documentation, $parameters, PREG_SET_ORDER);
-        $result = [];
-        foreach ($parameters as $parameter) {
-            $type = preg_replace('/\s+/', '', $parameter[1]);
-            if (str_contains($type, '<') || str_contains($type, '{') || str_contains($type, '[]')) {
-                $result['@param'.$parameter[2]] = $type;
-            }
-        }
-        if (preg_match('/@return\s+([^\r\n]+)/', $documentation, $return) === 1) {
-            $type = '';
-            $depth = 0;
-            foreach (str_split($return[1]) as $character) {
-                if (preg_match('/\s/', $character) === 1 && $depth === 0) {
-                    break;
-                }
-                if (str_contains('<{([', $character)) {
-                    $depth++;
-                } elseif (str_contains('>})]', $character)) {
-                    $depth--;
-                }
-                if (preg_match('/\s/', $character) !== 1) {
-                    $type .= $character;
-                }
-            }
-            if (str_contains($type, '<') || str_contains($type, '{') || str_contains($type, '[]')) {
-                $result['@return'] = $type;
-            }
-        }
+    }
+    expect((string) (new ReflectionMethod(TaxonomyReader::class, 'forOwners'))->getReturnType())->toBe('array');
+});
 
-        return $result;
-    };
-
-    foreach (nvlConsumerBindingsForTaxonomy() as [$contract, $implementation]) {
-        $interface = new ReflectionClass($contract);
-        $concrete = new ReflectionClass($implementation);
-        expect($interface->isInterface())->toBeTrue()
-            ->and($concrete->implementsInterface($contract))->toBeTrue();
-        foreach ($interface->getMethods() as $method) {
-            $native = $concrete->getMethod($method->getName());
-            $return = (string) $method->getReturnType();
-
-            $publishedTypes = $genericDocumentation($method->getDocComment());
-            foreach ($genericDocumentation($native->getDocComment()) as $tag => $type) {
-                expect($publishedTypes[$tag] ?? null)->toBe($type);
-            }
-
-            expect($native->isPublic())->toBeTrue()
-                ->and($native->isStatic())->toBeFalse()
-                ->and(count($method->getParameters()))->toBe(count($native->getParameters()));
-            if ($return !== 'self') {
-                expect((string) $native->getReturnType())->toBe($return);
-            } else {
-                $nativeReturn = (string) $native->getReturnType();
-                expect(is_a(in_array($nativeReturn, ['self', 'static'], true) ? $native->getDeclaringClass()->getName() : $nativeReturn, $contract, true))->toBeTrue();
-            }
-            foreach ($method->getParameters() as $position => $parameter) {
-                $actual = $native->getParameters()[$position];
-                expect($actual->getName())->toBe($parameter->getName())
-                    ->and((string) $actual->getType())->toBe((string) $parameter->getType())
-                    ->and($actual->isVariadic())->toBe($parameter->isVariadic())
-                    ->and($actual->isPassedByReference())->toBe($parameter->isPassedByReference())
-                    ->and($actual->isDefaultValueAvailable())->toBe($parameter->isDefaultValueAvailable())
-                    ->and(array_map(static fn (ReflectionAttribute $attribute): array => [$attribute->getName(), $attribute->getArguments()], $actual->getAttributes()))
-                    ->toBe(array_map(static fn (ReflectionAttribute $attribute): array => [$attribute->getName(), $attribute->getArguments()], $parameter->getAttributes()));
-                if ($parameter->isDefaultValueAvailable()) {
-                    expect($actual->getDefaultValue())->toEqual($parameter->getDefaultValue());
-                }
-            }
-        }
+test('native provider resolves each workflow and permits late host substitutes', function (): void {
+    foreach (array_keys(nvlNativeTaxonomyServices()) as $service) {
+        $original = $this->app->make($service);
+        expect($original)->toBeInstanceOf($service);
+        $host = clone $original;
+        $this->app->instance($service, $host);
+        expect($this->app->make($service))->toBe($host);
     }
 });
 
-test('native provider defaults resolve each workflow while preserving late host substitutes', function (): void {
-    foreach (nvlConsumerBindingsForTaxonomy() as [$contract, $implementation]) {
-        expect($this->app->bound($contract))->toBeTrue()
-            ->and($this->app->make($contract))->toBeInstanceOf($implementation);
-        $host = Mockery::mock($contract);
-        $this->app->instance($contract, $host);
-        expect($this->app->make($contract))->toBe($host);
-    }
-});
-
-test('provider registration preserves early interface bindings in a second native application', function (): void {
+test('provider registration preserves early native service instances in another application', function (): void {
     $consumer = new Application($this->app->basePath());
     $consumer->instance('config', new Repository($this->app->make('config')->all()));
     $consumer->instance('env', 'testing');
     $consumer->register(FilesystemServiceProvider::class);
     $hosts = [];
-    foreach (nvlConsumerBindingsForTaxonomy() as [$contract]) {
-        $hosts[$contract] = Mockery::mock($contract);
-        $consumer->instance($contract, $hosts[$contract]);
+    foreach (array_keys(nvlNativeTaxonomyServices()) as $service) {
+        $hosts[$service] = $this->app->make($service);
+        $consumer->instance($service, $hosts[$service]);
     }
     try {
         $consumer->register(TaxonomyServiceProvider::class);
-        foreach ($hosts as $contract => $host) {
-            expect($consumer->make($contract))->toBe($host);
+        foreach ($hosts as $service => $host) {
+            expect($consumer->make($service))->toBe($host);
         }
     } finally {
         Container::setInstance($this->app);

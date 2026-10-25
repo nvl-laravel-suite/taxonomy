@@ -6,7 +6,8 @@ namespace Nvl\Taxonomy\Tests;
 
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Nvl\Data\Providers\DataServiceProvider;
+use Illuminate\Support\Facades\Gate;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Taxonomy\Models\Category;
@@ -15,7 +16,6 @@ use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
-use Nvl\Tenancy\Providers\TenancyServiceProvider;
 use Nvl\Translatable\Providers\TranslatableServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -30,6 +30,9 @@ abstract class TestCase extends Orchestra
     protected function setUp(): void
     {
         parent::setUp();
+        foreach (['create', 'update', 'delete', 'move', 'merge', 'rebuild', 'assign', 'resolve', 'read'] as $ability) {
+            Gate::define('taxonomy.'.$ability, static fn (mixed $actor): bool => $actor === SystemActor::Background);
+        }
         $driver = getenv('NVL_C1_TEST_DRIVER');
         if (is_string($driver) && $driver !== '') {
             $this->assertSame($driver, (new Term)->getConnection()->getDriverName());
@@ -46,9 +49,7 @@ abstract class TestCase extends Orchestra
     {
         return [
             LocaleServiceProvider::class,
-            DataServiceProvider::class,
             SupportServiceProvider::class,
-            ...(class_exists(TenancyServiceProvider::class) ? [TenancyServiceProvider::class] : []),
             TranslatableServiceProvider::class,
             TaxonomyServiceProvider::class,
         ];

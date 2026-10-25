@@ -1,147 +1,30 @@
 ---
 name: nvl-taxonomy
-description: Implement, integrate, test, or review nvl/taxonomy in Laravel 13. Use for registered vocabularies, UUID hierarchical terms, localized names and descriptions, owner attachment, moves, merges, pruning, cycle prevention, tree loading, metadata schemas, or taxonomy diagnostics.
+description: Implement, integrate, test, or review nvl/taxonomy in Laravel 13. Use for registered vocabularies, hierarchical terms, localized names, owner assignments, moves, merges, tree reads, and diagnostics.
 ---
 
 # NVL Taxonomy
 
-For major 6, use native Ownership for new isolated integrations and the installed
-Ownership README/UPGRADING runbook for configured subclasses and reviewed adoption.
-Ordinary unowned hosts keep unscoped declarations; installation does not enable
-isolation. Tenant-specific APIs below apply only to the explicitly selected
-deprecated Tenancy bridge; they never substitute for native owner admission.
+Use the native Light services with an explicit persisted `Authenticatable` or `SystemActor::Background`. A model actor is reloaded and authorized through the `taxonomy.<ability>` Gate policy. The background actor is an explicit maintenance principal; never turn `null` into it.
 
-Treat vocabulary, parent, slug, order, metadata, and attachments as structural data. Store name and description only in dedicated translation rows.
+## Structural terms
 
-## Register and mutate
+- Register vocabulary rules through `TaxonomyRegistry` and owner capabilities through `TaxonomyOwnerRegistry`.
+- Use `TaxonomyTerms::create(array $attributes, $actor)` and `update(Term|string $term, array $attributes, $actor, TranslationSyncMode $mode)` for canonical slugs, parent, position, metadata, and locale keyed `translations`.
+- Use `TaxonomyTerms::move`, `merge`, `delete`, `rebuild`, and `validateMerge` for complete tree operations. Update, move, delete, and merge require expected revisions. A move validates cycles, depth, vocabulary, and ownership while holding locks.
+- Names and descriptions live only in `term_translations`; slugs remain canonical and locale independent. Use `TranslationSyncMode::Replace` only for an explicit retained locale map.
+- `DeleteTermStrategy` determines handling of children and attachments. Restrict is the default.
 
-- Register vocabulary rules through `TaxonomyRegistry`.
-- Register stable owner aliases through `TaxonomyOwnerRegistry`.
-- Use `CreateTermAction` and `UpdateTermAction` with `MutateTermPayload`.
-- Use `MoveTermAction`, `MergeTermsAction`, and `DeleteTermAction` for hierarchy changes.
-- Require expected revisions for updates, moves, deletes, and both sides of merges.
-- Pass a `DeleteTermStrategy` explicitly when a delete must handle attachments or children.
-- Keep canonical slugs locale-independent.
-- Terms declare `TranslationMutationPolicy::OwningServiceOnly`. Central
-  translation gathering, coverage, and reads are available; generic central
-  sync and locale deletion reject term mutations. Write `translations` through
-  `CreateTermAction` or `UpdateTermAction` with `MutateTermPayload`. To remove
-  locales, pass `mode: TranslationSyncMode::Replace` to
-  `UpdateTermAction::execute()` with the retained locale map and the expected
-  term revision in the payload.
-- Consumer applications authorize domain Actions before accepting user input.
+## Assignments and reads
 
-## Attach and query
+- Use `TaxonomyAssignments::attach`, `detach`, or `sync` on persisted registered owners; all operations retain the owner lock and transaction. `sync` is all or nothing and preserves supplied order.
+- Use `TaxonomyReader::resolve` for ordered references and creation of missing roots only in registered open vocabularies. UUID inputs identify existing terms; ambiguous slugs are rejected.
+- Use `TaxonomyReader::forOwners` with at most 100 owners and 20 vocabularies. It returns `['owners' => stdClass, 'order' => list]`; each requested owner and vocabulary has an explicit list of preloaded native `Term` models, including empty lists. The attached order is available as `pivot_position`.
+- For tree reads use `TaxonomyReader::tree` with a bound up to 500 terms. The registered vocabulary and native model scopes apply before loading.
+- Preserve the correlated owner filter policy (`TaxonomyBatchAuthorization`) and native ownership predicates. Never read a private term or another owner's attachment through a loose OR or unscoped relation.
 
-- For many-owner display reads, resolve `Nvl\Taxonomy\Contracts\ListOwnerTaxonomyTermsContract` and pass at most 100 persisted owners, 20 registered vocabularies, and an optional locale. Consume its DTO maps without package-model or lazy relationship queries.
-- Keep native morph class/string owner key pairs exact; capability labels are registry references. Preserve explicit empty vocabulary lists, JSON objects at both owner levels, first-request order, structural slugs, and pivot positions.
-- Bind `Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization` for private reads. Its loaded-owner authorization and three SQL methods are query-free; complete host-owner/attachment/term visibility belongs in its correlated host method. Every policy method is nested independently inside mandatory package predicates. Never loop single-owner actions or resolve terms through a creating mutation path.
-- Rank authorized attachments before any term/translation payload load. Probe at 101 terms per owner/vocabulary, reject overflow, and keep successful groups at 100. The total probe/payload ceilings are 202,000/200,000; split term and translation ID loads by vocabulary, at most 10,000 IDs per vocabulary.
-- Resolve localized DTO copy from preloaded rows with the pure translation resolver; use the finite validated locale chain and preserve intentional empty values. Ordinary translated/display getters can reload ownership and cause N+1 queries.
-- Reuse the audited any/all/without/category scopes with an optional compatible SQL policy. Preserve selected columns and caller predicates, validate actual builder connection/FROM/unions, group caller WHERE predicates and only their WHERE bindings before live/tenant guards, and restore native/custom soft-delete columns when host scopes were removed.
-- Reject nonempty host term filters and category filters before SQL when the canonical owner table basename matches the requested vocabulary's registered term-model table or the attachment table, without case sensitivity. Compare actual configured physical tables, including schema-qualified names. Use the bounded owner reader for display of those owners; preserve empty-reference host semantics.
-- Preserve Any-empty false and All/Without-empty unchanged within the admitted host set. UUID and slug references may identify the same term; All must not equate distinct-term count with reference count. Reload category roots through the registered visible model and traverse bounded visible child sets, never the whole vocabulary.
-- Verify total warm query counts at 1/25/100 owners: 4 for one populated vocabulary and 6 for two; disabled cold adds one installation-state probe with the inert Tenancy library. Each extra owner class adds one reload; a custom registered term model keeps the per-vocabulary budget. Native runs must assert the actual driver before collecting SQL evidence.
+## Ownership and maintenance
 
-- Use `AttachTermsAction`, `DetachTermsAction`, or `SyncTermAttachmentsAction`.
-- Never mutate the polymorphic attachment table directly.
-- Register every concrete owner class with a stable alias before models boot; attachment rows persist morph aliases and UUID row keys.
-- In tenant mode, also register every owner with `TenantResourceRegistry`, use
-  canonical `Term` vocabulary models, and adopt the `taxonomy` package before
-  traffic. Vocabulary aliases stay global; persisted trees are always local.
-- Never trust passed or loaded terms and owners. Reload them through the active
-  boundary, and preserve tenant predicates in OR and NOT EXISTS scopes.
-- Use a shared lock-capable cache store when attachment mutations can run on multiple nodes.
-- Use term UUIDs when a hierarchical slug is ambiguous.
-- Reserve UUID-shaped strings for term identifiers; do not use them as canonical slugs.
-- Reject cycles, depth overflow, cross-vocabulary parents, invalid metadata, duplicate sibling slugs, and unsafe deletes.
-- Load generic ordered trees through `TaxonomyTree`.
-
-## Operate and verify
-
-- Keep tenancy opt-in, vocabulary declarations global, and every term,
-  translation, hierarchy edge, and owner attachment tenant-local.
-- Adopt configured tables and connections through the package adapter; never
-  create a generic tenancy pivot or infer an unknown owner partition.
-- Resume only source/schema repairs consistent with the immutable reviewed
-  mapping. Changed split/destination mappings require restore/new prepare.
-
-- Run `nvl:taxonomy:doctor --strict --format=json`.
-- Preview maintenance with `nvl:taxonomy:rebuild`, `nvl:taxonomy:merge`, and `nvl:taxonomy:prune` dry-run options.
-- Supply `--tenant=<uuid>` to every maintenance command when tenancy is enabled.
-- Default pruning to open vocabularies; require `--include-closed` before removing canonical closed-vocabulary terms.
-- Test UUID identifiers, stable aliases, locale fallback, subtree moves, cycles, merges, exclusive attachments, delete policies, configured connections, and legacy adoption.
-
-## Ownership isolation and release discipline
-
-- Keep unowned applications independent of the enforcement runtime; native ownership never adds an undeclared Auth or Suite dependency. Tenancy-specific APIs are deprecated bridge compatibility.
-- Use registered package-owned resources, adoption adapters, Actions, and lifecycle APIs. Never add a generic owner delete-all path or raw cross-package cleanup.
-- Treat mapping/configuration hashes, interruption checkpoints, conservation evidence, worker context, owner-partitioned queries, and standalone consumption as release contracts.
-
-## Shared owner identities
-
-- Declare owner class lists in `nvl-core.owners` and reference model classes in `taxonomy` capability configuration. Laravel `getMorphClass()` supplies the host-authored stored identity; declarations do not add global host morph mappings.
-- The shared alias must match the Taxonomy owner identity. Registering an identity does not expand vocabulary allowed_owners or authorize term mutations.
-- Keep the package allowlist and authorization independent of Core registration. Never authorize a model merely because Core knows it.
-- Preserve resolvers, handlers and authorization. Legacy aliases require agreement with native `getMorphClass()` and remain deprecated in major 6; Doctor reports mismatches and stored identity drift without conversion.
-- If the host changes its morph map, explicitly reconcile reviewed package-owned columns and affected host relations before cutover. Core and package capability registration never mutate the host morph map or rewrite stored values.
-
-## Shared consumer diagnostics
-
-Run `php artisan nvl:doctor --strict --format=json` to combine checks from loaded NVL providers. Retain the package Doctor command for its detailed report; both paths reuse the package-owned inspection service.
-
-
-## Shared infrastructure options
-
-- Attachment actions and maintenance commands must use `nvl-taxonomy.locks.store`, then Core, then `cache.default`. Preserve attachment lifetime/wait bounds and existing command lock durations; production nodes need a shared lock-capable store.
-
-### Brownfield storage identities
-
-Resolve all package tables through the table helper and canonical `nvl-taxonomy.tables.*`, connections through `nvl-taxonomy.connection` with Core/Laravel inheritance. Defaults use `nvl_taxonomy_*`; migration filenames include that package slug. Never silently adopt a matching table or generic migration filename. Run shared `nvl:doctor --strict --format=json` and the explicit `nvl:schema:upgrade --package=taxonomy --claim-legacy --dry-run --format=json` before upgrading owned legacy storage. Validate the complete plan and choose one migration owner. Preserve host records, constraint names and stored morph values. Deprecated config inputs last one major; canonical options take precedence.
-
-## Cache and lock ownership
-
-Attachment locks use `nvl:taxonomy:attachments:` instead of the generic `attachments:` key. Rebuild and prune locks use `nvl:taxonomy:rebuild:` and `nvl:taxonomy:prune:` outside tenant identities. Existing generic host locks are never acquired or removed.
-
-Drain old mutation workers and maintenance processes, then wait for their outstanding lock leases to end before starting the new major across all nodes. Running old and new lock prefixes concurrently would create independent serialization domains. Restart workers after cutover; preserve host-selected stores and keys, and do not flush a shared cache to remove old NVL entries.
-
-## Canonical configuration ownership
-
-- Read/write `nvl-taxonomy` configuration and publish only canonical `nvl-<package>-<resource>` tags. Keep logical package/tenant resource identifiers unchanged.
-- Generic config roots and unprefixed package environment names are foreign by default. For an upgrading NVL host only, select `nvl-core.compatibility.legacy_config` package IDs and `legacy_env` explicitly; both default off. Canonical presence wins, including false/null/empty values. Legacy inputs are read without writing back and remain deprecated in major 6.
-- Use canonical `NVL_<PACKAGE>_*` variables only in config evaluation, then rebuild configuration caches and restart workers after cutover. Shared Laravel environment variables retain their names. Consult Core's versioned `support/resources/global-names.json` for all renames.
-- Old global aliases and legacy route families require separate explicit `global_aliases`/`legacy_routes` package selections. Preserve collisions and use Doctor diagnostics; never grant generic permissions automatically or claim signed-link compatibility without the same authorization/signature checks.
-
-## Compose host workflows through contracts
-
-- Inject focused `Nvl\Taxonomy\Contracts\*Contract` interfaces for the 9 selected public Actions listed in the README; reuse existing equivalent contracts. Preserve the exact native `execute` parameters/defaults and DTO/model/vendor results.
-- Use host interface bindings for substitution. Conditional defaults retain prebindings; late replacement reaches newly resolved host services. Keep private package constructor chains concrete and preserve package-owned authorization, queries, validation and mutation semantics.
-- Inject transient `TaxonomyTreeContract`/`TermResolverContract` for native tree/reference operations. Preserve Eloquent `Collection<int, Term>` and `list<Term|string>` → `list<Term>` semantics, including `createMissing = true`; do not expose private registry/writer helpers.
-
-
-## Consumer runtime and testing contracts
-
-Start with the package README Quickstart and Testing your app sections. Use `nvl:install <package>` for loaded-package common config publication; it does not enable features, run schema or refresh caches. Preserve native host owner keys/morph maps and selected host Auth and ownership defaults. Read full runtime defaults and publish advanced config only deliberately.
-
-Inject the supported focused interfaces and preserve host bindings. Returned model handles do not permit package-table queries/writes outside documented capability/extension seams. Host tests may substitute contracts in Laravel's container, use shipped model factories (ordinary make may persist parents; withoutParents()->make is detached), and use Laravel effect fakes deliberately. Only Media/Stripe have dedicated provider/library fakes; do not invent a universal package fake. Settings InteractsWithSettings is definition-only. Host PHPStan may include vendor/nvl/core/support/consumer-audit.neon; no unpublished workbench command is a consumer requirement.
-
-Read docs/events.md and the package README error table. Domain events use schemaVersion=1, model-free facts and actual source-connection commit callbacks; only six declared old Event suffix aliases remain deprecated through major 6. Migrate exact listeners/fakes and suffix wildcards, drain old queued payloads, rebuild event cache and restart workers. Delivery is not a durable outbox. The Core exception renderer is opt-in, JSON-only for respondable failures, with exactly message/code/context and host-selected locale. Do not expose diagnostics or reinterpret missing bindings as authorization denial.
-
-Core package logging uses nvl/normal with CSV quiet by default, stable message keys and bounded context; incidents survive quiet. Do not mutate global logger context or log raw row/provider/content/credential payloads. Run only authorized project checks and report new acceptance as pending until actual output exists.
-
-
-## Optional model-declared ownership
-
-Use `nvl-taxonomy.models.term` for the exact canonical Term subclass. Its static
-`ownershipDefinition()` chooses an unscoped root, a native owner column, or an
-exclusive primary pivot supplied by the host. The selected root covers every
-vocabulary; vocabulary configuration still owns hierarchy and host rules.
-Declare host resource keys in `nvl-taxonomy.ownership.owner_resources` and use
-the optional Ownership runtime plus reviewed taxonomy adoption mappings for
-existing records. Attachments inherit their canonical host and must match their
-term; locale rows inherit their term; parents share owner and vocabulary.
-Use Actions for attachment, move, merge, delete and maintenance workflows.
-Owned pivot relation helpers are denied. Run commands inside an admitted native
-OwnershipRunner scope; historical --tenant flows remain compatibility only.
-Never infer a default owner, activate production during package installation,
-or query adopted tables through base/alternate models.
+- Ownable resources are declared by the configured term root and `TaxonomyResourceRegistrar`. Unscoped hosts remain unscoped. Native adoption uses explicit reviewed mappings; it is not automatic old NVL schema conversion.
+- Use the doctor and maintenance commands for readiness, merge, prune, and position rebuild. Owned operations require an established native owner context.
+- Verify cycle and cross vocabulary/owner rejection, merge conflicts, localized copy, revision conflicts, all or nothing assignment sync, deterministic owner batches, empty results, and ownership concurrency.

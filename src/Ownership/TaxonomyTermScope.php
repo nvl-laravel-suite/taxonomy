@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Ownership;
 
-use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
@@ -47,8 +46,6 @@ final readonly class TaxonomyTermScope implements Scope
 
             return;
         }
-        $query = $model->newModelQuery();
-        $query->setQuery($builder->getQuery());
-        Container::getInstance()->make(TaxonomyBoundary::class)->query($query, 'taxonomy.terms');
+
     }
 }
