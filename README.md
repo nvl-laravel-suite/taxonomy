@@ -194,7 +194,7 @@ Attachment actions serialize each owner/vocabulary set with Laravel atomic locks
 Taxonomy registers its term resource with `TranslationResourceRegistry` for
 central gathering, coverage, and reads using the package field whitelist, query
 scope, authorization, and version hash. Terms declare
-`TranslationMutationPolicy::DomainActionOnly`: generic central sync and locale
+`TranslationMutationPolicy::OwningServiceOnly`: generic central sync and locale
 deletion actions reject term writes.
 
 Write localized names and descriptions through `CreateTermAction` or

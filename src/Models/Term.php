@@ -111,7 +111,7 @@ class Term extends Model implements Ownable, TranslatableModel
             translationModel: TermTranslation::class,
             foreignKey: 'term_id',
             fields: ['name', 'description'],
-            mutationPolicy: TranslationMutationPolicy::DomainActionOnly,
+            mutationPolicy: TranslationMutationPolicy::OwningServiceOnly,
             ownershipResource: TaxonomyOwnership::active() ? 'taxonomy.terms' : null,
         );
     }

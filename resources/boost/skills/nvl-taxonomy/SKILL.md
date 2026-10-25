@@ -22,7 +22,7 @@ Treat vocabulary, parent, slug, order, metadata, and attachments as structural d
 - Require expected revisions for updates, moves, deletes, and both sides of merges.
 - Pass a `DeleteTermStrategy` explicitly when a delete must handle attachments or children.
 - Keep canonical slugs locale-independent.
-- Terms declare `TranslationMutationPolicy::DomainActionOnly`. Central
+- Terms declare `TranslationMutationPolicy::OwningServiceOnly`. Central
   translation gathering, coverage, and reads are available; generic central
   sync and locale deletion reject term mutations. Write `translations` through
   `CreateTermAction` or `UpdateTermAction` with `MutateTermPayload`. To remove
