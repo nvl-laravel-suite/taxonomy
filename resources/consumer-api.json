@@ -380,22 +380,71 @@
             "kind": "class",
             "file": "src/Models/Term.php",
             "methods": [
-                "getKey",
-                "getKeyName",
-                "getMorphClass",
-                "getRouteKey",
-                "getRouteKeyName",
-                "is",
-                "isNot",
-                "relationLoaded"
+                "ancestors",
+                "attachments",
+                "children",
+                "delete",
+                "descendants",
+                "displayDescription",
+                "displayName",
+                "entries",
+                "fresh",
+                "getAllTranslations",
+                "getAvailableLocales",
+                "getConnectionName",
+                "getCurrentLocale",
+                "getRelationValue",
+                "getTable",
+                "getTranslatedAttributes",
+                "getTranslation",
+                "hasTranslation",
+                "isTranslatableAttribute",
+                "newQueryForRestoration",
+                "orderByTranslated",
+                "ownershipDefinition",
+                "parent",
+                "preloadDisplayCopy",
+                "refresh",
+                "refreshForUpdate",
+                "resolveRouteBinding",
+                "resolveTranslation",
+                "save",
+                "scopeOrderByTranslated",
+                "scopeOrdered",
+                "scopeWhereTranslated",
+                "scopeWhereTranslationNotNull",
+                "scopeWhereTranslationNull",
+                "scopeWithAllTranslations",
+                "scopeWithResolvedTranslations",
+                "setLocale",
+                "taxonomyName",
+                "translated",
+                "translation",
+                "translationDefinition",
+                "translationOptions",
+                "translationResourceKey",
+                "translations",
+                "whereTranslated",
+                "whereTranslationNotNull",
+                "whereTranslationNull",
+                "withAllTranslations",
+                "withResolvedTranslations"
             ],
             "properties": [
+                "attachments",
+                "children",
                 "created_at",
                 "id",
+                "meta",
+                "owner_scope_key",
+                "parent",
+                "parent_id",
+                "parent_key",
                 "position",
                 "revision",
                 "slug",
                 "taxonomy",
+                "translations",
                 "updated_at"
             ],
             "constants": []
@@ -404,17 +453,28 @@
             "kind": "class",
             "file": "src/Models/TermTranslation.php",
             "methods": [
-                "getKey",
-                "getKeyName",
-                "getMorphClass",
-                "getRouteKey",
-                "getRouteKeyName",
-                "is",
-                "isNot",
-                "relationLoaded"
+                "bootHasOwnership",
+                "delete",
+                "fresh",
+                "getConnectionName",
+                "getTable",
+                "newQueryForRestoration",
+                "ownershipDefinition",
+                "refresh",
+                "refreshForUpdate",
+                "save",
+                "term"
             ],
             "properties": [
-                "id"
+                "created_at",
+                "description",
+                "id",
+                "locale",
+                "name",
+                "owner_scope_key",
+                "term",
+                "term_id",
+                "updated_at"
             ],
             "constants": []
         },
@@ -422,16 +482,32 @@
             "kind": "class",
             "file": "src/Models/Termable.php",
             "methods": [
-                "getKey",
-                "getKeyName",
-                "getMorphClass",
-                "getRouteKey",
-                "getRouteKeyName",
-                "is",
-                "isNot",
-                "relationLoaded"
+                "bootHasOwnership",
+                "delete",
+                "fresh",
+                "getConnectionName",
+                "getTable",
+                "newQueryForRestoration",
+                "ownershipDefinition",
+                "refresh",
+                "refreshForUpdate",
+                "save",
+                "term",
+                "termable"
             ],
-            "properties": [],
+            "properties": [
+                "created_at",
+                "id",
+                "owner_scope_key",
+                "position",
+                "taxonomy",
+                "term",
+                "term_id",
+                "termable",
+                "termable_id",
+                "termable_type",
+                "updated_at"
+            ],
             "constants": []
         },
         "Nvl\\Taxonomy\\Services\\TaxonomyOwnerRegistry": {
@@ -510,111 +586,6 @@
             ],
             "properties": [],
             "constants": []
-        },
-        "Nvl\\Taxonomy\\Services\\TaxonomyTerms": {
-            "kind": "class",
-            "file": "src/Services/TaxonomyTerms.php",
-            "methods": [
-                "__construct",
-                "create",
-                "update",
-                "delete",
-                "move",
-                "merge",
-                "rebuild",
-                "validateMerge"
-            ],
-            "properties": [],
-            "constants": []
-        },
-        "Nvl\\Taxonomy\\Services\\TaxonomyAssignments": {
-            "kind": "class",
-            "file": "src/Services/TaxonomyAssignments.php",
-            "methods": [
-                "__construct",
-                "attach",
-                "detach",
-                "sync"
-            ],
-            "properties": [],
-            "constants": []
-        },
-        "Nvl\\Taxonomy\\Services\\TaxonomyReader": {
-            "kind": "class",
-            "file": "src/Services/TaxonomyReader.php",
-            "methods": [
-                "__construct",
-                "resolve",
-                "forOwners",
-                "tree",
-                "term"
-            ],
-            "properties": [],
-            "constants": []
         }
-    },
-    "models": {
-        "Nvl\\Taxonomy\\Models\\Term": {
-            "read": [
-                "created_at",
-                "id",
-                "position",
-                "revision",
-                "slug",
-                "taxonomy",
-                "updated_at"
-            ],
-            "identity_methods": [
-                "getKey",
-                "getKeyName",
-                "getMorphClass",
-                "getRouteKey",
-                "getRouteKeyName",
-                "is",
-                "isNot",
-                "relationLoaded"
-            ],
-            "capability_relations": []
-        },
-        "Nvl\\Taxonomy\\Models\\TermTranslation": {
-            "read": [
-                "id"
-            ],
-            "identity_methods": [
-                "getKey",
-                "getKeyName",
-                "getMorphClass",
-                "getRouteKey",
-                "getRouteKeyName",
-                "is",
-                "isNot",
-                "relationLoaded"
-            ],
-            "capability_relations": []
-        },
-        "Nvl\\Taxonomy\\Models\\Termable": {
-            "read": [],
-            "identity_methods": [
-                "getKey",
-                "getKeyName",
-                "getMorphClass",
-                "getRouteKey",
-                "getRouteKeyName",
-                "is",
-                "isNot",
-                "relationLoaded"
-            ],
-            "capability_relations": []
-        }
-    },
-    "capability_relations": {
-        "Nvl\\Taxonomy\\Concerns\\HasTaxonomies": [
-            "termables"
-        ]
-    },
-    "tables": {
-        "i18n": "nvl_taxonomy_i18n",
-        "termables": "nvl_taxonomy_termables",
-        "terms": "nvl_taxonomy_terms"
     }
 }
