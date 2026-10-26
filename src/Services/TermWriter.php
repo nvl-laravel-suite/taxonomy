@@ -23,6 +23,10 @@ use Nvl\Translatable\Services\TranslationPayloadValidator;
 
 /**
  * Persists validated term structure and dedicated translation rows.
+ *
+ * @internal
+ *
+ * @phpstan-type NormalizedTerm array{taxonomy:string,slug:string,translations:array<array-key,mixed>,parent_id:?string,position:int,meta:array<array-key,mixed>|null,expected_revision:?int}
  */
 final readonly class TermWriter
 {
@@ -42,8 +46,10 @@ final readonly class TermWriter
 
     /**
      * Persist one validated term and its complete translation set.
+     *
+     *
+     * @param  array<string,mixed>  $data
      */
-    /** @param array{taxonomy:string, slug:string, translations:array<string, array{name:string, description?:?string}>, parent_id?:?string, position?:int, meta?:?array<string, mixed>} $data */
     public function create(array $data): Term
     {
         $data = $this->normalize($data, false);
@@ -68,6 +74,9 @@ final readonly class TermWriter
 
     /**
      * Persist one revision-checked term and translation mutation.
+     *
+     *
+     * @param  array<string,mixed>  $data
      */
     public function update(
         Term $term,
@@ -98,7 +107,7 @@ final readonly class TermWriter
         return $term->refresh()->load('translations');
     }
 
-    /** @param array<string, mixed> $data */
+    /** @param NormalizedTerm $data */
     private function validate(array $data, ?string $termId = null): void
     {
         $definition = $this->taxonomies->get($data['taxonomy']);
@@ -171,7 +180,7 @@ final readonly class TermWriter
     }
 
     /**
-     * @param  array<string, mixed>|null  $metadata
+     * @param  array<array-key,mixed>|null  $metadata
      */
     private function validateMetadataDepth(?array $metadata, int $maximumDepth): void
     {
@@ -197,7 +206,8 @@ final readonly class TermWriter
     /**
      * Validate runtime locale keys and translation payload shapes.
      *
-     * @param  array<mixed>  $translations
+     * @param  array<array-key,mixed>  $translations
+     * @param  class-string<Term>  $modelClass
      */
     private function validateTranslations(array $translations, string $modelClass): void
     {
@@ -246,12 +256,15 @@ final readonly class TermWriter
         }
     }
 
-    /** @param array<string, array<string, mixed>> $translations */
+    /** @param array<array-key,mixed> $translations */
     private function writeTranslations(Term $term, array $translations, TranslationSyncMode $mode): void
     {
         $definition = $term->translationDefinition();
         $locales = [];
-        foreach ($translations as $locale => $attributes) {
+        $this->validateTranslations($translations, $term::class);
+        /** @var array<string,array<string,mixed>> $validated */
+        $validated = $translations;
+        foreach ($validated as $locale => $attributes) {
             $normalized = $definition->assertLocale($this->locales->assertSupported($locale));
             if (isset($locales[$normalized])) {
                 throw new \InvalidArgumentException('Duplicate normalized taxonomy translation locale.');
@@ -265,7 +278,8 @@ final readonly class TermWriter
     }
 
     /**
-     * @return array<string, mixed>
+     * @param  NormalizedTerm  $data
+     * @return array<string,mixed>
      */
     private function baseAttributes(array $data): array
     {
@@ -278,17 +292,18 @@ final readonly class TermWriter
         ];
     }
 
-    /** @param array<string, mixed> $attributes
-     * @return array{taxonomy:string, slug:string, translations:array<string, array<string, mixed>>, parent_id:?string, position:int, meta:?array, expected_revision:?int}
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return NormalizedTerm
      */
     private function normalize(array $attributes, bool $updating, ?Term $term = null): array
     {
         $allowed = ['taxonomy', 'slug', 'translations', 'parent_id', 'position', 'meta', 'expected_revision'];
-        if (array_is_list($attributes) || array_diff(array_keys($attributes), $allowed) !== []) {
+        if ($attributes === [] || array_diff(array_keys($attributes), $allowed) !== []) {
             throw new \InvalidArgumentException('Unknown taxonomy term attributes.');
         }
         if ($updating && (! isset($attributes['expected_revision']) || ! is_int($attributes['expected_revision']))) {
-            throw StaleTermVersionException::forTerm($term?->id ?? 'unknown');
+            throw StaleTermVersionException::forTerm($term !== null ? $term->id : 'unknown');
         }
         foreach ($updating ? ['translations'] : ['taxonomy', 'slug', 'translations'] as $required) {
             if (! array_key_exists($required, $attributes)) {

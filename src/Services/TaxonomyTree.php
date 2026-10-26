@@ -98,6 +98,7 @@ final readonly class TaxonomyTree
             ->orderBy('nvl_tree_copy.locale');
         $termsById = [];
         foreach ($join->get() as $row) {
+            /** @var array<string,mixed> $attributes */
             $attributes = get_object_vars($row);
             $id = $attributes['id'] ?? null;
             if (! is_string($id)) {
@@ -121,7 +122,11 @@ final readonly class TaxonomyTree
                 if (TaxonomyOwnership::declared()) {
                     $copy['owner_scope_key'] = $attributes['owner_scope_key'];
                 }
-                $termsById[$id]->getRelation('translations')->push($translation->newFromBuilder($copy, $translation->getConnectionName()));
+                $loadedTranslations = $termsById[$id]->getRelation('translations');
+                if (! $loadedTranslations instanceof Collection) {
+                    throw new \LogicException('A taxonomy tree must retain its loaded translations.');
+                }
+                $loadedTranslations->push($translation->newFromBuilder($copy, $translation->getConnectionName()));
             }
         }
         $terms = new Collection(array_values($termsById));

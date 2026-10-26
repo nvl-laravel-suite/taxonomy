@@ -34,6 +34,7 @@ final readonly class OwnerTaxonomyBatchReader
      *
      * @param  list<Model>  $owners
      * @param  array<array-key, mixed>  $vocabularies
+     * @return array{owners:stdClass,order:list<array{type:string,id:string}>}
      */
     public function read(array $owners, array $vocabularies, ?string $locale = null): array
     {
@@ -123,13 +124,19 @@ final readonly class OwnerTaxonomyBatchReader
             $attached = clone $term;
             $attached->preloadDisplayCopy($locale);
             $attached->setAttribute('pivot_position', $fact->position);
-            $values[$fact->termable_type][$fact->termable_id]->{$fact->taxonomy}[] = $attached;
+            $vocabularyTerms = $values[$fact->termable_type][$fact->termable_id]->{$fact->taxonomy};
+            if (! is_array($vocabularyTerms)) {
+                throw new TaxonomyBatchReadException('A vocabulary result must be a term list.');
+            }
+            $vocabularyTerms[] = $attached;
+            $values[$fact->termable_type][$fact->termable_id]->{$fact->taxonomy} = $vocabularyTerms;
         }
 
         return $this->result($admitted, $values);
     }
 
-    /** @param array<string, array<array-key, stdClass>> $values
+    /**
+     * @param  array<string, array<array-key, stdClass>>  $values
      * @return array{owners: stdClass, order: list<array{type: string, id: string}>}
      */
     private function result(OwnerBatch $batch, array $values): array

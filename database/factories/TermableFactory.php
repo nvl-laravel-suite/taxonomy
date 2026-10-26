@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
+use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Services\TermModelRegistry;
 
 /**
@@ -45,8 +46,8 @@ final class TermableFactory extends Factory
             if ($model->getAttribute('term_id') !== null) {
                 $parent = TermModelRegistry::query()->findOrFail(FactoryGuard::identifier($model->getAttribute('term_id')));
                 FactoryGuard::parent($parent, $model);
-                if (config('nvl-tenancy.enabled') === true && $owner->getRawOriginal('tenant_id') !== $parent->getRawOriginal('tenant_id')) {
-                    throw new InvalidArgumentException('Fixture owner and parent tenancy must agree.');
+                if (TaxonomyOwnership::declared() && $owner->getRawOriginal('owner_scope_key') !== $parent->getRawOriginal('owner_scope_key')) {
+                    throw new InvalidArgumentException('Fixture owner and parent ownership must agree.');
                 }
                 FactoryGuard::inherit($model, $parent);
                 if ($model->taxonomy !== $parent->taxonomy) {

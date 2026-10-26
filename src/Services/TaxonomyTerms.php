@@ -39,6 +39,7 @@ final readonly class TaxonomyTerms
         private TaxonomyActorPolicy $actors,
     ) {}
 
+    /** @param array<string,mixed> $attributes */
     public function create(array $attributes, Authenticatable|SystemActor $actor): Term
     {
         $this->actors->authorize($actor, 'create');
@@ -62,6 +63,7 @@ final readonly class TaxonomyTerms
         }, TaxonomyConfiguration::transactionAttempts());
     }
 
+    /** @param array<string,mixed> $attributes */
     public function update(
         Term|string $term,
         array $attributes,
@@ -193,6 +195,9 @@ final readonly class TaxonomyTerms
     ): Term {
         $this->actors->authorize($actor, 'move');
         $parentId = $parent instanceof Term ? $parent->getRawOriginal($parent->getKeyName()) : $parent;
+        if ($parentId !== null && ! is_string($parentId)) {
+            throw new InvalidArgumentException('A canonical parent identifier is required.');
+        }
         if ($position < 0) {
             throw new InvalidArgumentException('Taxonomy term positions cannot be negative.');
         }
@@ -465,6 +470,7 @@ final readonly class TaxonomyTerms
         }
     }
 
+    /** @return Collection<int,Term> */
     private function terms(?string $taxonomy, bool $lock = false): Collection
     {
         if ($taxonomy !== null && $taxonomy !== '') {
@@ -473,6 +479,7 @@ final readonly class TaxonomyTerms
             $definitions = array_values($this->taxonomies->all());
         }
 
+        /** @var Collection<int,Term> $terms */
         $terms = new Collection;
 
         foreach ($definitions as $definition) {
