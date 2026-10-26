@@ -6,7 +6,7 @@ namespace Nvl\Taxonomy\Exceptions;
 
 /**
  * @api
-
+ *
  * Raised when siblings would share the same canonical slug.
  */
 final class DuplicateSiblingSlugException extends TaxonomyException

@@ -6,7 +6,7 @@ namespace Nvl\Taxonomy\Exceptions;
 
 /**
  * @api
-
+ *
  * Raised when an operation references an unregistered vocabulary alias.
  */
 class UnknownTaxonomyException extends TaxonomyException {}

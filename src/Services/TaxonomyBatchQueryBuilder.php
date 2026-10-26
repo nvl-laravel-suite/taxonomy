@@ -15,7 +15,11 @@ use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
-/** Composes mandatory authorized attachment and structural term SQL before bounds. */
+/**
+ * Composes mandatory authorized attachment and structural term SQL before bounds.
+ *
+ * @internal
+ */
 final readonly class TaxonomyBatchQueryBuilder
 {
     /** Retain canonical ownership and registered vocabulary definitions. */

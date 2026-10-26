@@ -11,6 +11,8 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
  * Reloads mutation targets through their registered taxonomy model under a row lock.
+ *
+ * @internal
  */
 final readonly class TermModelResolver
 {

@@ -66,7 +66,8 @@ class Category extends Term
         return $tree;
     }
 
-    /** Return a Term fixture in the specialized native vocabulary.
+    /**
+     * Return a Term fixture in the specialized native vocabulary.
      *
      * @internal
      */

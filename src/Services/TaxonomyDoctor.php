@@ -20,6 +20,8 @@ use Throwable;
 
 /**
  * Inspects taxonomy schemas and registries without mutation.
+ *
+ * @internal
  */
 final readonly class TaxonomyDoctor
 {

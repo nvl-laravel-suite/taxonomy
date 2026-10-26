@@ -6,5 +6,6 @@ namespace Nvl\Taxonomy\Exceptions;
 
 /**
  * @api
- Reports unsupported SQL adapters and explicit bounded read overflow. */
+ * Reports unsupported SQL adapters and explicit bounded read overflow.
+ */
 final class TaxonomyBatchReadException extends TaxonomyException {}

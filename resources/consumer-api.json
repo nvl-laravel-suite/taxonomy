@@ -403,7 +403,6 @@
                 "orderByTranslated",
                 "ownershipDefinition",
                 "parent",
-                "preloadDisplayCopy",
                 "refresh",
                 "refreshForUpdate",
                 "resolveRouteBinding",
@@ -453,7 +452,6 @@
             "kind": "class",
             "file": "src/Models/TermTranslation.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -482,7 +480,6 @@
             "kind": "class",
             "file": "src/Models/Termable.php",
             "methods": [
-                "bootHasOwnership",
                 "delete",
                 "fresh",
                 "getConnectionName",
@@ -510,6 +507,18 @@
             ],
             "constants": []
         },
+        "Nvl\\Taxonomy\\Services\\TaxonomyAssignments": {
+            "kind": "class",
+            "file": "src/Services/TaxonomyAssignments.php",
+            "methods": [
+                "__construct",
+                "attach",
+                "detach",
+                "sync"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Taxonomy\\Services\\TaxonomyOwnerRegistry": {
             "kind": "class",
             "file": "src/Services/TaxonomyOwnerRegistry.php",
@@ -522,6 +531,35 @@
                 "resolve",
                 "types",
                 "unknownReferences"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Services\\TaxonomyReader": {
+            "kind": "class",
+            "file": "src/Services/TaxonomyReader.php",
+            "methods": [
+                "__construct",
+                "forOwners",
+                "resolve",
+                "term",
+                "tree"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Services\\TaxonomyTerms": {
+            "kind": "class",
+            "file": "src/Services/TaxonomyTerms.php",
+            "methods": [
+                "__construct",
+                "create",
+                "delete",
+                "merge",
+                "move",
+                "rebuild",
+                "update",
+                "validateMerge"
             ],
             "properties": [],
             "constants": []

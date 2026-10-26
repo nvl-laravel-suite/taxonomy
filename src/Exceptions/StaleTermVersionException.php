@@ -6,7 +6,7 @@ namespace Nvl\Taxonomy\Exceptions;
 
 /**
  * @api
-
+ *
  * Raised when a term mutation targets an outdated revision.
  */
 final class StaleTermVersionException extends TaxonomyException

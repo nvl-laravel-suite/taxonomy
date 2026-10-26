@@ -6,7 +6,7 @@ namespace Nvl\Taxonomy\Exceptions;
 
 /**
  * @api
-
+ *
  * Raised when a placement would exceed a vocabulary's maximum tree depth.
  */
 final class MaximumDepthExceededException extends TaxonomyException

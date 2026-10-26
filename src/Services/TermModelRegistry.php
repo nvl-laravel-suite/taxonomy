@@ -42,7 +42,9 @@ final class TermModelRegistry
         );
     }
 
-    /** Resolve and freeze the concrete Term class before resource compilation.
+    /**
+     * Resolve and freeze the concrete Term class before resource compilation.
+     *
      * @internal
      *
      * @return class-string<Term>
@@ -60,7 +62,9 @@ final class TermModelRegistry
         return $this->registration->modelClass();
     }
 
-    /** Resolve the immutable model from native framework entry points.
+    /**
+     * Resolve the immutable model from native framework entry points.
+     *
      * @internal
      *
      * @return class-string<Term>
@@ -70,7 +74,9 @@ final class TermModelRegistry
         return Container::getInstance()->make(self::class)->termClass();
     }
 
-    /** Construct the configured root.
+    /**
+     * Construct the configured root.
+     *
      * @internal
      *
      * @param  array<string,mixed>  $attributes
@@ -82,7 +88,9 @@ final class TermModelRegistry
         return new $class($attributes);
     }
 
-    /** Persist a package-authored attribute map under the exact source assignment.
+    /**
+     * Persist a package-authored attribute map under the exact source assignment.
+     *
      * @internal
      *
      * @param  array<string, mixed>  $attributes
@@ -97,7 +105,9 @@ final class TermModelRegistry
         });
     }
 
-    /** Create the exact configured query.
+    /**
+     * Create the exact configured query.
+     *
      * @internal
      *
      * @return Builder<Term>

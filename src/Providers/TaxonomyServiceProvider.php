@@ -16,7 +16,7 @@ use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Providers\SupportServiceProvider;
 use Nvl\Support\Traits\MergesPackageConfiguration;
 use Nvl\Support\Traits\RegistersNamespacedResources;
-use Nvl\Taxonomy\Commands;
+use Nvl\Taxonomy\Console\Commands;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization;
 use Nvl\Taxonomy\Ownership\TaxonomyAdoptionAdapter as OwnershipTaxonomyAdoptionAdapter;

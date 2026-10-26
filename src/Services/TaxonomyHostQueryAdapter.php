@@ -16,7 +16,11 @@ use Nvl\Taxonomy\Relations\ExactTaxonomyText;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
-/** Correlates registered visible terms without widening host ownership or selections. */
+/**
+ * Correlates registered visible terms without widening host ownership or selections.
+ *
+ * @internal
+ */
 final readonly class TaxonomyHostQueryAdapter
 {
     /** Retain canonical host admission and SQL authorization dependencies. */

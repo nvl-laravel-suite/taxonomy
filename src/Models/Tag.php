@@ -16,7 +16,8 @@ class Tag extends Term
 
     protected static string $taxonomy = 'tag';
 
-    /** Return a Term fixture in the specialized native vocabulary.
+    /**
+     * Return a Term fixture in the specialized native vocabulary.
      *
      * @internal
      */

@@ -16,7 +16,11 @@ use Nvl\Translatable\Services\ContentLocale;
 use Nvl\Translatable\Services\RelatedTranslationStore;
 use stdClass;
 
-/** Reads bounded authorized attachment facts and preloads native term models. */
+/**
+ * Reads bounded authorized attachment facts and preloads native term models.
+ *
+ * @internal
+ */
 final readonly class OwnerTaxonomyBatchReader
 {
     /** Retain canonical admission, SQL policy and translation projection dependencies. */

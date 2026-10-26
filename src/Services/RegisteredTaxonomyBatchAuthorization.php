@@ -11,7 +11,11 @@ use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 
-/** Preserves explicitly registered vocabulary and owner capability admission. */
+/**
+ * Preserves explicitly registered vocabulary and owner capability admission.
+ *
+ * @internal
+ */
 final readonly class RegisteredTaxonomyBatchAuthorization implements TaxonomyBatchAuthorization
 {
     /** Retain canonical owner and vocabulary admission. */

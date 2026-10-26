@@ -77,7 +77,8 @@ final class TermablePivot extends MorphPivot
         return PackageStorage::connectionName($this->connection ?? PackageStorage::connection('taxonomy') ?? parent::getConnectionName());
     }
 
-    /** Return the shared attachment fixture factory.
+    /**
+     * Return the shared attachment fixture factory.
      *
      * @internal
      */

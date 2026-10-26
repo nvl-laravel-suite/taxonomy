@@ -6,7 +6,7 @@ namespace Nvl\Taxonomy\Exceptions;
 
 /**
  * @api
-
+ *
  * Raised when a requested parent is missing or belongs to another vocabulary.
  */
 final class InvalidParentException extends TaxonomyException

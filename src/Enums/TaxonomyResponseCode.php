@@ -6,7 +6,9 @@ namespace Nvl\Taxonomy\Enums;
 
 use Nvl\Support\Contracts\ResponseCode;
 
-/** Stable public response discriminators for Taxonomy.
+/**
+ * Stable public response discriminators for Taxonomy.
+ *
  * @api
  */
 enum TaxonomyResponseCode: string implements ResponseCode

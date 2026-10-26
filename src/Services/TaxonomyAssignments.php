@@ -12,7 +12,11 @@ use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
-/** Atomic ordered term assignment operations for registered owners. @api */
+/**
+ * Atomic ordered term assignment operations for registered owners.
+ *
+ * @api
+ */
 final readonly class TaxonomyAssignments
 {
     public function __construct(

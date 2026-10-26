@@ -6,7 +6,7 @@ namespace Nvl\Taxonomy\Exceptions;
 
 /**
  * @api
-
+ *
  * Raised when a slug identifies more than one term in a hierarchical vocabulary.
  */
 final class AmbiguousTermReferenceException extends TaxonomyException

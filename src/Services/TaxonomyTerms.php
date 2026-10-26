@@ -25,7 +25,11 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Translatable\Enums\TranslationSyncMode;
 
-/** Complete atomic term mutations for registered vocabularies. @api */
+/**
+ * Complete atomic term mutations for registered vocabularies.
+ *
+ * @api
+ */
 final readonly class TaxonomyTerms
 {
     public function __construct(

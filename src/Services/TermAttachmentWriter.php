@@ -21,6 +21,8 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
  * Maintains one owner's ordered taxonomy attachment set inside caller transactions.
+ *
+ * @internal
  */
 final readonly class TermAttachmentWriter
 {

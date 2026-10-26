@@ -10,7 +10,9 @@ use Nvl\Support\Exceptions\ExceptionResponse;
 use Nvl\Support\Traits\InteractsWithPackageFailure;
 use Nvl\Taxonomy\Enums\TaxonomyResponseCode;
 
-/** Expected failure to resolve the requested canonical merge terms.
+/**
+ * Expected failure to resolve the requested canonical merge terms.
+ *
  * @api
  */
 final class TermNotFoundException extends InvalidArgumentException implements RespondableException

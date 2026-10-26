@@ -319,7 +319,11 @@ class Term extends Model implements Ownable, TranslatableModel
         return is_string($value) ? $value : null;
     }
 
-    /** Resolve already scoped tree translation rows without per-node storage probes. @internal */
+    /**
+     * Resolve already scoped tree translation rows without per-node storage probes.
+     *
+     * @internal
+     */
     public function preloadDisplayCopy(string $locale): void
     {
         $rows = $this->getRelation('translations');

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Nvl\Taxonomy\Commands;
+namespace Nvl\Taxonomy\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\ModelNotFoundException;

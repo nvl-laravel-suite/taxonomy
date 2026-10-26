@@ -18,6 +18,8 @@ use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
  * Validates parent membership, cycles, and configured tree depth.
+ *
+ * @internal
  */
 final readonly class TermHierarchy
 {

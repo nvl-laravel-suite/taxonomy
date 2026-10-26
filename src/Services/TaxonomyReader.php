@@ -16,7 +16,11 @@ use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
-/** Scoped native term and owner batch reads. @api */
+/**
+ * Scoped native term and owner batch reads.
+ *
+ * @api
+ */
 final readonly class TaxonomyReader
 {
     public function __construct(

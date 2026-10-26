@@ -13,6 +13,8 @@ use Nvl\Taxonomy\Support\TermMergeContext;
 
 /**
  * Resolves and validates a merge from locked term and hierarchy snapshots.
+ *
+ * @internal
  */
 final readonly class TermMergeValidator
 {

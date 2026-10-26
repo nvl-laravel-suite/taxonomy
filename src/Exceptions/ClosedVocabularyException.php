@@ -6,7 +6,7 @@ namespace Nvl\Taxonomy\Exceptions;
 
 /**
  * @api
-
+ *
  * Raised when unknown term input is supplied to a closed vocabulary.
  */
 class ClosedVocabularyException extends TaxonomyException

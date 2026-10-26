@@ -10,7 +10,9 @@ use Nvl\Support\Exceptions\ExceptionResponse;
 use Nvl\Support\Traits\InteractsWithPackageFailure;
 use Nvl\Taxonomy\Enums\TaxonomyResponseCode;
 
-/** Expected taxonomy membership, merge or attachment constraint failure.
+/**
+ * Expected taxonomy membership, merge or attachment constraint failure.
+ *
  * @api
  */
 final class InvalidTermOperationException extends InvalidArgumentException implements RespondableException

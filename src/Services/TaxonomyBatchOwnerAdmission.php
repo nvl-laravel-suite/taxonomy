@@ -15,7 +15,11 @@ use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Relations\ExactTaxonomyText;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
-/** Reloads captured native owner identities through retained canonical scopes. */
+/**
+ * Reloads captured native owner identities through retained canonical scopes.
+ *
+ * @internal
+ */
 final readonly class TaxonomyBatchOwnerAdmission
 {
     /** Retain the registered capability and ownership runtimes. */
