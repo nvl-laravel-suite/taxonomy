@@ -17,10 +17,10 @@ use Nvl\Support\Enums\SystemActor;
  */
 final readonly class TaxonomyActorPolicy
 {
-    public function authorize(Authenticatable|SystemActor $actor, string $ability): void
+    public function authorize(Authenticatable|SystemActor $actor, string $ability, ?Model $owner = null, ?string $taxonomy = null): void
     {
         if ($actor === SystemActor::Background) {
-            Gate::forUser($actor)->authorize('taxonomy.'.$ability);
+            Gate::forUser($actor)->authorize('taxonomy.'.$ability, $owner === null ? [] : [$owner, $taxonomy]);
 
             return;
         }
@@ -42,6 +42,6 @@ final readonly class TaxonomyActorPolicy
             throw new AuthorizationException('The taxonomy actor is unavailable.');
         }
 
-        Gate::forUser($current)->authorize('taxonomy.'.$ability);
+        Gate::forUser($current)->authorize('taxonomy.'.$ability, $owner === null ? [] : [$owner, $taxonomy]);
     }
 }

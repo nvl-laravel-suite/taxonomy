@@ -106,3 +106,18 @@ it('rejects a forged actor source before querying it', function (): void {
         'taxonomy' => 'tag', 'slug' => 'forged',
     ], $actor))->toThrow(AuthorizationException::class);
 });
+
+it('passes the locked canonical owner and vocabulary to assignment authorization', function (): void {
+    $owner = Post::create(['title' => 'Allowed owner']);
+    $foreign = Post::create(['title' => 'Foreign owner']);
+    $owner->title = 'Forged in memory';
+    Gate::define('taxonomy.assign', static fn (mixed $actor, Post $canonical, string $taxonomy): bool => $actor === SystemActor::Background
+        && $canonical->id === $owner->id && $canonical->title === 'Allowed owner' && $taxonomy === 'tag');
+
+    $assignments = app(TaxonomyAssignments::class);
+    expect(fn () => $assignments->sync($foreign, 'tag', ['denied'], SystemActor::Background))
+        ->toThrow(AuthorizationException::class);
+    $assignments->sync($owner, 'tag', ['admitted'], SystemActor::Background);
+    expect($owner->fresh()->tags()->pluck('slug')->all())->toBe(['admitted'])
+        ->and($foreign->fresh()->tags()->count())->toBe(0);
+});

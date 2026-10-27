@@ -23,6 +23,7 @@ final readonly class TaxonomyAssignments
         private TermAttachmentWriter $attachments,
         private TaxonomyBoundary $boundary,
         private TaxonomyActorPolicy $actors,
+        private TaxonomyOwnerRegistry $owners,
     ) {}
 
     /** @param list<Term|string> $terms */
@@ -53,7 +54,6 @@ final readonly class TaxonomyAssignments
      */
     private function mutate(Model $owner, string $taxonomy, Authenticatable|SystemActor $actor, \Closure $operation): mixed
     {
-        $this->actors->authorize($actor, 'assign');
         $connection = TermModelRegistry::newInstance()->getConnectionName();
         $lock = TaxonomyConfiguration::lock(
             TaxonomyConfiguration::attachmentLockName($this->boundary, $owner, $taxonomy),
@@ -62,7 +62,12 @@ final readonly class TaxonomyAssignments
 
         return $lock->block(
             TaxonomyConfiguration::lockWaitSeconds(),
-            fn (): mixed => DB::connection($connection)->transaction($operation, TaxonomyConfiguration::transactionAttempts()),
+            fn (): mixed => DB::connection($connection)->transaction(function () use ($owner, $taxonomy, $actor, $operation): mixed {
+                $canonical = $this->owners->resolve($owner, lock: true);
+                $this->actors->authorize($actor, 'assign', $canonical, $taxonomy);
+
+                return $operation();
+            }, TaxonomyConfiguration::transactionAttempts()),
         );
     }
 }
