@@ -125,18 +125,18 @@ final class TaxonomyServiceProvider extends ServiceProvider implements Ownership
 
         $this->publishes([
             __DIR__.'/../../config/nvl-taxonomy.php' => config_path('nvl-taxonomy.php'),
-        ], 'taxonomy-config');
+        ], 'nvl-taxonomy-config');
 
         $this->publishesMigrations([
             __DIR__.'/../../database/migrations' => database_path('migrations'),
-        ], 'taxonomy-migrations');
+        ], 'nvl-taxonomy-migrations');
         if ((bool) config('nvl-taxonomy.migrations.enabled', true)) {
             $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
         }
 
         $this->publishes([
             __DIR__.'/../../resources/boost/skills' => base_path('.agents/skills'),
-        ], 'taxonomy-skills');
+        ], 'nvl-taxonomy-skills');
 
         if ($this->app->runningInConsole()) {
             $this->commands([

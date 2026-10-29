@@ -43,16 +43,6 @@ return [
 
     ],
 
-    'table_names' => [
-        TaxonomyTables::Terms => TaxonomyTables::Terms,
-        TaxonomyTables::I18n => TaxonomyTables::I18n,
-        TaxonomyTables::Termables => TaxonomyTables::Termables,
-    ],
-
-    'storage' => [
-        'connection' => null,
-    ],
-
     'migrations' => [
         'enabled' => true,
     ],
@@ -77,5 +67,7 @@ return [
         'generator' => SlugGenerator::class,
         'locale' => null,
     ],
+    'connection' => null,
+    'tables' => ['terms' => TaxonomyTables::Terms, 'i18n' => TaxonomyTables::I18n, 'termables' => TaxonomyTables::Termables],
 
 ];

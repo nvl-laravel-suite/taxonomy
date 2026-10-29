@@ -3,12 +3,12 @@
     "configs": {
         "nvl-taxonomy": {
             "common": [
+                "connection",
                 "locks.seconds",
                 "migrations.enabled",
                 "models.term",
                 "owners",
-                "ownership.owner_resources",
-                "storage.connection"
+                "ownership.owner_resources"
             ],
             "advanced": [
                 "limits.bulk_terms",
@@ -18,9 +18,9 @@
                 "locks.wait_seconds",
                 "slugs.generator",
                 "slugs.locale",
-                "table_names.nvl_taxonomy_i18n",
-                "table_names.nvl_taxonomy_termables",
-                "table_names.nvl_taxonomy_terms",
+                "tables.i18n",
+                "tables.termables",
+                "tables.terms",
                 "taxonomies.category.allowed_owners",
                 "taxonomies.category.exclusive",
                 "taxonomies.category.hierarchical",

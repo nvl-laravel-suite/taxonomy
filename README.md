@@ -34,3 +34,5 @@ Call these services with an explicit persisted `Authenticatable` or `SystemActor
 System actors still require explicit policy permission; their identity is not a bypass. Preserve canonical owner identity, source transactions and native ownership admission when composing host workflows.
 
 Released under the [MIT License](LICENSE).
+
+Shared [service contracts, model extensions and composition](https://github.com/nvl-laravel-suite/laravel-suite/blob/main/docs/consumer-api.md) apply alongside the package-specific rules above.
