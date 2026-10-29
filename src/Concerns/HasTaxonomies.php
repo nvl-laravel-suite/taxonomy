@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Concerns;
 
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Str;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Models\Term;
@@ -114,9 +116,9 @@ trait HasTaxonomies
      * @param  list<string|int>  $values
      * @return Builder<static>
      */
-    public function scopeWithAnyTerms(Builder $query, string $taxonomy, array $values, ?TaxonomyBatchAuthorization $policy = null): Builder
+    public function scopeWithAnyTerms(Builder $query, string $taxonomy, array $values, Authenticatable|SystemActor $actor, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
-        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'any', $policy);
+        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'any', $actor, $policy);
     }
 
     /**
@@ -126,9 +128,9 @@ trait HasTaxonomies
      * @param  list<string|int>  $values
      * @return Builder<static>
      */
-    public function scopeWithAllTerms(Builder $query, string $taxonomy, array $values, ?TaxonomyBatchAuthorization $policy = null): Builder
+    public function scopeWithAllTerms(Builder $query, string $taxonomy, array $values, Authenticatable|SystemActor $actor, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
-        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'all', $policy);
+        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'all', $actor, $policy);
     }
 
     /**
@@ -138,9 +140,9 @@ trait HasTaxonomies
      * @param  list<string|int>  $values
      * @return Builder<static>
      */
-    public function scopeWithoutTerms(Builder $query, string $taxonomy, array $values, ?TaxonomyBatchAuthorization $policy = null): Builder
+    public function scopeWithoutTerms(Builder $query, string $taxonomy, array $values, Authenticatable|SystemActor $actor, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
-        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'without', $policy);
+        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->filter($query, $taxonomy, $values, 'without', $actor, $policy);
     }
 
     /**
@@ -149,9 +151,9 @@ trait HasTaxonomies
      * @param  Builder<static>  $query
      * @return Builder<static>
      */
-    public function scopeInCategory(Builder $query, Term $category, bool $includeDescendants = true, ?TaxonomyBatchAuthorization $policy = null): Builder
+    public function scopeInCategory(Builder $query, Term $category, Authenticatable|SystemActor $actor, bool $includeDescendants = true, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
-        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->category($query, $category, $includeDescendants, $policy);
+        return Container::getInstance()->make(TaxonomyHostQueryAdapter::class)->category($query, $category, $actor, $includeDescendants, $policy);
     }
 
     /**

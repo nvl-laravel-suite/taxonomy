@@ -40,14 +40,14 @@ it('supports the public owner query and inspection workflow', function () {
         ->newPivotQuery()
         ->toSql();
 
-    expect(Post::query()->withAnyTerms('tag', [])->count())->toBe(0)
-        ->and(Post::query()->withAllTerms('tag', [])->count())->toBe(2)
-        ->and(Post::query()->withoutTerms('tag', [])->count())->toBe(2)
-        ->and(Post::query()->withAnyTerms('tag', [$tag->id, 'missing'])->sole()->is($categorized))->toBeTrue()
-        ->and(Post::query()->withAllTerms('tag', ['php', 'laravel'])->sole()->is($categorized))->toBeTrue()
-        ->and(Post::query()->withoutTerms('tag', ['php'])->sole()->is($uncategorized))->toBeTrue()
-        ->and(Post::query()->inCategory($parent)->sole()->is($categorized))->toBeTrue()
-        ->and(Post::query()->inCategory($parent, false)->count())->toBe(0)
+    expect(Post::query()->withAnyTerms('tag', [], SystemActor::Background)->count())->toBe(0)
+        ->and(Post::query()->withAllTerms('tag', [], SystemActor::Background)->count())->toBe(2)
+        ->and(Post::query()->withoutTerms('tag', [], SystemActor::Background)->count())->toBe(2)
+        ->and(Post::query()->withAnyTerms('tag', [$tag->id, 'missing'], SystemActor::Background)->sole()->is($categorized))->toBeTrue()
+        ->and(Post::query()->withAllTerms('tag', ['php', 'laravel'], SystemActor::Background)->sole()->is($categorized))->toBeTrue()
+        ->and(Post::query()->withoutTerms('tag', ['php'], SystemActor::Background)->sole()->is($uncategorized))->toBeTrue()
+        ->and(Post::query()->inCategory($parent, SystemActor::Background)->sole()->is($categorized))->toBeTrue()
+        ->and(Post::query()->inCategory($parent, SystemActor::Background, false)->count())->toBe(0)
         ->and($freshOwner->hasTerm('tag', $tag))->toBeTrue()
         ->and($freshOwner->hasTerm('tag', 'missing'))->toBeFalse()
         ->and($categorized->load('tags')->hasTerm('tag', $tag->id))->toBeTrue()
@@ -63,11 +63,11 @@ it('supports the public owner query and inspection workflow', function () {
 
     config()->set('nvl-taxonomy.limits.bulk_terms', 1);
 
-    expect(fn () => Post::query()->withAnyTerms('tag', ['one', 'two'])->get())
+    expect(fn () => Post::query()->withAnyTerms('tag', ['one', 'two'], SystemActor::Background)->get())
         ->toThrow(InvalidArgumentException::class)
-        ->and(fn () => Post::query()->withAllTerms('tag', ['one', 'two'])->get())
+        ->and(fn () => Post::query()->withAllTerms('tag', ['one', 'two'], SystemActor::Background)->get())
         ->toThrow(InvalidArgumentException::class)
-        ->and(fn () => Post::query()->withoutTerms('tag', ['one', 'two'])->get())
+        ->and(fn () => Post::query()->withoutTerms('tag', ['one', 'two'], SystemActor::Background)->get())
         ->toThrow(InvalidArgumentException::class);
 });
 
@@ -307,9 +307,9 @@ it('validates capability aliases without installing a host morph map', function 
 });
 
 it('reports missing consumer schema without attempting data inspection', function () {
-    config()->set('nvl-taxonomy.table_names', [
+    config()->set('nvl-taxonomy.tables', [
         'terms' => 'missing_terms',
-        'terms_i18n' => 'missing_terms_i18n',
+        'i18n' => 'missing_terms_i18n',
         'termables' => 'missing_termables',
     ]);
 

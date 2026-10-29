@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Contracts;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
@@ -22,7 +24,7 @@ interface TaxonomyBatchAuthorization
      *
      * @param  list<string>  $vocabularies
      */
-    public function authorizeOwners(OwnerBatch $owners, array $vocabularies): void;
+    public function authorizeOwners(Authenticatable|SystemActor $actor, OwnerBatch $owners, array $vocabularies): void;
 
     /**
      * Restrict attachment rows before window ranking without executing SQL.
@@ -30,7 +32,7 @@ interface TaxonomyBatchAuthorization
      * @param  Builder<Termable>  $query
      * @param  list<string>  $vocabularies
      */
-    public function scopeAttachments(Builder $query, OwnerBatch $owners, array $vocabularies): void;
+    public function scopeAttachments(Authenticatable|SystemActor $actor, Builder $query, OwnerBatch $owners, array $vocabularies): void;
 
     /**
      * Restrict registered structural term rows without executing SQL.
@@ -38,12 +40,12 @@ interface TaxonomyBatchAuthorization
      * @param  Builder<Term>  $query
      * @param  list<string>  $vocabularies
      */
-    public function scopeTerms(Builder $query, array $vocabularies): void;
+    public function scopeTerms(Authenticatable|SystemActor $actor, Builder $query, array $vocabularies): void;
 
     /**
      * Express complete host-owner and attached-term visibility in correlated SQL.
      *
      * @param  Builder<Term>  $query
      */
-    public function scopeHostTerms(Builder $query, Model $ownerPrototype, string $vocabulary): void;
+    public function scopeHostTerms(Authenticatable|SystemActor $actor, Builder $query, Model $ownerPrototype, string $vocabulary): void;
 }

@@ -19,7 +19,7 @@ use Nvl\Translatable\Services\ContentLocale;
 /**
  * Builds a deterministic localized tree for any registered vocabulary.
  *
- * @api
+ * @internal
  */
 final readonly class TaxonomyTree
 {

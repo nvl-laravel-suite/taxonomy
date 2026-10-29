@@ -39,8 +39,8 @@ it('reads registered term subclasses with only required providers', function (st
 
     expect(Tag::query()->whereKey($ids['tag'])->exists())->toBeTrue();
     $category = Category::query()->findOrFail($ids['category']);
-    expect(Post::query()->withAnyTerms('tag', ['visible-tag'])->pluck('id')->all())->toBe([$owner->getKey()])
-        ->and(Post::query()->withAllTerms('tag', ['visible-tag', $ids['tag']])->pluck('id')->all())->toBe([$owner->getKey()])
-        ->and(Post::query()->withoutTerms('tag', ['missing'])->pluck('id')->all())->toBe([$owner->getKey()])
-        ->and(Post::query()->inCategory($category, false)->pluck('id')->all())->toBe([$owner->getKey()]);
+    expect(Post::query()->withAnyTerms('tag', ['visible-tag'], SystemActor::Background)->pluck('id')->all())->toBe([$owner->getKey()])
+        ->and(Post::query()->withAllTerms('tag', ['visible-tag', $ids['tag']], SystemActor::Background)->pluck('id')->all())->toBe([$owner->getKey()])
+        ->and(Post::query()->withoutTerms('tag', ['missing'], SystemActor::Background)->pluck('id')->all())->toBe([$owner->getKey()])
+        ->and(Post::query()->inCategory($category, SystemActor::Background, false)->pluck('id')->all())->toBe([$owner->getKey()]);
 })->with(['batch', 'filters']);

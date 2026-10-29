@@ -88,9 +88,9 @@ it('matches all-term scopes when multiple references identify the same term', fu
     app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
     $term = $post->tags()->firstOrFail();
 
-    expect(Post::query()->withAllTerms('tag', [$term->id, $term->slug])->count())->toBe(1)
-        ->and(Post::query()->withAnyTerms('tag', [$term->id, $term->slug])->count())->toBe(1)
-        ->and(Post::query()->withoutTerms('tag', [$term->id, $term->slug])->count())->toBe(0)
+    expect(Post::query()->withAllTerms('tag', [$term->id, $term->slug], SystemActor::Background)->count())->toBe(1)
+        ->and(Post::query()->withAnyTerms('tag', [$term->id, $term->slug], SystemActor::Background)->count())->toBe(1)
+        ->and(Post::query()->withoutTerms('tag', [$term->id, $term->slug], SystemActor::Background)->count())->toBe(0)
         ->and($post->hasTerm('tag', $term->slug))->toBeTrue();
 });
 
@@ -128,11 +128,11 @@ it('removes raw attachment rows when an owning model is deleted', function () {
     $post = Post::create(['title' => 'Disposable post']);
     app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
 
-    $this->assertDatabaseCount(config('nvl-taxonomy.table_names.termables', 'termables'), 1);
+    $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 1);
 
     $post->delete();
 
-    $this->assertDatabaseCount(config('nvl-taxonomy.table_names.termables', 'termables'), 0);
+    $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 0);
     expect(Tag::query()->where('slug', 'laravel')->exists())->toBeTrue();
 });
 
@@ -154,7 +154,7 @@ it('queries category subtrees with qualified relationship columns', function () 
     $child = Category::create(['slug' => 'subsection', 'parent_id' => $parent->id]);
     app(TaxonomyAssignments::class)->sync($post, 'category', [$child], SystemActor::Background);
 
-    expect(Post::query()->inCategory($parent)->count())->toBe(1);
+    expect(Post::query()->inCategory($parent, SystemActor::Background)->count())->toBe(1);
 });
 
 it('creates dedicated term translations with deterministic field fallback', function () {
@@ -262,7 +262,7 @@ it('rolls back term creation on the configured taxonomy connection when translat
         'prefix' => '',
         'foreign_key_constraints' => true,
     ]);
-    config()->set('nvl-taxonomy.storage.connection', $connection);
+    config()->set('nvl-taxonomy.connection', $connection);
     config()->set('nvl-translatable.locales', ['en']);
 
     try {
@@ -412,7 +412,7 @@ it('stores stable owner aliases and UUID-backed attachment rows', function () {
     $post = Post::create(['title' => 'Stable owner']);
     app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
 
-    $row = DB::table(config('nvl-taxonomy.table_names.termables', 'termables'))->first();
+    $row = DB::table(TaxonomyTables::get(TaxonomyTables::Termables))->first();
 
     expect($row)->not->toBeNull()
         ->and($row->id)->toBeUuid()
@@ -437,7 +437,7 @@ it('uses the UUID pivot model for relation-level attachment compatibility', func
     $tag = Tag::create(['slug' => 'relation-tag']);
     $post->tags()->attach($tag, ['taxonomy' => 'tag', 'position' => 0]);
 
-    $row = DB::table(config('nvl-taxonomy.table_names.termables', 'termables'))->first();
+    $row = DB::table(TaxonomyTables::get(TaxonomyTables::Termables))->first();
 
     expect($row?->id)->toBeUuid()
         ->and($row?->termable_type)->toBe(Post::class);
@@ -665,9 +665,9 @@ it('emits one committed event with the resulting term revision', function () {
 });
 
 it('does not swallow non-unique database failures while creating open terms', function () {
-    $translationTable = config('nvl-taxonomy.table_names.terms_i18n', 'terms_i18n');
+    $translationTable = TaxonomyTables::get(TaxonomyTables::I18n);
     config()->set(
-        'nvl-taxonomy.table_names.terms_i18n',
+        'nvl-taxonomy.tables.i18n',
         'taxonomy_translation_failure',
     );
     $post = Post::create(['title' => 'Failed open term']);
@@ -677,7 +677,7 @@ it('does not swallow non-unique database failures while creating open terms', fu
             ->and(Tag::query()->where('slug', 'must-rollback')->exists())->toBeFalse()
             ->and(DB::table(TaxonomyTables::Termables)->count())->toBe(0);
     } finally {
-        config()->set('nvl-taxonomy.table_names.terms_i18n', $translationTable);
+        config()->set('nvl-taxonomy.tables.i18n', $translationTable);
     }
 });
 
@@ -797,7 +797,7 @@ it('keeps move merge delete and attachments on the configured connection', funct
         'prefix' => '',
         'foreign_key_constraints' => true,
     ]);
-    config()->set('nvl-taxonomy.storage.connection', $connection);
+    config()->set('nvl-taxonomy.connection', $connection);
     config()->set('nvl-translatable.locales', ['en']);
 
     try {
@@ -837,7 +837,8 @@ it('keeps move merge delete and attachments on the configured connection', funct
             'slug' => 'destination',
             'translations' => ['en' => ['name' => 'Destination']],
         ], SystemActor::Background);
-        $post = Post::create(['title' => 'Cross-connection owner']);
+        Post::migrate();
+        $post = Post::create(['title' => 'Source owner']);
         app(TaxonomyAssignments::class)->sync($post, 'tag', [$source], SystemActor::Background);
         app(TaxonomyTerms::class)->merge($source, $destination, SystemActor::Background, $source->revision, $destination->revision);
         app(TaxonomyTerms::class)->delete($moved, $moved->revision, SystemActor::Background, DeleteTermStrategy::Restrict);
@@ -847,7 +848,7 @@ it('keeps move merge delete and attachments on the configured connection', funct
             ->and(DB::connection($connection)->table(TaxonomyTables::get(TaxonomyTables::Termables))->value('term_id'))->toBe($destination->id)
             ->and(DB::connection()->table(TaxonomyTables::get(TaxonomyTables::Terms))->count())->toBe(0);
     } finally {
-        config()->set('nvl-taxonomy.storage.connection', null);
+        config()->set('nvl-taxonomy.connection', null);
         DB::purge($connection);
         unlink($database);
     }

@@ -7,21 +7,26 @@ description: Implement, integrate, test, or review nvl/taxonomy in Laravel 13. U
 
 Use the native Light services with an explicit persisted `Authenticatable` or `SystemActor::Background`. A model actor is reloaded and authorized through the `taxonomy.<ability>` Gate policy. The background actor is an explicit maintenance principal; never turn `null` into it.
 
+Mutation Gates receive locked canonical terms and their vocabulary; move/delete include a related destination when applicable and merge includes both source and destination. Create receives the vocabulary name. `TaxonomyCatalogAuthorization` and every `TaxonomyBatchAuthorization` callback receive the canonical explicit actor first. Bind SQL visibility for private content rather than consulting an ambient guard.
+
 ## Structural terms
 
 - Register vocabulary rules through `TaxonomyRegistry` and owner capabilities through `TaxonomyOwnerRegistry`.
 - Use `TaxonomyTerms::create(array $attributes, $actor)` and `update(Term|string $term, array $attributes, $actor, TranslationSyncMode $mode)` for canonical slugs, parent, position, metadata, and locale keyed `translations`.
 - Use `TaxonomyTerms::move`, `merge`, `delete`, `rebuild`, and `validateMerge` for complete tree operations. Update, move, delete, and merge require expected revisions. A move validates cycles, depth, vocabulary, and ownership while holding locks.
 - Names and descriptions live only in `term_translations`; slugs remain canonical and locale independent. Use `TranslationSyncMode::Replace` only for an explicit retained locale map.
+- Structural patches may omit translations to retain all locales. Null positions are invalid; null metadata clears it.
 - `DeleteTermStrategy` determines handling of children and attachments. Restrict is the default.
 
 ## Assignments and reads
 
 - Use `TaxonomyAssignments::attach`, `detach`, or `sync` on persisted registered owners; all operations retain the owner lock and transaction. `sync` is all or nothing and preserves supplied order.
 - Use `TaxonomyReader::resolve` for ordered references and creation of missing roots only in registered open vocabularies. UUID inputs identify existing terms; ambiguous slugs are rejected.
+- Resolve a list of at most `limits.bulk_terms` distinct normalized references. Missing roots require `taxonomy.create`, even through assignment; existing terms do not. Assignment owners share the Taxonomy connection so their locks protect the same transaction.
 - Use `TaxonomyReader::forOwners` with at most 100 owners and 20 vocabularies. It returns `['owners' => stdClass, 'order' => list]`; each requested owner and vocabulary has an explicit list of preloaded native `Term` models, including empty lists. The attached order is available as `pivot_position`.
 - For tree reads use `TaxonomyReader::tree` with a bound up to 500 terms. The registered vocabulary and native model scopes apply before loading.
 - Preserve the correlated owner filter policy (`TaxonomyBatchAuthorization`) and native ownership predicates. Never read a private term or another owner's attachment through a loose OR or unscoped relation.
+- Host filters take the explicit actor: `withAnyTerms($taxonomy, $values, $actor, $policy = null)` and equivalent all/without filters; `inCategory($category, $actor, $includeDescendants = true, $policy = null)`. Their read Gate and SQL policies receive canonical actor facts.
 
 ## Ownership and maintenance
 

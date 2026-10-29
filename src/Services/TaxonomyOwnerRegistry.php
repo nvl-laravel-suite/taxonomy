@@ -91,20 +91,28 @@ final class TaxonomyOwnerRegistry
         $modelClass = $owner::class;
         $canonical = new $modelClass;
 
-        $identifier = $owner->getRawOriginal($owner->getKeyName());
+        $identifier = $owner->getRawOriginal($canonical->getKeyName());
+        $key = $owner->getKey();
 
-        if (! $owner->exists || (! is_string($identifier) && ! is_int($identifier))) {
+        if (! $owner->exists || (! is_string($identifier) && ! is_int($identifier))
+            || (! is_string($key) && ! is_int($key))
+            || $owner->getTable() !== $canonical->getTable()
+            || ($owner->getConnectionName() !== null && $owner->getConnectionName() !== $canonical->getConnection()->getName())
+            || $owner->getConnection() !== $canonical->getConnection()
+            || $owner->getKeyName() !== $canonical->getKeyName()
+            || $owner->getKeyType() !== $canonical->getKeyType()
+            || $owner->isDirty($canonical->getKeyName())
+            || (string) $key !== (string) $identifier) {
             throw TaxonomyOwnership::violation('Taxonomy owners must be persisted canonical records.');
         }
+        if ($canonical->getConnection() !== TermModelRegistry::newInstance()->getConnection()) {
+            throw new InvalidArgumentException('Taxonomy owners must share the Taxonomy connection.');
+        }
 
-        $query = $canonical->newQuery()->whereKey($identifier);
+        $query = $canonical->newQuery()->useWritePdo()->whereKey($identifier);
         $resource = null;
 
         if (TaxonomyOwnership::active()) {
-            if ($canonical->getConnection() !== TermModelRegistry::newInstance()->getConnection()) {
-                throw new InvalidArgumentException('Taxonomy owners must share the Taxonomy connection.');
-            }
-
             $resource = TaxonomyOwnership::resource($owner);
             $this->boundary->query($query, $resource);
         }

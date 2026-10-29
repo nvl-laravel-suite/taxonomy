@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\DB;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization;
@@ -67,7 +68,7 @@ it('uses the scoped content locale and preserves empty display copy', function (
 it('rejects denied catalogue vocabularies before reading term storage', function (): void {
     app()->bind(TaxonomyCatalogAuthorization::class, static fn () => new class implements TaxonomyCatalogAuthorization
     {
-        public function authorizeVocabulary(string $taxonomy): void
+        public function authorizeVocabulary(Authenticatable|SystemActor $actor, string $taxonomy): void
         {
             throw new AuthorizationException('Denied vocabulary.');
         }

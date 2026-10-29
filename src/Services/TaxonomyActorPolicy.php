@@ -8,6 +8,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
+use Nvl\Support\Auth\CanonicalActorResolver;
 use Nvl\Support\Enums\SystemActor;
 
 /**
@@ -17,31 +18,26 @@ use Nvl\Support\Enums\SystemActor;
  */
 final readonly class TaxonomyActorPolicy
 {
-    public function authorize(Authenticatable|SystemActor $actor, string $ability, ?Model $owner = null, ?string $taxonomy = null): void
+    public function __construct(private CanonicalActorResolver $actors) {}
+
+    public function authorize(Authenticatable|SystemActor $actor, string $ability, ?Model $owner = null, ?string $taxonomy = null, ?Model $related = null): Authenticatable|SystemActor
     {
         if ($actor === SystemActor::Background) {
-            Gate::forUser($actor)->authorize('taxonomy.'.$ability, $owner === null ? [] : [$owner, $taxonomy]);
-
-            return;
+            $current = $actor;
+        } else {
+            if (! $actor instanceof Model) {
+                throw new AuthorizationException('A persisted taxonomy actor is required.');
+            }
+            $connection = $actor->getConnectionName();
+            if ($connection !== null && $connection !== (new ($actor::class))->getConnection()->getName()) {
+                throw new AuthorizationException('The taxonomy actor identity has changed.');
+            }
+            $current = $this->actors->resolve($actor);
         }
 
-        if (! $actor instanceof Model || ! $actor->exists || $actor->getKey() === null) {
-            throw new AuthorizationException('A persisted taxonomy actor is required.');
-        }
+        $arguments = $owner === null ? ($taxonomy === null ? [] : [$taxonomy]) : [$owner, $taxonomy, $related];
+        Gate::forUser($current)->authorize('taxonomy.'.$ability, $arguments);
 
-        $prototype = new ($actor::class);
-        if ($actor->getTable() !== $prototype->getTable()
-            || $actor->getKeyName() !== $prototype->getKeyName()
-            || $actor->getConnection() !== $prototype->getConnection()
-            || $actor->isDirty($actor->getKeyName())) {
-            throw new AuthorizationException('The taxonomy actor identity has changed.');
-        }
-
-        $current = $prototype->newQuery()->whereKey($actor->getRawOriginal($actor->getKeyName()))->first();
-        if (! $current instanceof Authenticatable) {
-            throw new AuthorizationException('The taxonomy actor is unavailable.');
-        }
-
-        Gate::forUser($current)->authorize('taxonomy.'.$ability, $owner === null ? [] : [$owner, $taxonomy]);
+        return $current;
     }
 }

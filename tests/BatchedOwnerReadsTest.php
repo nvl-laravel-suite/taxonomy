@@ -302,7 +302,7 @@ it('keeps exact native and custom morph identities paired with string owner keys
 
     foreach ([$native, ...$strings] as $index => $owner) {
         expect(array_column($json->owners->{$owner->getMorphClass()}->{(string) $owner->getKey()}->tag, 'id'))->toBe([$terms[$index]->id]);
-        expect($owner->newQuery()->withAnyTerms('tag', [$terms[$index]->id])->pluck($owner->getKeyName())->all())->toBe([$owner->getKey()]);
+        expect($owner->newQuery()->withAnyTerms('tag', [$terms[$index]->id], SystemActor::Background)->pluck($owner->getKeyName())->all())->toBe([$owner->getKey()]);
     }
     expect(Relation::morphMap())->toBe(['Host.Custom' => CustomKeyPost::class]);
 });
@@ -318,7 +318,7 @@ it('rejects overlapping storage host filters before SQL while keeping batch read
         $query = (new $class)->newQuery()->whereKey(array_map(static fn (Model $owner): mixed => $owner->getKey(), $owners));
         DB::enableQueryLog();
         DB::flushQueryLog();
-        expect(fn () => $query->{$method}('tag', [$first->id])->get())->toThrow(TaxonomyBatchReadException::class, 'TaxonomyReader::forOwners');
+        expect(fn () => $query->{$method}('tag', [$first->id], SystemActor::Background)->get())->toThrow(TaxonomyBatchReadException::class, 'TaxonomyReader::forOwners');
         expect(DB::getQueryLog())->toBe([]);
     } finally {
         $restore(isset($first, $second) ? [$first->id, $second->id] : []);
@@ -330,9 +330,9 @@ it('preserves empty host filter semantics on overlapping storage without correla
     try {
         [$owners, $first, $second] = taxonomyBatchOverlappingOwners($class);
         $ids = array_map(static fn (Model $owner): mixed => $owner->getKey(), $owners);
-        expect((new $class)->newQuery()->whereKey($ids)->withAnyTerms('tag', [])->pluck('id')->all())->toBe([])
-            ->and((new $class)->newQuery()->whereKey($ids)->withAllTerms('tag', [])->pluck('id')->all())->toEqualCanonicalizing($ids)
-            ->and((new $class)->newQuery()->whereKey($ids)->withoutTerms('tag', [])->pluck('id')->all())->toEqualCanonicalizing($ids);
+        expect((new $class)->newQuery()->whereKey($ids)->withAnyTerms('tag', [], SystemActor::Background)->pluck('id')->all())->toBe([])
+            ->and((new $class)->newQuery()->whereKey($ids)->withAllTerms('tag', [], SystemActor::Background)->pluck('id')->all())->toEqualCanonicalizing($ids)
+            ->and((new $class)->newQuery()->whereKey($ids)->withoutTerms('tag', [], SystemActor::Background)->pluck('id')->all())->toEqualCanonicalizing($ids);
     } finally {
         $restore(isset($first, $second) ? [$first->id, $second->id] : []);
     }
@@ -345,7 +345,7 @@ it('rejects overlapping storage category filters before root or traversal SQL', 
         $query = (new $class)->newQuery()->whereKey(array_map(static fn (Model $owner): mixed => $owner->getKey(), $owners));
         DB::enableQueryLog();
         DB::flushQueryLog();
-        expect(fn () => $query->inCategory($root)->get())->toThrow(TaxonomyBatchReadException::class, 'TaxonomyReader::forOwners');
+        expect(fn () => $query->inCategory($root, SystemActor::Background)->get())->toThrow(TaxonomyBatchReadException::class, 'TaxonomyReader::forOwners');
         expect(DB::getQueryLog())->toBe([]);
     } finally {
         $restore(isset($root, $other) ? [$root->id, $other->id] : []);
@@ -364,15 +364,15 @@ it('rejects equivalent qualified and case folded table storage before SQL', func
         expect(array_map(static fn (Term $value): string => $value->id, $result['owners']->{BatchTermTableOwner::class}->{(string) $owners[$index]->getKey()}->tag))->toBe([$term->id]);
     }
     $ids = array_map(static fn (Model $owner): mixed => $owner->getKey(), $owners);
-    expect(BatchTermTableOwner::query()->whereKey($ids)->withAnyTerms('tag', [])->count())->toBe(0)
-        ->and(BatchTermTableOwner::query()->whereKey($ids)->withAllTerms('tag', [])->count())->toBe(2)
-        ->and(BatchTermTableOwner::query()->whereKey($ids)->withoutTerms('tag', [])->count())->toBe(2);
+    expect(BatchTermTableOwner::query()->whereKey($ids)->withAnyTerms('tag', [], SystemActor::Background)->count())->toBe(0)
+        ->and(BatchTermTableOwner::query()->whereKey($ids)->withAllTerms('tag', [], SystemActor::Background)->count())->toBe(2)
+        ->and(BatchTermTableOwner::query()->whereKey($ids)->withoutTerms('tag', [], SystemActor::Background)->count())->toBe(2);
     DB::enableQueryLog();
     DB::flushQueryLog();
     foreach (['withAnyTerms', 'withAllTerms', 'withoutTerms'] as $method) {
-        expect(fn () => BatchTermTableOwner::query()->{$method}('tag', [$first->id])->get())->toThrow(TaxonomyBatchReadException::class);
+        expect(fn () => BatchTermTableOwner::query()->{$method}('tag', [$first->id], SystemActor::Background)->get())->toThrow(TaxonomyBatchReadException::class);
     }
-    expect(fn () => BatchTermTableOwner::query()->inCategory($first)->get())->toThrow(TaxonomyBatchReadException::class);
+    expect(fn () => BatchTermTableOwner::query()->inCategory($first, SystemActor::Background)->get())->toThrow(TaxonomyBatchReadException::class);
     expect(DB::getQueryLog())->toBe([]);
 })->with(['schema', 'case']);
 
@@ -543,13 +543,13 @@ it('preserves existing filter semantics and requires visible explicit policy ter
     app(TaxonomyAssignments::class)->sync($visibleOwner, 'tag', [$visible], SystemActor::Background);
     app(TaxonomyAssignments::class)->sync($hiddenOwner, 'tag', [$hidden], SystemActor::Background);
 
-    expect(Post::query()->withAnyTerms('tag', [], $policy)->count())->toBe(0)
-        ->and(Post::query()->withAllTerms('tag', [], $policy)->count())->toBe(2)
-        ->and(Post::query()->withoutTerms('tag', [], $policy)->count())->toBe(2)
-        ->and(Post::query()->withAllTerms('tag', [$visible->id, 'visible'], $policy)->sole()->getKey())->toBe($visibleOwner->getKey())
-        ->and(Post::query()->withAnyTerms('tag', ['hidden'], $policy)->count())->toBe(0)
-        ->and(Post::query()->withoutTerms('tag', ['hidden'], $policy)->count())->toBe(2)
-        ->and(Post::query()->select('id')->where('title', 'Hidden')->withAnyTerms('tag', ['visible'], $policy)->count())->toBe(0);
+    expect(Post::query()->withAnyTerms('tag', [], SystemActor::Background, $policy)->count())->toBe(0)
+        ->and(Post::query()->withAllTerms('tag', [], SystemActor::Background, $policy)->count())->toBe(2)
+        ->and(Post::query()->withoutTerms('tag', [], SystemActor::Background, $policy)->count())->toBe(2)
+        ->and(Post::query()->withAllTerms('tag', [$visible->id, 'visible'], SystemActor::Background, $policy)->sole()->getKey())->toBe($visibleOwner->getKey())
+        ->and(Post::query()->withAnyTerms('tag', ['hidden'], SystemActor::Background, $policy)->count())->toBe(0)
+        ->and(Post::query()->withoutTerms('tag', ['hidden'], SystemActor::Background, $policy)->count())->toBe(2)
+        ->and(Post::query()->select('id')->where('title', 'Hidden')->withAnyTerms('tag', ['visible'], SystemActor::Background, $policy)->count())->toBe(0);
 });
 
 it('does not traverse a hidden registered category root through the generic term model', function (): void {
@@ -560,7 +560,7 @@ it('does not traverse a hidden registered category root through the generic term
     $child = BatchScopedTerm::withoutGlobalScopes()->create(['taxonomy' => 'private_categories', 'slug' => 'visible', 'parent_id' => $root->id]);
     app(TaxonomyAssignments::class)->sync($owner, 'private_categories', [$child], SystemActor::Background);
 
-    expect(fn () => Post::query()->inCategory($root)->get())->toThrow(InvalidArgumentException::class);
+    expect(fn () => Post::query()->inCategory($root, SystemActor::Background)->get())->toThrow(InvalidArgumentException::class);
 });
 
 it('rejects altered host builder connection table and unions before SQL', function (string $mode): void {
@@ -577,7 +577,7 @@ it('rejects altered host builder connection table and unions before SQL', functi
 
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => $query->withAnyTerms('tag', ['visible'])->get())->toThrow(InvalidArgumentException::class);
+    expect(fn () => $query->withAnyTerms('tag', ['visible'], SystemActor::Background)->get())->toThrow(InvalidArgumentException::class);
     expect(DB::getQueryLog())->toBe([]);
 })->with(['connection', 'table', 'union']);
 
@@ -643,7 +643,7 @@ it('groups caller OR clauses before native and custom soft delete guards in dire
         ->and($guarded->getBindings())->toBe($bindings)
         ->and($guarded->get()->modelKeys())->toBe([$active->getKey()])
         ->and($guarded->firstOrFail()->getAttribute('marker'))->toBe('retained')
-        ->and($class::withoutGlobalScopes()->where('title', 'visible')->orWhere('title', 'deleted')->withAllTerms('tag', [])->pluck('id')->all())->toBe([$active->getKey()]);
+        ->and($class::withoutGlobalScopes()->where('title', 'visible')->orWhere('title', 'deleted')->withAllTerms('tag', [], SystemActor::Background)->pluck('id')->all())->toBe([$active->getKey()]);
 })->with([[BatchScopedPost::class, 'deleted_at'], [BatchArchivedPost::class, 'archived_at']]);
 
 it('bounds category traversal by visible child sets rather than loading a vocabulary', function (): void {
@@ -654,7 +654,7 @@ it('bounds category traversal by visible child sets rather than loading a vocabu
     config()->set('nvl-taxonomy.limits.bulk_terms', 3);
     DB::enableQueryLog();
     DB::flushQueryLog();
-    expect(fn () => Post::query()->inCategory($root)->get())->toThrow(TaxonomyException::class);
+    expect(fn () => Post::query()->inCategory($root, SystemActor::Background)->get())->toThrow(TaxonomyException::class);
     $queries = DB::getQueryLog();
     $childQueries = array_values(array_filter($queries, static fn (array $query): bool => str_contains($query['query'], 'parent_id')));
     expect($childQueries)->toHaveCount(1)
@@ -693,7 +693,7 @@ it('keeps term policy OR clauses inside the independent host attachment policy',
     $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
 
     expect($json->owners->{Post::class}->{(string) $owner->getKey()}->tag)->toBe([])
-        ->and(Post::query()->withAnyTerms('tag', ['absent'], new BatchTaxonomyPolicy)->count())->toBe(0);
+        ->and(Post::query()->withAnyTerms('tag', ['absent'], SystemActor::Background, new BatchTaxonomyPolicy)->count())->toBe(0);
 });
 
 it('does not count denied structural terms toward overflow or translation loads', function (): void {

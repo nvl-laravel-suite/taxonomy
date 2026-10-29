@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException;
 use Nvl\Taxonomy\Models\Term;
@@ -29,6 +31,7 @@ final readonly class TaxonomyHostQueryAdapter
         private TaxonomyBatchQueryBuilder $queries,
         private TaxonomyBatchAuthorization $policy,
         private TaxonomyRegistry $vocabularies,
+        private TaxonomyActorPolicy $actors,
     ) {}
 
     /**
@@ -40,8 +43,9 @@ final readonly class TaxonomyHostQueryAdapter
      * @param  array<array-key, mixed>  $references
      * @return Builder<T>
      */
-    public function filter(Builder $query, string $vocabulary, array $references, string $mode, ?TaxonomyBatchAuthorization $policy = null): Builder
+    public function filter(Builder $query, string $vocabulary, array $references, string $mode, Authenticatable|SystemActor $actor, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
+        $actor = $this->actors->authorize($actor, 'read');
         $this->owners->assertVocabulary($query->getModel(), $vocabulary);
         $this->owners->assertHostQuery($query);
         if (! array_is_list($references)) {
@@ -67,12 +71,12 @@ final readonly class TaxonomyHostQueryAdapter
         }
         if ($mode === 'all') {
             foreach (array_keys($values) as $value) {
-                $query->whereExists($this->matching($query->getModel(), $vocabulary, [(string) $value], $policy)->selectRaw('1')->toBase());
+                $query->whereExists($this->matching($query->getModel(), $vocabulary, [(string) $value], $policy, $actor)->selectRaw('1')->toBase());
             }
 
             return $query;
         }
-        $terms = $this->matching($query->getModel(), $vocabulary, array_map(strval(...), array_keys($values)), $policy)->selectRaw('1')->toBase();
+        $terms = $this->matching($query->getModel(), $vocabulary, array_map(strval(...), array_keys($values)), $policy, $actor)->selectRaw('1')->toBase();
 
         return $query->whereExists($terms, 'and', $mode === 'without');
     }
@@ -85,8 +89,9 @@ final readonly class TaxonomyHostQueryAdapter
      * @param  Builder<T>  $query
      * @return Builder<T>
      */
-    public function category(Builder $query, Term $category, bool $descendants = true, ?TaxonomyBatchAuthorization $policy = null): Builder
+    public function category(Builder $query, Term $category, Authenticatable|SystemActor $actor, bool $descendants = true, ?TaxonomyBatchAuthorization $policy = null): Builder
     {
+        $actor = $this->actors->authorize($actor, 'read');
         $this->owners->assertHostQuery($query);
         $identifier = $category->getRawOriginal($category->getKeyName());
         $vocabulary = $category->getRawOriginal('taxonomy');
@@ -96,7 +101,7 @@ final readonly class TaxonomyHostQueryAdapter
         $this->owners->assertVocabulary($query->getModel(), $vocabulary);
         $this->assertCorrelationShape($query->getModel(), $vocabulary);
         $policy ??= $this->policy;
-        $rootQuery = $this->queries->terms($vocabulary, $policy);
+        $rootQuery = $this->queries->terms($vocabulary, $policy, $actor);
         if ($category->getConnection() !== $rootQuery->getConnection()
             || $category->getTable() !== $rootQuery->getModel()->getTable()) {
             throw new InvalidArgumentException('Category filters require canonical registered term storage.');
@@ -110,7 +115,7 @@ final readonly class TaxonomyHostQueryAdapter
         $frontier = $ids;
         $limit = TaxonomyConfiguration::positiveLimit('bulk_terms', 500);
         while ($descendants && $frontier !== []) {
-            $children = $this->queries->terms($vocabulary, $policy);
+            $children = $this->queries->terms($vocabulary, $policy, $actor);
             $model = $children->getModel();
             $rows = $children->whereIn($model->qualifyColumn('parent_id'), $frontier)
                 ->orderBy($model->getQualifiedKeyName())->limit($limit - count($seen) + 1)
@@ -129,7 +134,7 @@ final readonly class TaxonomyHostQueryAdapter
             }
         }
 
-        return $this->filter($query, $vocabulary, $ids, 'any', $policy);
+        return $this->filter($query, $vocabulary, $ids, 'any', $actor, $policy);
     }
 
     /** Reject physical table shadowing before any ownership or term storage query. */
@@ -161,9 +166,9 @@ final readonly class TaxonomyHostQueryAdapter
      * @param  list<string>  $references
      * @return Builder<Term>
      */
-    private function matching(Model $owner, string $vocabulary, array $references, TaxonomyBatchAuthorization $policy): Builder
+    private function matching(Model $owner, string $vocabulary, array $references, TaxonomyBatchAuthorization $policy, Authenticatable|SystemActor $actor): Builder
     {
-        $terms = $this->queries->terms($vocabulary, $policy, $owner);
+        $terms = $this->queries->terms($vocabulary, $policy, $actor, $owner);
         $model = $terms->getModel();
         $attachments = $this->queries->attachments();
         $pivot = $attachments->getModel();

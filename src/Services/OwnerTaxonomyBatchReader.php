@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException;
@@ -40,7 +42,7 @@ final readonly class OwnerTaxonomyBatchReader
      * @param  array<array-key, mixed>  $vocabularies
      * @return array{owners:stdClass,order:list<array{type:string,id:string}>}
      */
-    public function read(array $owners, array $vocabularies, ?string $locale = null): array
+    public function read(array $owners, array $vocabularies, Authenticatable|SystemActor $actor, ?string $locale = null): array
     {
         $input = OwnerBatch::fromModels($owners);
         if (! array_is_list($vocabularies) || count($vocabularies) > 20) {
@@ -69,7 +71,7 @@ final readonly class OwnerTaxonomyBatchReader
             return ['owners' => new stdClass, 'order' => []];
         }
         $admitted = $this->owners->admit($input, $vocabularies);
-        $this->policy->authorizeOwners($admitted, $vocabularies);
+        $this->policy->authorizeOwners($actor, $admitted, $vocabularies);
         foreach ($admitted->identities() as $identity) {
             $empty = new stdClass;
             foreach ($vocabularies as $vocabulary) {
@@ -81,7 +83,7 @@ final readonly class OwnerTaxonomyBatchReader
             return $this->result($admitted, $values);
         }
         /** @var Collection<int, stdClass&object{id: string, term_id: string, termable_type: string, termable_id: string, taxonomy: string, position: int, nvl_taxonomy_rank: int}> $facts */
-        $facts = $this->queries->probe($this->queries->batch($admitted, $vocabularies, $this->policy))->get();
+        $facts = $this->queries->probe($this->queries->batch($admitted, $vocabularies, $this->policy, $actor))->get();
         $ids = [];
         foreach ($facts as $fact) {
             if ($fact->nvl_taxonomy_rank > 100) {
@@ -96,7 +98,7 @@ final readonly class OwnerTaxonomyBatchReader
             if ($vocabularyIds === []) {
                 continue;
             }
-            $query = $this->queries->terms($vocabulary, $this->policy);
+            $query = $this->queries->terms($vocabulary, $this->policy, $actor);
             $prototype = $query->getModel();
             $loaded = $query->whereIn($prototype->getQualifiedKeyName(), $vocabularyIds)
                 ->get(array_map($prototype->qualifyColumn(...), ['id', 'taxonomy', 'slug', 'parent_id', 'position', 'revision']));

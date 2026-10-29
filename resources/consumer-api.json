@@ -563,32 +563,12 @@
             "properties": [],
             "constants": []
         },
-        "Nvl\\Taxonomy\\Services\\TaxonomyTree": {
-            "kind": "class",
-            "file": "src/Services/TaxonomyTree.php",
-            "methods": [
-                "__construct",
-                "for"
-            ],
-            "properties": [],
-            "constants": []
-        },
         "Nvl\\Taxonomy\\Services\\TermModelRegistry": {
             "kind": "class",
             "file": "src/Services/TermModelRegistry.php",
             "methods": [
                 "__construct",
                 "termClass"
-            ],
-            "properties": [],
-            "constants": []
-        },
-        "Nvl\\Taxonomy\\Services\\TermResolver": {
-            "kind": "class",
-            "file": "src/Services/TermResolver.php",
-            "methods": [
-                "__construct",
-                "resolve"
             ],
             "properties": [],
             "constants": []

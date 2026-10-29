@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException;
@@ -30,7 +32,7 @@ final readonly class TaxonomyBatchQueryBuilder
      *
      * @return Builder<Term>
      */
-    public function terms(string $vocabulary, TaxonomyBatchAuthorization $policy, ?Model $host = null): Builder
+    public function terms(string $vocabulary, TaxonomyBatchAuthorization $policy, Authenticatable|SystemActor $actor, ?Model $host = null): Builder
     {
         $definition = $this->vocabularies->get($vocabulary);
         $prototype = new $definition->model;
@@ -39,9 +41,9 @@ final readonly class TaxonomyBatchQueryBuilder
         }
         $query = $this->boundary->query($prototype->newQuery()->withoutEagerLoads(), 'taxonomy.terms');
         TaxonomyBatchOwnerAdmission::exact($query, $prototype->qualifyColumn('taxonomy'), $vocabulary);
-        $query->where(fn (Builder $nested) => $policy->scopeTerms($nested, [$vocabulary]));
+        $query->where(fn (Builder $nested) => $policy->scopeTerms($actor, $nested, [$vocabulary]));
         if ($host !== null) {
-            $query->where(fn (Builder $nested) => $policy->scopeHostTerms($nested, $host, $vocabulary));
+            $query->where(fn (Builder $nested) => $policy->scopeHostTerms($actor, $nested, $host, $vocabulary));
         }
 
         return $query;
@@ -66,7 +68,7 @@ final readonly class TaxonomyBatchQueryBuilder
      * @param  list<string>  $vocabularies
      * @return Builder<Termable>
      */
-    public function batch(OwnerBatch $owners, array $vocabularies, TaxonomyBatchAuthorization $policy): Builder
+    public function batch(OwnerBatch $owners, array $vocabularies, TaxonomyBatchAuthorization $policy, Authenticatable|SystemActor $actor): Builder
     {
         $query = $this->attachments();
         $model = $query->getModel();
@@ -78,16 +80,16 @@ final readonly class TaxonomyBatchQueryBuilder
                 });
             }
         });
-        $query->where(function (Builder $vocabularyQueries) use ($vocabularies, $model, $policy): void {
+        $query->where(function (Builder $vocabularyQueries) use ($vocabularies, $model, $policy, $actor): void {
             foreach ($vocabularies as $vocabulary) {
-                $vocabularyQueries->orWhere(function (Builder $vocabularyQuery) use ($vocabulary, $model, $policy): void {
+                $vocabularyQueries->orWhere(function (Builder $vocabularyQuery) use ($vocabulary, $model, $policy, $actor): void {
                     TaxonomyBatchOwnerAdmission::exact($vocabularyQuery, $model->qualifyColumn('taxonomy'), $vocabulary);
-                    $terms = $this->terms($vocabulary, $policy);
+                    $terms = $this->terms($vocabulary, $policy, $actor);
                     $vocabularyQuery->whereIn($model->qualifyColumn('term_id'), $terms->select($terms->getModel()->getQualifiedKeyName()));
                 });
             }
         });
-        $query->where(fn (Builder $nested) => $policy->scopeAttachments($nested, $owners, $vocabularies));
+        $query->where(fn (Builder $nested) => $policy->scopeAttachments($actor, $nested, $owners, $vocabularies));
 
         return $query;
     }

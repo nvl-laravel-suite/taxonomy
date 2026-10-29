@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Models\Term;
@@ -26,7 +28,7 @@ final readonly class RegisteredTaxonomyBatchAuthorization implements TaxonomyBat
      *
      * @param  list<string>  $vocabularies
      */
-    public function authorizeOwners(OwnerBatch $owners, array $vocabularies): void
+    public function authorizeOwners(Authenticatable|SystemActor $actor, OwnerBatch $owners, array $vocabularies): void
     {
         foreach ($owners->owners() as $owner) {
             foreach ($vocabularies as $vocabulary) {
@@ -41,7 +43,7 @@ final readonly class RegisteredTaxonomyBatchAuthorization implements TaxonomyBat
      * @param  Builder<Termable>  $query
      * @param  list<string>  $vocabularies
      */
-    public function scopeAttachments(Builder $query, OwnerBatch $owners, array $vocabularies): void {}
+    public function scopeAttachments(Authenticatable|SystemActor $actor, Builder $query, OwnerBatch $owners, array $vocabularies): void {}
 
     /**
      * Preserve the registered model's own term visibility predicates.
@@ -49,14 +51,14 @@ final readonly class RegisteredTaxonomyBatchAuthorization implements TaxonomyBat
      * @param  Builder<Term>  $query
      * @param  list<string>  $vocabularies
      */
-    public function scopeTerms(Builder $query, array $vocabularies): void {}
+    public function scopeTerms(Authenticatable|SystemActor $actor, Builder $query, array $vocabularies): void {}
 
     /**
      * Admit the canonical host capability without querying owner records.
      *
      * @param  Builder<Term>  $query
      */
-    public function scopeHostTerms(Builder $query, Model $ownerPrototype, string $vocabulary): void
+    public function scopeHostTerms(Authenticatable|SystemActor $actor, Builder $query, Model $ownerPrototype, string $vocabulary): void
     {
         $this->owners->assertVocabulary($ownerPrototype, $vocabulary);
     }

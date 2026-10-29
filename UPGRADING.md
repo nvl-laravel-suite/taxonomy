@@ -6,6 +6,14 @@ Light requires PHP 8.4 and Laravel 13. Replace retired package Actions, transpor
 
 Upgrade the selected family together. Preserve stored identities, migration ownership, source connections, queue state and operation recovery journals. Review and apply the relevant storage/adoption procedure before accepting writes; installing new code alone does not migrate existing data.
 
+Term mutation Gates now receive canonical locked targets: `($actor, $term, $taxonomy, $related)` for update/delete/move and `($actor, $source, $taxonomy, $destination)` for merge and merge validation. Create receives `($actor, $taxonomy)`. Authorize the actual target rather than trusting caller model attributes.
+
+Add `Authenticatable|SystemActor $actor` as the first parameter of every `TaxonomyCatalogAuthorization` and `TaxonomyBatchAuthorization` method. Host filters now require the actor after their references; `inCategory` requires it immediately after the category. Pass it explicitly from the consumer's service call. Open-vocabulary creation during resolve or assignment additionally requires `taxonomy.create`; existing-term assignments retain their own permission.
+
+Structural update patches may omit translations. Explicit replacement still requires the retained locale map. Null positions are rejected. Owners must share the package connection for atomic assignment locks. These changes require no schema migration.
+
+Replace direct `TaxonomyTree` and `TermResolver` calls with `TaxonomyReader`; those helpers are internal and rely on the native service authorization and transaction.
+
 ## Historical upgrade notes
 
 The following sections describe pre-Light releases and their old APIs, compatibility windows and commands. They remain useful for understanding existing installations, but are not Light setup instructions. The old Tenancy bridge, DTO/Action contracts, package HTTP and type generation are retired in Light.

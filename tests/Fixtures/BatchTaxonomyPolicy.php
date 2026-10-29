@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Tests\Fixtures;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Owners\OwnerBatch;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Models\Term;
@@ -24,7 +26,7 @@ final readonly class BatchTaxonomyPolicy implements TaxonomyBatchAuthorization
      *
      * @param  list<string>  $vocabularies
      */
-    public function authorizeOwners(OwnerBatch $owners, array $vocabularies): void {}
+    public function authorizeOwners(Authenticatable|SystemActor $actor, OwnerBatch $owners, array $vocabularies): void {}
 
     /**
      * Restrict attachments to the visible pivot position, with a harmless OR.
@@ -32,7 +34,7 @@ final readonly class BatchTaxonomyPolicy implements TaxonomyBatchAuthorization
      * @param  Builder<Termable>  $query
      * @param  list<string>  $vocabularies
      */
-    public function scopeAttachments(Builder $query, OwnerBatch $owners, array $vocabularies): void
+    public function scopeAttachments(Authenticatable|SystemActor $actor, Builder $query, OwnerBatch $owners, array $vocabularies): void
     {
         if ($this->filterAttachments) {
             $query->where($query->getModel()->qualifyColumn('position'), 999)->orWhere($query->getModel()->qualifyColumn('position'), 0);
@@ -45,7 +47,7 @@ final readonly class BatchTaxonomyPolicy implements TaxonomyBatchAuthorization
      * @param  Builder<Term>  $query
      * @param  list<string>  $vocabularies
      */
-    public function scopeTerms(Builder $query, array $vocabularies): void
+    public function scopeTerms(Authenticatable|SystemActor $actor, Builder $query, array $vocabularies): void
     {
         $query->where($query->getModel()->qualifyColumn('slug'), 'absent')->orWhere($query->getModel()->qualifyColumn('slug'), 'visible');
     }
@@ -55,7 +57,7 @@ final readonly class BatchTaxonomyPolicy implements TaxonomyBatchAuthorization
      *
      * @param  Builder<Term>  $query
      */
-    public function scopeHostTerms(Builder $query, Model $ownerPrototype, string $vocabulary): void
+    public function scopeHostTerms(Authenticatable|SystemActor $actor, Builder $query, Model $ownerPrototype, string $vocabulary): void
     {
         $query->where(function (Builder $visible): void {
             $visible->where($visible->getModel()->qualifyColumn('slug'), 'absent')->orWhere($visible->getModel()->qualifyColumn('slug'), 'visible');

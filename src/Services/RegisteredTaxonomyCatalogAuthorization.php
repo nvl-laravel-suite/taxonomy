@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
@@ -18,7 +20,7 @@ final readonly class RegisteredTaxonomyCatalogAuthorization implements TaxonomyC
     public function __construct(private TaxonomyRegistry $taxonomies) {}
 
     /** Admit only explicitly registered vocabularies. */
-    public function authorizeVocabulary(string $taxonomy): void
+    public function authorizeVocabulary(Authenticatable|SystemActor $actor, string $taxonomy): void
     {
         $this->taxonomies->get($taxonomy);
     }

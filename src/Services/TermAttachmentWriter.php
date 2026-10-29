@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Contracts\OwnershipModelPersistence;
 use Nvl\Taxonomy\Exceptions\InvalidTermOperationException;
 use Nvl\Taxonomy\Models\Term;
@@ -42,29 +44,29 @@ final readonly class TermAttachmentWriter
      *
      * @param  list<Term|string>  $references
      */
-    public function sync(Model $owner, string $taxonomy, array $references): void
+    public function sync(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor): void
     {
         if (TaxonomyOwnership::declared()) {
             $canonical = $this->owners->resolve($owner, lock: true);
-            $this->persistence->save($canonical, function () use ($canonical, $taxonomy, $references): bool {
-                $this->syncRecords($canonical, $taxonomy, $references);
+            $this->persistence->save($canonical, function () use ($canonical, $taxonomy, $references, $actor): bool {
+                $this->syncRecords($canonical, $taxonomy, $references, $actor);
 
                 return true;
             });
 
             return;
         }
-        $this->syncRecords($owner, $taxonomy, $references);
+        $this->syncRecords($owner, $taxonomy, $references, $actor);
     }
 
     /** Persist the admitted attachment set under its actual host source lease.
      * @param  list<Term|string>  $references
      */
-    private function syncRecords(Model $owner, string $taxonomy, array $references): void
+    private function syncRecords(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor): void
     {
         [$definition, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy, lock: true);
         $this->assertBulkLimit($references);
-        $resolved = $this->terms->resolve($taxonomy, $references);
+        $resolved = $this->terms->resolve($taxonomy, $references, $actor);
 
         if ($definition->exclusive && count($resolved) > 1) {
             throw new InvalidTermOperationException(
@@ -108,7 +110,7 @@ final readonly class TermAttachmentWriter
      *
      * @param  list<Term|string>  $references
      */
-    public function append(Model $owner, string $taxonomy, array $references): void
+    public function append(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor): void
     {
         [, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy, lock: true);
         $current = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy)
@@ -122,7 +124,7 @@ final readonly class TermAttachmentWriter
             $references,
         );
 
-        $this->sync($owner, $taxonomy, [...$current, ...$incoming]);
+        $this->sync($owner, $taxonomy, [...$current, ...$incoming], $actor);
     }
 
     /**
@@ -130,15 +132,15 @@ final readonly class TermAttachmentWriter
      *
      * @param  list<Term|string>  $references
      */
-    public function detach(Model $owner, string $taxonomy, array $references = []): int
+    public function detach(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor): int
     {
         if (! TaxonomyOwnership::declared()) {
-            return $this->detachRecords($owner, $taxonomy, $references);
+            return $this->detachRecords($owner, $taxonomy, $references, $actor);
         }
         $canonical = $this->owners->resolve($owner, lock: true);
         $deleted = 0;
-        $this->persistence->save($canonical, function () use ($canonical, $taxonomy, $references, &$deleted): bool {
-            $deleted = $this->detachRecords($canonical, $taxonomy, $references);
+        $this->persistence->save($canonical, function () use ($canonical, $taxonomy, $references, $actor, &$deleted): bool {
+            $deleted = $this->detachRecords($canonical, $taxonomy, $references, $actor);
 
             return true;
         });
@@ -149,7 +151,7 @@ final readonly class TermAttachmentWriter
     /** Remove admitted attachments while the source lease remains active.
      * @param  list<Term|string>  $references
      */
-    private function detachRecords(Model $owner, string $taxonomy, array $references): int
+    private function detachRecords(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor): int
     {
         [, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy, lock: true);
         $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy);
@@ -159,7 +161,7 @@ final readonly class TermAttachmentWriter
             $this->assertBulkLimit($references);
             $ids = array_map(
                 static fn (Term $term): string => $term->id,
-                $this->terms->resolve($taxonomy, $references, createMissing: false),
+                $this->terms->resolve($taxonomy, $references, $actor, createMissing: false),
             );
 
             if ($ids === []) {

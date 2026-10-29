@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Nvl\Taxonomy\Concerns\HasTaxonomies;
+use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 class Post extends Model
 {
@@ -20,12 +21,18 @@ class Post extends Model
     /** @var list<string> */
     protected array $taxonomies = ['tag', 'category'];
 
+    /** Keep this fixture host on its explicitly configured Taxonomy source. */
+    public function getConnectionName(): ?string
+    {
+        return TaxonomyConfiguration::connection() ?? parent::getConnectionName();
+    }
+
     /**
      * Create the test-only taxonomy owner table.
      */
     public static function migrate(): void
     {
-        Schema::create('taxonomy_posts', function (Blueprint $table) {
+        Schema::connection((new self)->getConnectionName())->create('taxonomy_posts', function (Blueprint $table) {
             $table->id();
             $table->string('title');
             $table->timestamps();

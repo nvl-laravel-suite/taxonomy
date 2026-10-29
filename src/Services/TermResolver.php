@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
@@ -17,13 +19,14 @@ use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Support\SlugGenerator;
+use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Translatable\Services\ContentLocale;
 
 /**
  * Resolves term references in batches and creates missing open-vocabulary roots.
  *
- * @api
+ * @internal
  */
 final readonly class TermResolver
 {
@@ -37,16 +40,20 @@ final readonly class TermResolver
         private TermWriter $writer,
         private OwnershipBoundary $boundary,
         private DomainEventDispatcher $domainEvents,
+        private TaxonomyActorPolicy $actors,
     ) {}
 
     /**
      * Resolve ordered references and create missing roots when permitted.
      *
-     * @param  list<Term|string>  $references
+     * @param  array<array-key, Term|string>  $references  Raw references validated as a list before resolution
      * @return list<Term>
      */
-    public function resolve(string $taxonomy, array $references, bool $createMissing = true): array
+    public function resolve(string $taxonomy, array $references, Authenticatable|SystemActor $actor, bool $createMissing = true): array
     {
+        if (! array_is_list($references)) {
+            throw new InvalidArgumentException('Taxonomy term references must be a bounded list.');
+        }
         $definition = $this->taxonomies->get($taxonomy);
         $modelReferenceIds = [];
         $stringReferences = [];
@@ -86,6 +93,10 @@ final readonly class TermResolver
             if (! Str::isUuid($input)) {
                 $slugs[$input] = $this->slugs->generate($input);
             }
+        }
+
+        if (count($identifiers) + count(array_unique($slugs)) > TaxonomyConfiguration::positiveLimit('bulk_terms', 500)) {
+            throw new InvalidArgumentException('Too many distinct taxonomy term references were supplied.');
         }
 
         if ($identifiers === [] && $slugs === []) {
@@ -172,6 +183,7 @@ final readonly class TermResolver
         if (! $definition->open) {
             throw new ClosedVocabularyException($taxonomy, array_values($missing));
         }
+        $this->actors->authorize($actor, 'create', taxonomy: $taxonomy);
 
         $database = DB::connection((new $modelClass)->getConnectionName());
 

@@ -7,6 +7,7 @@ namespace Nvl\Taxonomy\Services;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
@@ -16,6 +17,7 @@ use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Exceptions\CircularHierarchyException;
+use Nvl\Taxonomy\Exceptions\InvalidParentException;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
 use Nvl\Taxonomy\Models\Term;
@@ -46,11 +48,11 @@ final readonly class TaxonomyTerms
     /** @param array<string,mixed> $attributes */
     public function create(array $attributes, Authenticatable|SystemActor $actor): Term
     {
-        $this->actors->authorize($actor, 'create');
         $taxonomy = $attributes['taxonomy'] ?? null;
         if (! is_string($taxonomy) || $taxonomy === '') {
             throw new InvalidArgumentException('A taxonomy identifier is required.');
         }
+        $this->actors->authorize($actor, 'create', taxonomy: $taxonomy);
         $definition = $this->taxonomies->get($taxonomy);
         $connection = (new ($definition->model))->getConnectionName();
 
@@ -74,7 +76,6 @@ final readonly class TaxonomyTerms
         Authenticatable|SystemActor $actor,
         TranslationSyncMode $mode = TranslationSyncMode::Patch,
     ): Term {
-        $this->actors->authorize($actor, 'update');
         $termId = $term instanceof Term
             ? $term->getRawOriginal($term->getKeyName())
             : $term;
@@ -88,9 +89,11 @@ final readonly class TaxonomyTerms
             $termId,
             $attributes,
             $mode,
+            $actor,
         ): Term {
             $resolvedTerm = $this->terms->lock($termId);
             $this->taxonomies->get($resolvedTerm->taxonomy);
+            $this->actors->authorize($actor, 'update', $resolvedTerm, $resolvedTerm->taxonomy);
 
             $updated = $this->writer->update($resolvedTerm, $attributes, $mode);
             $this->domainEvents->dispatch(new TermChanged(
@@ -111,7 +114,6 @@ final readonly class TaxonomyTerms
         DeleteTermStrategy $strategy = DeleteTermStrategy::Restrict,
         ?string $reparentTo = null,
     ): bool {
-        $this->actors->authorize($actor, 'delete');
         $connection = TermModelRegistry::newInstance()->getConnectionName();
 
         return DB::connection($connection)->transaction(function () use (
@@ -119,8 +121,11 @@ final readonly class TaxonomyTerms
             $expectedRevision,
             $strategy,
             $reparentTo,
+            $actor,
         ): bool {
             $term = $this->terms->lock($term);
+            $destination = $reparentTo === null ? null : $this->terms->lock($reparentTo);
+            $this->actors->authorize($actor, 'delete', $term, $term->taxonomy, $destination);
 
             if ($term->revision !== $expectedRevision) {
                 throw StaleTermVersionException::forTerm($term->id);
@@ -197,7 +202,6 @@ final readonly class TaxonomyTerms
         int $position,
         int $expectedRevision,
     ): Term {
-        $this->actors->authorize($actor, 'move');
         $parentId = $parent instanceof Term ? $parent->getRawOriginal($parent->getKeyName()) : $parent;
         if ($parentId !== null && ! is_string($parentId)) {
             throw new InvalidArgumentException('A canonical parent identifier is required.');
@@ -213,8 +217,15 @@ final readonly class TaxonomyTerms
             $parentId,
             $position,
             $expectedRevision,
+            $actor,
         ): Term {
             $term = $this->terms->lock($term);
+            try {
+                $parent = $parentId === null ? null : $this->terms->lock($parentId);
+            } catch (ModelNotFoundException) {
+                throw InvalidParentException::forTerm($term->taxonomy, $parentId);
+            }
+            $this->actors->authorize($actor, 'move', $term, $term->taxonomy, $parent);
 
             if ($term->revision !== $expectedRevision) {
                 throw StaleTermVersionException::forTerm($term->id);
@@ -243,7 +254,6 @@ final readonly class TaxonomyTerms
         int $expectedSourceRevision,
         int $expectedDestinationRevision,
     ): Term {
-        $this->actors->authorize($actor, 'merge');
         $sourceId = $source instanceof Term
             ? $source->getRawOriginal($source->getKeyName())
             : $source;
@@ -262,6 +272,7 @@ final readonly class TaxonomyTerms
             $expectedSourceRevision,
             $expectedDestinationRevision,
             $connection,
+            $actor,
         ): Term {
             $context = $this->validator->validate(
                 $sourceId,
@@ -271,6 +282,7 @@ final readonly class TaxonomyTerms
             );
             $source = $context->source;
             $destination = $context->destination;
+            $this->actors->authorize($actor, 'merge', $source, $source->taxonomy, $destination);
             $ownerScope = TaxonomyOwnership::declared() ? $source->getRawOriginal('owner_scope_key') : null;
             if (TaxonomyOwnership::declared() && ! is_string($ownerScope)) {
                 throw TaxonomyOwnership::violation('A merged Taxonomy term lacks owner scope.');
@@ -366,7 +378,7 @@ final readonly class TaxonomyTerms
 
     public function rebuild(Authenticatable|SystemActor $actor, ?string $taxonomy = null, bool $dryRun = false): int
     {
-        $this->actors->authorize($actor, 'rebuild');
+        $this->actors->authorize($actor, 'rebuild', taxonomy: $taxonomy);
         $connection = TermModelRegistry::newInstance()->getConnectionName();
 
         return DB::connection($connection)->transaction(function () use ($taxonomy, $dryRun): int {
@@ -407,7 +419,6 @@ final readonly class TaxonomyTerms
         int $expectedSourceRevision,
         int $expectedDestinationRevision,
     ): void {
-        $this->actors->authorize($actor, 'merge');
         $sourceId = $source instanceof Term
             ? $source->getRawOriginal($source->getKeyName())
             : $source;
@@ -421,12 +432,10 @@ final readonly class TaxonomyTerms
         $connection = $this->connectionFor();
 
         DB::connection($connection)->transaction(
-            fn () => $this->validator->validate(
-                $sourceId,
-                $destinationId,
-                $expectedSourceRevision,
-                $expectedDestinationRevision,
-            ),
+            function () use ($sourceId, $destinationId, $expectedSourceRevision, $expectedDestinationRevision, $actor): void {
+                $context = $this->validator->validate($sourceId, $destinationId, $expectedSourceRevision, $expectedDestinationRevision);
+                $this->actors->authorize($actor, 'merge', $context->source, $context->source->taxonomy, $context->destination);
+            },
             TaxonomyConfiguration::transactionAttempts(),
         );
     }

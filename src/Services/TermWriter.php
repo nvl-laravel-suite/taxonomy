@@ -83,6 +83,10 @@ final readonly class TermWriter
         array $data,
         TranslationSyncMode $mode = TranslationSyncMode::Patch,
     ): Term {
+        $hasTranslations = array_key_exists('translations', $data);
+        if (! $hasTranslations && $mode === TranslationSyncMode::Replace) {
+            throw new \InvalidArgumentException('Translation replacement requires an explicit locale map.');
+        }
         $data = $this->normalize($data, true, $term);
         $this->boundary->assertRecord($term, 'taxonomy.terms');
         if ($term->revision !== $data['expected_revision']) {
@@ -99,16 +103,18 @@ final readonly class TermWriter
             );
         }
 
-        $this->validate($data, $term->id);
+        $this->validate($data, $term->id, allowOmittedTranslations: ! $hasTranslations);
         $term->fill($this->baseAttributes($data));
         $term->save();
-        $this->writeTranslations($term, $data['translations'], $mode);
+        if ($hasTranslations) {
+            $this->writeTranslations($term, $data['translations'], $mode);
+        }
 
         return $term->refresh()->load('translations');
     }
 
     /** @param NormalizedTerm $data */
-    private function validate(array $data, ?string $termId = null): void
+    private function validate(array $data, ?string $termId = null, bool $allowOmittedTranslations = false): void
     {
         $definition = $this->taxonomies->get($data['taxonomy']);
         $this->hierarchy->validate($data['taxonomy'], $data['parent_id'], $termId);
@@ -126,7 +132,7 @@ final readonly class TermWriter
             );
         }
 
-        if ($data['translations'] === []) {
+        if ($data['translations'] === [] && ! $allowOmittedTranslations) {
             throw new \InvalidArgumentException(
                 'Taxonomy terms require at least one translation.',
             );
@@ -305,7 +311,7 @@ final readonly class TermWriter
         if ($updating && (! isset($attributes['expected_revision']) || ! is_int($attributes['expected_revision']))) {
             throw StaleTermVersionException::forTerm($term !== null ? $term->id : 'unknown');
         }
-        foreach ($updating ? ['translations'] : ['taxonomy', 'slug', 'translations'] as $required) {
+        foreach ($updating ? [] : ['taxonomy', 'slug', 'translations'] as $required) {
             if (! array_key_exists($required, $attributes)) {
                 throw new \InvalidArgumentException("Missing taxonomy term attribute [{$required}].");
             }
@@ -317,6 +323,7 @@ final readonly class TermWriter
                 'parent_id' => $term->parent_id,
                 'position' => $term->position,
                 'meta' => $term->meta,
+                'translations' => [],
                 ...$attributes,
             ];
         }
@@ -324,7 +331,7 @@ final readonly class TermWriter
             throw new \InvalidArgumentException('Invalid taxonomy term attributes.');
         }
         $parent = $attributes['parent_id'] ?? null;
-        $position = $attributes['position'] ?? 0;
+        $position = array_key_exists('position', $attributes) ? $attributes['position'] : 0;
         $meta = $attributes['meta'] ?? null;
         $revision = $attributes['expected_revision'] ?? null;
         if (($parent !== null && ! is_string($parent)) || ! is_int($position) || ($meta !== null && ! is_array($meta)) || ($revision !== null && ! is_int($revision))) {

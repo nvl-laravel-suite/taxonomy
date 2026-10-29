@@ -29,13 +29,13 @@ final readonly class TaxonomyAssignments
     /** @param list<Term|string> $terms */
     public function attach(Model $owner, string $taxonomy, array $terms, Authenticatable|SystemActor $actor): void
     {
-        $this->mutate($owner, $taxonomy, $actor, fn () => $this->attachments->append($owner, $taxonomy, $terms));
+        $this->mutate($owner, $taxonomy, $actor, fn (Model $canonical, Authenticatable|SystemActor $current) => $this->attachments->append($canonical, $taxonomy, $terms, $current));
     }
 
     /** @param list<Term|string> $terms */
     public function detach(Model $owner, string $taxonomy, array $terms, Authenticatable|SystemActor $actor): int
     {
-        $deleted = $this->mutate($owner, $taxonomy, $actor, fn (): int => $this->attachments->detach($owner, $taxonomy, $terms));
+        $deleted = $this->mutate($owner, $taxonomy, $actor, fn (Model $canonical, Authenticatable|SystemActor $current): int => $this->attachments->detach($canonical, $taxonomy, $terms, $current));
 
         return $deleted;
     }
@@ -43,13 +43,13 @@ final readonly class TaxonomyAssignments
     /** @param list<Term|string> $terms */
     public function sync(Model $owner, string $taxonomy, array $terms, Authenticatable|SystemActor $actor): void
     {
-        $this->mutate($owner, $taxonomy, $actor, fn () => $this->attachments->sync($owner, $taxonomy, $terms));
+        $this->mutate($owner, $taxonomy, $actor, fn (Model $canonical, Authenticatable|SystemActor $current) => $this->attachments->sync($canonical, $taxonomy, $terms, $current));
     }
 
     /**
      * @template T
      *
-     * @param  \Closure():T  $operation
+     * @param  \Closure(Model, Authenticatable|SystemActor):T  $operation
      * @return T
      */
     private function mutate(Model $owner, string $taxonomy, Authenticatable|SystemActor $actor, \Closure $operation): mixed
@@ -64,9 +64,9 @@ final readonly class TaxonomyAssignments
             TaxonomyConfiguration::lockWaitSeconds(),
             fn (): mixed => DB::connection($connection)->transaction(function () use ($owner, $taxonomy, $actor, $operation): mixed {
                 $canonical = $this->owners->resolve($owner, lock: true);
-                $this->actors->authorize($actor, 'assign', $canonical, $taxonomy);
+                $current = $this->actors->authorize($actor, 'assign', $canonical, $taxonomy);
 
-                return $operation();
+                return $operation($canonical, $current);
             }, TaxonomyConfiguration::transactionAttempts()),
         );
     }

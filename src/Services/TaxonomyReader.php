@@ -37,12 +37,13 @@ final readonly class TaxonomyReader
      */
     public function resolve(string $taxonomy, array $references, Authenticatable|SystemActor $actor): array
     {
-        $this->actors->authorize($actor, 'resolve');
+        $actor = $this->actors->authorize($actor, 'resolve');
+        $this->catalogAuthorization->authorizeVocabulary($actor, $taxonomy);
         $definition = $this->taxonomies->get($taxonomy);
         $connection = (new ($definition->model))->getConnectionName();
 
         return DB::connection($connection)->transaction(
-            fn (): array => $this->resolver->resolve($taxonomy, $references),
+            fn (): array => $this->resolver->resolve($taxonomy, $references, $actor),
             TaxonomyConfiguration::transactionAttempts(),
         );
     }
@@ -53,24 +54,24 @@ final readonly class TaxonomyReader
      */
     public function forOwners(array $owners, array $vocabularies, Authenticatable|SystemActor $actor, ?string $locale = null): array
     {
-        $this->actors->authorize($actor, 'read');
+        $actor = $this->actors->authorize($actor, 'read');
 
-        return $this->owners->read($owners, $vocabularies, $locale);
+        return $this->owners->read($owners, $vocabularies, $actor, $locale);
     }
 
     /** @return Collection<int, Term> */
     public function tree(string $taxonomy, Authenticatable|SystemActor $actor, ?string $locale = null, int $limit = 500): Collection
     {
-        $this->actors->authorize($actor, 'read');
-        $this->catalogAuthorization->authorizeVocabulary($taxonomy);
+        $actor = $this->actors->authorize($actor, 'read');
+        $this->catalogAuthorization->authorizeVocabulary($actor, $taxonomy);
 
         return $this->trees->boundedFor($taxonomy, $locale, $limit);
     }
 
     public function term(string $taxonomy, string $id, Authenticatable|SystemActor $actor, ?string $locale = null): ?Term
     {
-        $this->actors->authorize($actor, 'read');
-        $this->catalogAuthorization->authorizeVocabulary($taxonomy);
+        $actor = $this->actors->authorize($actor, 'read');
+        $this->catalogAuthorization->authorizeVocabulary($actor, $taxonomy);
         if (! Str::isUuid($id)) {
             throw new InvalidArgumentException('Taxonomy term identities must be UUIDs.');
         }
