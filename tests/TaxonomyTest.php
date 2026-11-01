@@ -27,6 +27,7 @@ use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Services\TaxonomyReader;
 use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TaxonomyTree;
+use Nvl\Taxonomy\Services\TermHierarchy;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
@@ -852,4 +853,69 @@ it('keeps move merge delete and attachments on the configured connection', funct
         DB::purge($connection);
         unlink($database);
     }
+});
+
+it('validates flat and hierarchical writes without hydrating unrelated vocabulary terms', function (): void {
+    $terms = app(TaxonomyTerms::class);
+    $actor = SystemActor::Background;
+    $unrelated = $terms->create(['taxonomy' => 'tag', 'slug' => 'unrelated-tag', 'translations' => ['en' => ['name' => 'Unrelated']]], $actor);
+    $category = $terms->create(['taxonomy' => 'category', 'slug' => 'parent-category', 'translations' => ['en' => ['name' => 'Parent']]], $actor);
+    $otherCategory = $terms->create(['taxonomy' => 'category', 'slug' => 'other-category', 'translations' => ['en' => ['name' => 'Other']]], $actor);
+    $retrieved = [];
+    Event::listen('eloquent.retrieved: *', function (string $event, array $models) use (&$retrieved): void {
+        foreach ($models as $model) {
+            if ($model instanceof Term) {
+                $retrieved[] = $model->id;
+            }
+        }
+    });
+
+    $tag = $terms->create(['taxonomy' => 'tag', 'slug' => 'new-tag', 'translations' => ['en' => ['name' => 'New']]], $actor);
+    $terms->update($tag, ['position' => 2, 'expected_revision' => $tag->revision], $actor);
+    $terms->create(['taxonomy' => 'category', 'slug' => 'new-child', 'parent_id' => $category->id, 'translations' => ['en' => ['name' => 'Child']]], $actor);
+
+    expect($retrieved)->not->toContain($unrelated->id, $otherCategory->id);
+});
+
+it('preserves attachment identities and creation times when appending and reordering terms', function (): void {
+    $owner = Post::create(['title' => 'Stable attachment owner']);
+    $assignments = app(TaxonomyAssignments::class);
+    $actor = SystemActor::Background;
+    $assignments->sync($owner, 'tag', ['one', 'two'], $actor);
+    $table = TaxonomyTables::get(TaxonomyTables::Termables);
+    $before = DB::table($table)->where('termable_id', $owner->id)->orderBy('position')->get()->keyBy('term_id');
+    $assignments->attach($owner, 'tag', ['three'], $actor);
+    $afterAppend = DB::table($table)->where('termable_id', $owner->id)->orderBy('position')->get()->keyBy('term_id');
+    foreach ($before as $termId => $attachment) {
+        expect($afterAppend[$termId]->id)->toBe($attachment->id)
+            ->and($afterAppend[$termId]->created_at)->toBe($attachment->created_at);
+    }
+
+    $assignments->sync($owner, 'tag', ['three', 'one'], $actor);
+    $afterReorder = DB::table($table)->where('termable_id', $owner->id)->orderBy('position')->get();
+    expect($afterReorder->pluck('position')->all())->toBe([0, 1])
+        ->and($afterReorder[1]->id)->toBe($before->first()->id);
+});
+
+it('limits locked descendant reads to the affected taxonomy subtree', function (): void {
+    $terms = app(TaxonomyTerms::class);
+    $actor = SystemActor::Background;
+    $root = $terms->create(['taxonomy' => 'category', 'slug' => 'subtree-root', 'translations' => ['en' => ['name' => 'Root']]], $actor);
+    $child = $terms->create(['taxonomy' => 'category', 'slug' => 'subtree-child', 'parent_id' => $root->id, 'translations' => ['en' => ['name' => 'Child']]], $actor);
+    $unrelated = $terms->create(['taxonomy' => 'category', 'slug' => 'unrelated-root', 'translations' => ['en' => ['name' => 'Other']]], $actor);
+    $seen = [];
+    Event::listen('eloquent.retrieved: *', function (string $event, array $models) use (&$seen): void {
+        foreach ($models as $model) {
+            if ($model instanceof Term) {
+                $seen[] = $model->id;
+            }
+        }
+    });
+    DB::transaction(function () use ($root, $child): void {
+        $root->newQuery()->whereKey($root->id)->lockForUpdate()->firstOrFail();
+        expect(app(TermHierarchy::class)->descendants($root)->modelKeys())->toBe([$child->id])
+            ->and(app(TermHierarchy::class)->subtreeDepth($root))->toBe(2);
+    });
+
+    expect($seen)->not->toContain($unrelated->id);
 });

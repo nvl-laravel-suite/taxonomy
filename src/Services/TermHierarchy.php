@@ -43,7 +43,27 @@ final readonly class TermHierarchy
             throw FlatVocabularyException::forTaxonomy($taxonomy);
         }
 
-        $terms = $this->lockedTerms($taxonomy);
+        /** @var Collection<string, Term> $terms */
+        $terms = new Collection;
+        $cursor = $parentId;
+
+        while ($cursor !== null) {
+            if ($cursor === $termId || $terms->has($cursor)) {
+                throw new CircularHierarchyException('A taxonomy hierarchy cannot contain a cycle.');
+            }
+
+            $parent = $definition->model::query()
+                ->where('taxonomy', $taxonomy)
+                ->lockForUpdate()
+                ->find($cursor);
+
+            if (! $parent instanceof Term) {
+                throw InvalidParentException::forTerm($taxonomy, $cursor);
+            }
+
+            $terms->put($cursor, $parent);
+            $cursor = $parent->parent_id;
+        }
 
         $this->validateWithTerms($taxonomy, $parentId, $termId, $subtreeDepth, $terms);
     }
@@ -121,43 +141,45 @@ final readonly class TermHierarchy
      */
     public function subtreeDepth(Term $term): int
     {
-        return $this->subtreeDepthFromTerms($term, $this->lockedTerms($term->taxonomy));
+        if (! $this->taxonomies->get($term->taxonomy)->hierarchical) {
+            return 1;
+        }
+
+        return $this->subtreeDepthFromTerms($term, $this->descendants($term)->keyBy('id'));
     }
 
     /**
-     * Return deterministic descendants from a locked vocabulary snapshot.
+     * Return deterministic descendants while the caller holds the source term lock.
      *
      * @return Collection<int, Term>
      */
     public function descendants(Term $term): Collection
     {
-        $terms = $this->lockedTerms($term->taxonomy);
-        $children = $terms->toBase()->groupBy(
-            static fn (Term $candidate): string => $candidate->parent_id ?? '__root__',
-        );
+        $definition = $this->taxonomies->get($term->taxonomy);
         $descendants = new Collection;
+        $parents = [$term->id];
         $visited = [$term->id => true];
-        $append = function (string $parentId) use (
-            &$append,
-            $children,
-            $descendants,
-            &$visited,
-        ): void {
-            $directChildren = $children->get($parentId, new BaseCollection);
 
-            foreach ($directChildren as $child) {
-                if (isset($visited[$child->id])) {
-                    throw new CircularHierarchyException(
-                        'A taxonomy hierarchy cannot contain a cycle.',
-                    );
+        while ($parents !== []) {
+            $next = [];
+            foreach (array_chunk($parents, 500) as $parentIds) {
+                $children = $definition->model::query()
+                    ->where('taxonomy', $term->taxonomy)
+                    ->whereIn('parent_id', $parentIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+                foreach ($children as $child) {
+                    if (isset($visited[$child->id])) {
+                        throw new CircularHierarchyException('A taxonomy hierarchy cannot contain a cycle.');
+                    }
+                    $visited[$child->id] = true;
+                    $descendants->push($child);
+                    $next[] = $child->id;
                 }
-
-                $visited[$child->id] = true;
-                $descendants->push($child);
-                $append($child->id);
             }
-        };
-        $append($term->id);
+            $parents = $next;
+        }
 
         return $descendants;
     }

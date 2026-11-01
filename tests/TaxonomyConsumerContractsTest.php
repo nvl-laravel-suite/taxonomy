@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Taxonomy\Exceptions\UnknownTaxonomyException;
@@ -20,6 +21,9 @@ use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
+use Nvl\Taxonomy\Tests\Fixtures\TaxonomyDoctorExplicitDefaultTerm;
+use Nvl\Taxonomy\Tests\Fixtures\TaxonomyDoctorForeignTerm;
+use Nvl\Taxonomy\Tests\Fixtures\TaxonomyDoctorUnconfiguredTerm;
 
 it('supports the public owner query and inspection workflow', function () {
     $categorized = Post::create(['title' => 'Categorized']);
@@ -322,3 +326,31 @@ it('reports missing consumer schema without attempting data inspection', functio
             'foreign_keys.missing_termables',
         );
 });
+
+it('compares registered vocabulary models by their effective source instead of nullable connection names', function (string $model, bool $compatible): void {
+    $default = DB::getDefaultConnection();
+    config()->set('database.connections.taxonomy_doctor_default', config('database.connections.'.$default));
+    config()->set('database.connections.taxonomy_doctor_foreign', ['driver' => 'sqlite', 'database' => ':memory:']);
+    $definitions = config('nvl-taxonomy.taxonomies');
+    $definitions['doctor_source'] = ['model' => $model];
+    config()->set('nvl-taxonomy.taxonomies', $definitions);
+
+    try {
+        DB::setDefaultConnection('taxonomy_doctor_default');
+        $registry = new TaxonomyRegistry;
+        app()->instance(TaxonomyRegistry::class, $registry);
+        expect($registry->get('doctor_source')->model)->toBe($model)
+            ->and((new Term)->getConnectionName())->toBeNull();
+        $check = collect(app(TaxonomyDoctor::class)->inspect())->firstWhere('key', 'registry.model_connections');
+
+        expect($check?->passed)->toBe($compatible);
+    } finally {
+        DB::setDefaultConnection($default);
+        DB::purge('taxonomy_doctor_default');
+        DB::purge('taxonomy_doctor_foreign');
+    }
+})->with([
+    'explicit default source' => [TaxonomyDoctorExplicitDefaultTerm::class, true],
+    'different actual source' => [TaxonomyDoctorForeignTerm::class, false],
+    'unconfigured vocabulary source' => [TaxonomyDoctorUnconfiguredTerm::class, false],
+]);

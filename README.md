@@ -46,3 +46,10 @@ System actors still require explicit policy permission; their identity is not a 
 Released under the [MIT License](LICENSE).
 
 Shared [service contracts, model extensions and composition](https://github.com/nvl-laravel-suite/laravel-suite/blob/main/docs/consumer-api.md) apply alongside the package-specific rules above.
+
+
+Owner aliases are persisted in attachment `termable_type` values. Keep aliases stable; changing one requires an explicit migration of existing attachments. Native assignment sync preserves unchanged attachment IDs and creation timestamps and changes only added, removed or repositioned rows. Term deletion defaults to Restrict; direct database deletion still follows the schema's cascading attachment and translation foreign keys.
+
+Ordinary create/update validation locks only the prospective ancestor chain, and flat root validation does not scan the vocabulary. Descendant reads are limited to the affected subtree. Moves and reparenting retain a locked vocabulary snapshot to serialize cycle and depth validation; budget those operations for the vocabulary size. Attachment mutations also lock the canonical owner row; use a shared cache lock store when coordinating multiple processes.
+
+Cache locks coordinate application workers; canonical owner/vocabulary database row locks remain the integrity boundary on the shared transaction source. A process-local cache lock alone is not distributed coordination. Merge removes source attachments already present at the destination and preserves the distinct canonical positions of the others; it does not introduce duplicate owner/vocabulary positions.

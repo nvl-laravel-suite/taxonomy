@@ -148,15 +148,20 @@ final readonly class TaxonomyDoctor
 
         $unknownAllowedOwners = [];
         $connectionMismatches = [];
+        $packageConnection = TermModelRegistry::newInstance()->getConnection()->getName();
 
         foreach ($this->taxonomies->all() as $definition) {
             foreach ($this->owners->unknownReferences($definition->allowedOwners) as $alias) {
                 $unknownAllowedOwners[] = $definition->taxonomy.':'.$alias;
             }
 
-            $modelConnection = (new ($definition->model))->getConnectionName();
+            try {
+                $compatible = (new ($definition->model))->getConnection()->getName() === $packageConnection;
+            } catch (Throwable) {
+                $compatible = false;
+            }
 
-            if ($modelConnection !== TermModelRegistry::newInstance()->getConnectionName()) {
+            if (! $compatible) {
                 $connectionMismatches[] = $definition->taxonomy;
             }
         }

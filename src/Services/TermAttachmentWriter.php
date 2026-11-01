@@ -76,17 +76,38 @@ final readonly class TermAttachmentWriter
 
         $ids = array_map(static fn (Term $term): string => $term->id, $resolved);
         $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy);
-        $query->lockForUpdate()->get();
-        $query->delete();
+        $existing = [];
+        foreach ((clone $query)->lockForUpdate()->get(['id', 'term_id', 'position']) as $attachment) {
+            $position = filter_var($attachment->position, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+            if (! is_string($attachment->id) || ! is_string($attachment->term_id) || ! is_int($position)) {
+                throw new InvalidTermOperationException('Stored taxonomy attachments must have canonical identifiers.');
+            }
+            $existing[$attachment->term_id] = ['id' => $attachment->id, 'position' => $position];
+        }
 
         if ($ids === []) {
+            $query->delete();
+
             return;
+        }
+
+        $removed = array_diff(array_keys($existing), $ids);
+        if ($removed !== []) {
+            (clone $query)->whereIn('term_id', $removed)->delete();
         }
 
         $now = now();
         $rows = [];
 
         foreach ($ids as $position => $termId) {
+            if (isset($existing[$termId])) {
+                if ($existing[$termId]['position'] !== $position) {
+                    (clone $query)->where('id', $existing[$termId]['id'])
+                        ->update(['position' => $position, 'updated_at' => $now]);
+                }
+
+                continue;
+            }
             $rows[] = [
                 'id' => (string) Str::uuid(),
                 ...(TaxonomyOwnership::declared() ? $this->boundary->attributes('taxonomy.attachments') : []),
@@ -100,9 +121,11 @@ final readonly class TermAttachmentWriter
             ];
         }
 
-        DB::connection(TermModelRegistry::newInstance()->getConnectionName())
-            ->table((new Termable)->getTable())
-            ->insert($rows);
+        if ($rows !== []) {
+            DB::connection(TermModelRegistry::newInstance()->getConnectionName())
+                ->table((new Termable)->getTable())
+                ->insert($rows);
+        }
     }
 
     /**

@@ -1,35 +1,81 @@
 ---
 name: nvl-taxonomy
-description: Implement, integrate, test, or review nvl/taxonomy in Laravel 13. Use for registered vocabularies, hierarchical terms, localized names, owner assignments, moves, merges, tree reads, and diagnostics.
+description: Use when integrating nvl/taxonomy registered vocabularies, localized hierarchical terms, owner assignments, moves/merges/deletion, bounded tree/batch reads or owner query filters.
 ---
 
 # NVL Taxonomy
 
-Use the native Light services with an explicit persisted `Authenticatable` or `SystemActor::Background`. A model actor is reloaded and authorized through the `taxonomy.<ability>` Gate policy. The background actor is an explicit maintenance principal; never turn `null` into it.
+Use the native PHP 8.4 / Laravel 13 services and native Term models. The host
+owns HTTP, application Actions/DTOs, presentation and frontend types.
 
-Mutation Gates receive locked canonical terms and their vocabulary; move/delete include a related destination when applicable and merge includes both source and destination. Create receives the vocabulary name. `TaxonomyCatalogAuthorization` and every `TaxonomyBatchAuthorization` callback receive the canonical explicit actor first. Bind SQL visibility for private content rather than consulting an ambient guard.
+## Reference routing
 
-## Structural terms
+- [Installation](references/installation.md): dependencies, configuration, migrations and publication.
+- [Native API](references/api.md): exact public service, model, registry and policy declarations.
+- [Usage](references/usage.md): vocabulary/owner setup, term mutations, assignment and SQL visibility recipes.
 
-- Register vocabulary rules through `TaxonomyRegistry` and owner capabilities through `TaxonomyOwnerRegistry`.
-- Use `TaxonomyTerms::create(array $attributes, $actor)` and `update(Term|string $term, array $attributes, $actor, TranslationSyncMode $mode)` for canonical slugs, parent, position, metadata, and locale keyed `translations`.
-- Use `TaxonomyTerms::move`, `merge`, `delete`, `rebuild`, and `validateMerge` for complete tree operations. Update, move, delete, and merge require expected revisions. A move validates cycles, depth, vocabulary, and ownership while holding locks.
-- Names and descriptions live only in `term_translations`; slugs remain canonical and locale independent. Use `TranslationSyncMode::Replace` only for an explicit retained locale map.
-- Structural patches may omit translations to retain all locales. Null positions are invalid; null metadata clears it.
-- `DeleteTermStrategy` determines handling of children and attachments. Restrict is the default.
+## Select the owning service
+
+| Need | Service |
+| --- | --- |
+| Create/update/move/merge/delete, validate merge, rebuild positions | `TaxonomyTerms` |
+| Append, detach or replace ordered owner assignments | `TaxonomyAssignments` |
+| Resolve references, read a term/tree, bounded owner batches | `TaxonomyReader` |
+| Declare vocabulary semantics | `TaxonomyRegistry` |
+| Declare host owner capability | `TaxonomyOwnerRegistry` |
+
+Use complete mutations; internal TermWriter/attachment helpers and direct table
+writes do not supply equivalent policy, revision or transaction guarantees.
+
+## Actors, vocabulary and canonical identity
+
+Every native call supplies a persisted Eloquent Authenticatable or explicit
+`SystemActor::Background`. Both go through `taxonomy.<ability>` Gates. Null is
+not a maintenance principal. Native policy reloads actor facts and retains host
+scopes. Gates receive locked canonical terms/vocabulary and related destination
+where relevant; create receives the vocabulary name.
+
+Register vocabulary rules and owner aliases before use. Capability aliases do not
+change Laravel morph maps. Assignments require registered owners on Taxonomy's
+connection so owner locks and term writes share the same transaction.
+Bind SQL visibility for private terms/owners; never infer it from an ambient guard.
+
+## Structural and localized input
+
+- Create requires `taxonomy`, canonical `slug` and locale-keyed `translations`.
+- Structural native keys use `parent_id` and `meta`, not generic camelCase wrappers.
+- Update requires integer `expected_revision`; parent changes use `move`.
+- Omitted update translations retain locales; explicit Replace needs a locale map.
+- Localized rows contain name/description; slug stays locale independent.
+- Null position is invalid; nullable `meta` clears metadata.
+- Delete, move and merge take their declared separate revision arguments.
+- Restrict is the default deletion strategy; cascading/reparenting is explicit.
+
+Missing references are created only as roots in registered open vocabularies and
+require `taxonomy.create`. UUIDs identify existing terms; ambiguous slugs fail.
+Preserve normalized-reference and payload bounds rather than silently truncating.
 
 ## Assignments and reads
 
-- Use `TaxonomyAssignments::attach`, `detach`, or `sync` on persisted registered owners; all operations retain the owner lock and transaction. `sync` is all or nothing and preserves supplied order.
-- Use `TaxonomyReader::resolve` for ordered references and creation of missing roots only in registered open vocabularies. UUID inputs identify existing terms; ambiguous slugs are rejected.
-- Resolve a list of at most `limits.bulk_terms` distinct normalized references. Missing roots require `taxonomy.create`, even through assignment; existing terms do not. Assignment owners share the Taxonomy connection so their locks protect the same transaction.
-- Use `TaxonomyReader::forOwners` with at most 100 owners and 20 vocabularies. It returns `['owners' => stdClass, 'order' => list]`; each requested owner and vocabulary has an explicit list of preloaded native `Term` models, including empty lists. The attached order is available as `pivot_position`.
-- For tree reads use `TaxonomyReader::tree` with a bound up to 500 terms. The registered vocabulary and native model scopes apply before loading.
-- Preserve the correlated owner filter policy (`TaxonomyBatchAuthorization`) and native ownership predicates. Never read a private term or another owner's attachment through a loose OR or unscoped relation.
-- Host filters take the explicit actor: `withAnyTerms($taxonomy, $values, $actor, $policy = null)` and equivalent all/without filters; `inCategory($category, $actor, $includeDescendants = true, $policy = null)`. Their read Gate and SQL policies receive canonical actor facts.
+Assignment sync is ordered and all-or-nothing under the owner lock. Tree reads
+return bounded native collections. Owner batches admit at most 100 owners and 20
+vocabularies and return an object map plus separate exact order, including empty lists.
+Keep `pivot_position`, translations and native owner predicates in projections.
 
-## Ownership and maintenance
+`TaxonomyCatalogAuthorization` gates vocabulary reads; `TaxonomyBatchAuthorization`
+adds query-free loaded-fact admission and SQL predicates for private data. The
+registered defaults preserve capabilities/model scopes, not custom private policy.
+Host `withAnyTerms`/all/without and category filters take an explicit canonical actor.
 
-- Ownable resources are declared by the configured term root and `TaxonomyResourceRegistrar`. Unscoped hosts remain unscoped. Native adoption uses explicit reviewed mappings; it is not automatic old NVL schema conversion.
-- Use the doctor and maintenance commands for readiness, merge, prune, and position rebuild. Owned operations require an established native owner context.
-- Verify cycle and cross vocabulary/owner rejection, merge conflicts, localized copy, revision conflicts, all or nothing assignment sync, deterministic owner batches, empty results, and ownership concurrency.
+## Models, atomicity and checks
+
+Select `nvl-taxonomy.models.term` before provider boot with a native Term subclass.
+Preserve UUID, casts, taxonomy/query scopes, tree/persistence hooks, ownership and
+package-configured storage. Added columns are host migrations; fixed translations
+and assignment pivots have no replacement selector.
+
+Keep native Ownership declaration/adoption, tree/assignment locking, revision
+conflicts, source transactions and outer-commit events. Test cycles/depth,
+foreign owner/vocabulary, merge conflicts, deletion strategy, locale modes,
+assignment rollback and bounded SQL visibility. Use [usage](references/usage.md)
+for supported payloads instead of rebuilding application workflow classes.
