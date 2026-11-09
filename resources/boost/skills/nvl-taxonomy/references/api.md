@@ -454,7 +454,9 @@ resolved @return Illuminate\Database\Eloquent\Relations\HasMany<Nvl\Taxonomy\Mod
 public function children(): Illuminate\Database\Eloquent\Relations\HasMany
 @return HasMany<static, $this>
 resolved @return Illuminate\Database\Eloquent\Relations\HasMany<Nvl\Taxonomy\Models\Term, $this>
-public function delete(): ?bool
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
 public function descendants(): Illuminate\Database\Eloquent\Collection
 @return Collection<int, static>
 resolved @return Illuminate\Database\Eloquent\Collection<int, Nvl\Taxonomy\Models\Term>
@@ -581,7 +583,9 @@ resolved @property (Illuminate\Support\Carbon | null) $updated_at
 
 ```text
 final class Nvl\Taxonomy\Models\TermTranslation extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
-public function delete(): ?bool
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
 public function fresh(mixed $with=[]): ?static
 @param (array<array-key, mixed> | string) $with
 public function getConnectionName(): ?string
@@ -616,7 +620,9 @@ resolved @property (Illuminate\Support\Carbon | null) $updated_at
 
 ```text
 final class Nvl\Taxonomy\Models\Termable extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
-public function delete(): ?bool
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
 public function fresh(mixed $with=[]): ?static
 @param (array<array-key, mixed> | string) $with
 public function getConnectionName(): ?string
