@@ -24,6 +24,7 @@ use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Ownership\TaxonomyTermScope;
 use Nvl\Taxonomy\Relations\StringMorphToMany;
+use Nvl\Taxonomy\Services\TaxonomyTree;
 use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Translatable\Contracts\TranslatableModel;
@@ -114,7 +115,7 @@ class Term extends Model implements Ownable, TranslatableModel
             foreignKey: 'term_id',
             fields: ['name', 'description'],
             mutationPolicy: TranslationMutationPolicy::OwningServiceOnly,
-            ownershipResource: TaxonomyOwnership::active() ? 'taxonomy.terms' : null,
+            ownershipResource: TaxonomyOwnership::declared() ? 'taxonomy.terms' : null,
         );
     }
 
@@ -123,7 +124,7 @@ class Term extends Model implements Ownable, TranslatableModel
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms));
+        return TaxonomyConfiguration::table(TaxonomyTables::Terms);
     }
 
     /**
@@ -216,7 +217,7 @@ class Term extends Model implements Ownable, TranslatableModel
             $related->newQuery(),
             $this,
             'termable',
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
+            TaxonomyConfiguration::table(TaxonomyTables::Termables),
             'term_id',
             'termable_id',
             $this->getKeyName(),
@@ -267,30 +268,13 @@ class Term extends Model implements Ownable, TranslatableModel
      */
     public function descendants(): Collection
     {
-        $grouped = static::query()
-            ->where('taxonomy', $this->taxonomy)
-            ->ordered($this->taxonomy)
-            ->get()
-            ->groupBy(static fn (Term $term): string => $term->parent_id ?? '__root__');
-        $descendants = new Collection;
-        $visited = [$this->id => true];
-        $append = function (string $parentId) use (&$append, $grouped, $descendants, &$visited): void {
-            /** @var Collection<int, Term> $children */
-            $children = $grouped->get($parentId, new Collection);
-
-            foreach ($children as $child) {
-                if (isset($visited[$child->id])) {
-                    continue;
-                }
-
-                $visited[$child->id] = true;
-                $descendants->push($child);
-                $append($child->id);
-            }
-        };
-        $append($this->id);
-
-        return $descendants;
+        return TaxonomyTree::preorder(
+            static::query()
+                ->where('taxonomy', $this->taxonomy)
+                ->ordered($this->taxonomy)
+                ->get(),
+            $this->id,
+        );
     }
 
     /**
@@ -298,8 +282,9 @@ class Term extends Model implements Ownable, TranslatableModel
      */
     public function displayName(?string $locale = null): string
     {
-        if ($locale !== null && isset($this->preloadedDisplayCopy[$locale])) {
-            return $this->preloadedDisplayCopy[$locale]['name'];
+        $preloaded = $this->preloadedCopy($locale);
+        if ($preloaded !== null) {
+            return $preloaded['name'];
         }
         $value = $this->translated('name', $locale);
 
@@ -311,12 +296,27 @@ class Term extends Model implements Ownable, TranslatableModel
      */
     public function displayDescription(?string $locale = null): ?string
     {
-        if ($locale !== null && isset($this->preloadedDisplayCopy[$locale])) {
-            return $this->preloadedDisplayCopy[$locale]['description'];
+        $preloaded = $this->preloadedCopy($locale);
+        if ($preloaded !== null) {
+            return $preloaded['description'];
         }
         $value = $this->translated('description', $locale);
 
         return is_string($value) ? $value : null;
+    }
+
+    /**
+     * Return the tree's preloaded copy for the requested or current locale.
+     *
+     * @return array{name:string, description:?string}|null
+     */
+    private function preloadedCopy(?string $locale): ?array
+    {
+        if ($this->preloadedDisplayCopy === []) {
+            return null;
+        }
+
+        return $this->preloadedDisplayCopy[$locale ?? $this->getCurrentLocale()] ?? null;
     }
 
     /**

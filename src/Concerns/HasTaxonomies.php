@@ -55,7 +55,7 @@ trait HasTaxonomies
                         $related->newQuery(),
                         $model,
                         'termable',
-                        TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
+                        TaxonomyConfiguration::table(TaxonomyTables::Termables),
                         'termable_id',
                         'term_id',
                         $model->getKeyName(),
@@ -79,7 +79,7 @@ trait HasTaxonomies
                 return;
             }
 
-            $canonical = Container::getInstance()->make(TaxonomyOwnerRegistry::class)->resolve($model, lock: true);
+            $canonical = Container::getInstance()->make(TaxonomyOwnerRegistry::class)->resolveForDeletion($model);
             $query = Termable::query()
                 ->where('termable_type', $model->getMorphClass())
                 ->where('termable_id', TaxonomyConfiguration::modelIdentifier($canonical));

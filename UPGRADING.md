@@ -1,6 +1,6 @@
 # Upgrading NVL Taxonomy
 
-## NVL Light: planned family 7
+## NVL Light: family 7
 
 Light requires PHP 8.4 and Laravel 13. Replace retired package Actions, transport DTOs, HTTP endpoints and generated frontend types with host-owned adapters around the native services documented in [README.md](README.md). Models remain ordinary Eloquent models; domain operations retain their documented policies, validation, locks and lifecycle guarantees. Pass explicit admitted actors and configure optional integrations deliberately.
 
@@ -99,7 +99,7 @@ Legacy alias references remain read compatibility during major 5 and remain depr
 
 ## Shared Doctor integration
 
-The loaded package provider now contributes its existing inspection checks to Core's `nvl:doctor --strict --format=json`. The package command remains available. The shared gate fails errors and, in strict mode, warnings; no data upgrade is required for diagnostics.
+The loaded package provider now contributes its existing inspection checks to Core's `nvl:doctor --strict --format=json`. In family 7, register `Nvl\Support\Providers\DoctorServiceProvider` in the host first; it is not auto-discovered. The package command remains available. The shared gate fails errors and, in strict mode, warnings; no data upgrade is required for diagnostics.
 
 
 ## Infrastructure option inheritance
@@ -109,6 +109,8 @@ Configure a shared `locks.store` in Taxonomy or Core instead of relying on an un
 ## Next major: isolated schema identities
 
 This is a breaking schema identity change. Back up storage and migration history, pause writes/workers, install this code with automatic package migrations disabled, and select one owner for migrations (vendor or published).
+
+The `nvl:schema:*` commands ship through the 6.x line only. Family 7 does not register them, so complete this step before upgrading to 7.
 
 ```sh
 php artisan nvl:doctor --strict --format=json

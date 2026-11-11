@@ -242,7 +242,7 @@ it('keeps total localized query counts fixed at one twenty five and one hundred 
         $domainQueries = taxonomyBatchDomainQueries($queries);
         expect($domainQueries)->not->toBe([])
             ->and(taxonomyBatchOwnedQueries($domainQueries))->toHaveCount(3)
-            ->and(count($queries))->toBeGreaterThan(count($domainQueries));
+            ->and(count($queries))->toBe(count($domainQueries));
         $counts[] = count($domainQueries);
         $json = json_decode(json_encode($result, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
         expect($json->order)->toHaveCount($count);
@@ -622,8 +622,8 @@ it('measures cold and warm total SQL budgets for one and two populated vocabular
         ->and($warmDomain)->not->toBe([])
         ->and(count($coldDomain))->toBe($vocabularyCount === 1 ? 4 : 6)
         ->and(count($warmDomain))->toBe($vocabularyCount === 1 ? 4 : 6)
-        ->and(count($cold))->toBeGreaterThan(count($coldDomain))
-        ->and(count($warm))->toBeGreaterThan(count($warmDomain));
+        ->and(count($cold))->toBe(count($coldDomain))
+        ->and(count($warm))->toBe(count($warmDomain));
 })->with([[1, 1], [25, 1], [100, 1], [1, 2], [25, 2], [100, 2]]);
 
 it('groups caller OR clauses before native and custom soft delete guards in direct helpers', function (string $class, string $column): void {
@@ -679,8 +679,8 @@ it('adds one reload query per owner class while custom term models keep the voca
 
     expect(taxonomyBatchDomainQueries($oneVocabulary))->toHaveCount(5)
         ->and(taxonomyBatchDomainQueries($twoVocabularies))->toHaveCount(7)
-        ->and(count($oneVocabulary))->toBeGreaterThan(5)
-        ->and(count($twoVocabularies))->toBeGreaterThan(7);
+        ->and(count($oneVocabulary))->toBe(5)
+        ->and(count($twoVocabularies))->toBe(7);
 });
 
 it('keeps term policy OR clauses inside the independent host attachment policy', function (): void {
@@ -737,5 +737,5 @@ it('bounds transferred successful attachments separately for every exact owner v
     $windows = array_values(array_filter($queries, static fn (array $query): bool => str_contains(strtolower($query['query']), 'row_number()')));
     expect(DB::select($windows[0]['query'], $windows[0]['bindings']))->toHaveCount(400)
         ->and(taxonomyBatchDomainQueries($queries))->toHaveCount(7)
-        ->and(count($queries))->toBeGreaterThan(7);
+        ->and(count($queries))->toBe(7);
 });

@@ -2,9 +2,14 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
@@ -30,6 +35,7 @@ use Nvl\Taxonomy\Services\TaxonomyTree;
 use Nvl\Taxonomy\Services\TermHierarchy;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
+use Nvl\Taxonomy\Tests\Fixtures\BatchArchivedPost;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
 use Nvl\Taxonomy\Tests\Fixtures\Post;
 use Nvl\Translatable\Enums\TranslationSyncMode;
@@ -135,6 +141,46 @@ it('removes raw attachment rows when an owning model is deleted', function () {
 
     $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 0);
     expect(Tag::query()->where('slug', 'laravel')->exists())->toBeTrue();
+});
+
+it('removes attachment rows when an already soft-deleted owner is force deleted', function () {
+    // MySQL DDL commits the wrapping test transaction, so the column is added and removed outside it.
+    $commitsDdl = in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+    $table = (new Post)->getTable();
+    $addsColumn = ! Schema::hasColumn($table, 'archived_at');
+    if ($addsColumn) {
+        if ($commitsDdl) {
+            DB::rollBack();
+        }
+        Schema::table($table, static fn (Blueprint $table) => $table->softDeletes('archived_at'));
+        if ($commitsDdl) {
+            DB::beginTransaction();
+        }
+    }
+
+    try {
+        app(TaxonomyOwnerRegistry::class)->register('archived_posts', BatchArchivedPost::class);
+        $post = BatchArchivedPost::create(['title' => 'Trashed post']);
+        app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
+
+        $post->delete();
+
+        expect($post->trashed())->toBeTrue();
+        $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 1);
+        expect(fn () => app(TaxonomyAssignments::class)->sync($post, 'tag', ['php'], SystemActor::Background))
+            ->toThrow(InvalidArgumentException::class, 'The canonical taxonomy owner is unavailable.');
+
+        $post->forceDelete();
+
+        $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 0);
+        expect(BatchArchivedPost::withTrashed()->whereKey($post->getKey())->exists())->toBeFalse();
+    } finally {
+        if ($addsColumn && $commitsDdl) {
+            DB::rollBack();
+            Schema::table($table, static fn (Blueprint $table) => $table->dropColumn('archived_at'));
+            DB::beginTransaction();
+        }
+    }
 });
 
 it('generates a tree of categories', function () {
@@ -619,6 +665,24 @@ it('loads localized trees without per-node translation queries', function () {
         ->and($populatedQueryCount)->toBe($singleQueryCount);
 });
 
+it('answers display copy for the current locale from the preloaded tree copy', function () {
+    config()->set('nvl-translatable.locales', ['en', 'bg']);
+    app(TaxonomyTerms::class)->create([
+        'taxonomy' => 'category',
+        'slug' => 'preloaded-root',
+        'translations' => ['en' => ['name' => 'Preloaded', 'description' => 'Preloaded detail']],
+    ], SystemActor::Background);
+    $term = app(TaxonomyTree::class)->for('category', 'en')->sole();
+    $term->setRelation('translations', $term->translations->map(static function (Model $row): Model {
+        return $row->setAttribute('name', 'Changed after preload')->setAttribute('description', 'Changed detail');
+    }));
+
+    expect($term->displayName())->toBe('Preloaded')
+        ->and($term->displayDescription())->toBe('Preloaded detail')
+        ->and($term->displayName('en'))->toBe('Preloaded')
+        ->and($term->displayName('bg'))->toBe('Changed after preload');
+});
+
 it('discards term events when an outer transaction rolls back', function () {
     config()->set('nvl-translatable.locales', ['en']);
     Event::fake([TermChanged::class]);
@@ -663,6 +727,57 @@ it('emits one committed event with the resulting term revision', function () {
             && $event->revision === $term->revision,
     );
     Event::assertDispatchedTimes(TermChanged::class, 1);
+});
+
+/** Commit a root tag the way a concurrent request would, bypassing this request's writer. */
+function taxonomyInsertCompetingTag(string $slug): void
+{
+    DB::table(TaxonomyTables::get(TaxonomyTables::Terms))->insert([
+        'id' => (string) Str::uuid(),
+        'taxonomy' => 'tag',
+        'parent_key' => '__root__',
+        'slug' => $slug,
+        'position' => 0,
+        'revision' => 1,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+}
+
+it('reuses an open term that a concurrent request committed after the lookup', function () {
+    $post = Post::create(['title' => 'Concurrent tagger']);
+    $committed = false;
+    Gate::define('taxonomy.create', function () use (&$committed): bool {
+        if (! $committed) {
+            $committed = true;
+            taxonomyInsertCompetingTag('race-tag');
+        }
+
+        return true;
+    });
+
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['race-tag'], SystemActor::Background);
+
+    expect($committed)->toBeTrue()
+        ->and(Tag::query()->where('slug', 'race-tag')->count())->toBe(1)
+        ->and($post->load('tags')->tags->pluck('slug')->all())->toBe(['race-tag']);
+});
+
+it('reports a root slug race lost at the unique index as a duplicate sibling slug', function () {
+    $competing = null;
+    Tag::creating(function (Tag $tag) use (&$competing): void {
+        if ($competing === null) {
+            $competing = $tag->slug;
+            taxonomyInsertCompetingTag($tag->slug);
+        }
+    });
+
+    expect(fn () => app(TaxonomyTerms::class)->create([
+        'taxonomy' => 'tag',
+        'slug' => 'raced-root',
+        'translations' => ['en' => ['name' => 'Raced root']],
+    ], SystemActor::Background))->toThrow(DuplicateSiblingSlugException::class)
+        ->and($competing)->toBe('raced-root');
 });
 
 it('does not swallow non-unique database failures while creating open terms', function () {

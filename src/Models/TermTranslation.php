@@ -64,7 +64,7 @@ final class TermTranslation extends Model implements Ownable
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n));
+        return TaxonomyConfiguration::table(TaxonomyTables::I18n);
     }
 
     /**

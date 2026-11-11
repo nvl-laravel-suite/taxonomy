@@ -80,7 +80,7 @@ final readonly class TaxonomyBatchOwnerAdmission
             || $owner->getConnection() !== $connection) {
             $this->unavailable();
         }
-        if (TaxonomyOwnership::active()) {
+        if (TaxonomyOwnership::declared()) {
             TaxonomyOwnership::resource($prototype);
         }
     }
@@ -116,7 +116,7 @@ final readonly class TaxonomyBatchOwnerAdmission
             }
             $query->whereNull($column);
         }
-        if (TaxonomyOwnership::active()) {
+        if (TaxonomyOwnership::declared()) {
             $this->boundary->query($query, TaxonomyOwnership::resource($owner));
         }
 
@@ -176,10 +176,24 @@ final readonly class TaxonomyBatchOwnerAdmission
         $query->whereRaw(ExactTaxonomyText::value($text, $connection->getDriverName()), [$value, $value]);
     }
 
+    /**
+     * Match one package-owned text column byte-exactly, with a plain equality beside the
+     * exact predicate so the column's indexes remain usable.
+     *
+     * @template T of Model
+     *
+     * @param  Builder<T>  $query
+     */
+    public static function exactText(Builder $query, string $column, string $value): void
+    {
+        $query->where($column, $value);
+        self::exact($query, $column, $value);
+    }
+
     /** Fail with the existing enabled or disabled canonical owner denial semantics. */
     private function unavailable(): never
     {
-        if (TaxonomyOwnership::active()) {
+        if (TaxonomyOwnership::declared()) {
             throw TaxonomyOwnership::violation('The canonical taxonomy owner is unavailable in the active storage scope.');
         }
 

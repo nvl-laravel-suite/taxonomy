@@ -40,7 +40,7 @@ final readonly class TaxonomyBatchQueryBuilder
             throw new TaxonomyBatchReadException('Registered taxonomy terms must share the canonical package connection.');
         }
         $query = $this->boundary->query($prototype->newQuery()->withoutEagerLoads(), 'taxonomy.terms');
-        TaxonomyBatchOwnerAdmission::exact($query, $prototype->qualifyColumn('taxonomy'), $vocabulary);
+        TaxonomyBatchOwnerAdmission::exactText($query, $prototype->qualifyColumn('taxonomy'), $vocabulary);
         $query->where(fn (Builder $nested) => $policy->scopeTerms($actor, $nested, [$vocabulary]));
         if ($host !== null) {
             $query->where(fn (Builder $nested) => $policy->scopeHostTerms($actor, $nested, $host, $vocabulary));
@@ -75,15 +75,15 @@ final readonly class TaxonomyBatchQueryBuilder
         $query->where(function (Builder $pairs) use ($owners, $model): void {
             foreach ($owners->identities() as $identity) {
                 $pairs->orWhere(function (Builder $pair) use ($identity, $model): void {
-                    TaxonomyBatchOwnerAdmission::exact($pair, $model->qualifyColumn('termable_type'), $identity->type);
-                    TaxonomyBatchOwnerAdmission::exact($pair, $model->qualifyColumn('termable_id'), $identity->id);
+                    TaxonomyBatchOwnerAdmission::exactText($pair, $model->qualifyColumn('termable_type'), $identity->type);
+                    TaxonomyBatchOwnerAdmission::exactText($pair, $model->qualifyColumn('termable_id'), $identity->id);
                 });
             }
         });
         $query->where(function (Builder $vocabularyQueries) use ($vocabularies, $model, $policy, $actor): void {
             foreach ($vocabularies as $vocabulary) {
                 $vocabularyQueries->orWhere(function (Builder $vocabularyQuery) use ($vocabulary, $model, $policy, $actor): void {
-                    TaxonomyBatchOwnerAdmission::exact($vocabularyQuery, $model->qualifyColumn('taxonomy'), $vocabulary);
+                    TaxonomyBatchOwnerAdmission::exactText($vocabularyQuery, $model->qualifyColumn('taxonomy'), $vocabulary);
                     $terms = $this->terms($vocabulary, $policy, $actor);
                     $vocabularyQuery->whereIn($model->qualifyColumn('term_id'), $terms->select($terms->getModel()->getQualifiedKeyName()));
                 });

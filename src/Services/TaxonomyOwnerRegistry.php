@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Services;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use InvalidArgumentException;
 use Nvl\Support\OwnerRegistry;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
@@ -87,6 +88,22 @@ final class TaxonomyOwnerRegistry
     /** Reload one registered owner through its declared owner resource. */
     public function resolve(Model $owner, bool $lock = false): Model
     {
+        return $this->reload($owner, $lock, withTrashed: false);
+    }
+
+    /**
+     * Lock one registered owner whose row is being removed, including an already soft-deleted row.
+     *
+     * @internal
+     */
+    public function resolveForDeletion(Model $owner): Model
+    {
+        return $this->reload($owner, lock: true, withTrashed: true);
+    }
+
+    /** Reload the canonical owner row inside its ownership boundary. */
+    private function reload(Model $owner, bool $lock, bool $withTrashed): Model
+    {
         $this->aliasFor($owner);
         $modelClass = $owner::class;
         $canonical = new $modelClass;
@@ -110,9 +127,12 @@ final class TaxonomyOwnerRegistry
         }
 
         $query = $canonical->newQuery()->useWritePdo()->whereKey($identifier);
+        if ($withTrashed) {
+            $query->withoutGlobalScope(SoftDeletingScope::class);
+        }
         $resource = null;
 
-        if (TaxonomyOwnership::active()) {
+        if (TaxonomyOwnership::declared()) {
             $resource = TaxonomyOwnership::resource($owner);
             $this->boundary->query($query, $resource);
         }
@@ -124,7 +144,7 @@ final class TaxonomyOwnerRegistry
         $resolved = $query->first();
 
         if (! $resolved instanceof Model) {
-            if (TaxonomyOwnership::active()) {
+            if (TaxonomyOwnership::declared()) {
                 throw TaxonomyOwnership::violation('The canonical taxonomy owner is unavailable.');
             }
 

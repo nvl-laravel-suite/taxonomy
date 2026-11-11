@@ -6,7 +6,6 @@ namespace Nvl\Taxonomy\Services;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Query\JoinClause;
-use Illuminate\Support\Collection as BaseCollection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Models\Term;
@@ -136,37 +135,85 @@ final readonly class TaxonomyTree
         foreach ($terms as $term) {
             $term->preloadDisplayCopy($locale);
         }
-        $grouped = $terms->toBase()->groupBy(
-            static fn (Term $term): string => $term->parent_id ?? '__root__',
-        );
 
-        return $this->children($grouped, '__root__', []);
+        return self::nest($terms);
     }
 
     /**
-     * @param  BaseCollection<string, BaseCollection<int, Term>>  $grouped
-     * @param  array<string, true>  $visited
-     * @return Collection<int, Term>
+     * Nest ordered terms below one parent, setting each returned term's `children` relation.
+     *
+     * @template TTerm of Term
+     *
+     * @param  iterable<TTerm>  $terms
+     * @return Collection<int, TTerm>
      */
-    private function children(BaseCollection $grouped, string $parentId, array $visited): Collection
+    public static function nest(iterable $terms, string $parentId = '__root__'): Collection
     {
-        $children = $grouped->get($parentId, new BaseCollection);
-        $tree = new Collection;
+        $visited = [$parentId => true];
 
-        foreach ($children as $child) {
+        return self::below(self::byParent($terms), $parentId, $visited, nest: true);
+    }
+
+    /**
+     * Return the ordered terms below one parent in deterministic preorder.
+     *
+     * @template TTerm of Term
+     *
+     * @param  iterable<TTerm>  $terms
+     * @return Collection<int, TTerm>
+     */
+    public static function preorder(iterable $terms, string $parentId): Collection
+    {
+        $visited = [$parentId => true];
+
+        return self::below(self::byParent($terms), $parentId, $visited, nest: false);
+    }
+
+    /**
+     * @template TTerm of Term
+     *
+     * @param  iterable<TTerm>  $terms
+     * @return array<string, list<TTerm>>
+     */
+    private static function byParent(iterable $terms): array
+    {
+        $byParent = [];
+        foreach ($terms as $term) {
+            $byParent[$term->parent_id ?? '__root__'][] = $term;
+        }
+
+        return $byParent;
+    }
+
+    /**
+     * Visit every term below one parent once, either nested or flattened.
+     *
+     * @template TTerm of Term
+     *
+     * @param  array<string, list<TTerm>>  $byParent
+     * @param  array<string, true>  $visited
+     * @return Collection<int, TTerm>
+     */
+    private static function below(array $byParent, string $parentId, array &$visited, bool $nest): Collection
+    {
+        $terms = new Collection;
+
+        foreach ($byParent[$parentId] ?? [] as $child) {
             if (isset($visited[$child->id])) {
                 continue;
             }
 
-            $branchVisited = $visited;
-            $branchVisited[$child->id] = true;
-            $child->setRelation(
-                'children',
-                $this->children($grouped, $child->id, $branchVisited),
-            );
-            $tree->push($child);
+            $visited[$child->id] = true;
+            $terms->push($child);
+            $descendants = self::below($byParent, $child->id, $visited, $nest);
+
+            if ($nest) {
+                $child->setRelation('children', $descendants);
+            } else {
+                $terms = $terms->concat($descendants);
+            }
         }
 
-        return $tree;
+        return $terms;
     }
 }

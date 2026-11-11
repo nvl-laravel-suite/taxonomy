@@ -15,6 +15,7 @@ use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException;
 use Nvl\Taxonomy\Exceptions\ClosedVocabularyException;
+use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
@@ -128,7 +129,7 @@ final readonly class TermResolver
             $candidate = $byId->get($modelReferenceId);
 
             if (! $candidate instanceof Term) {
-                if (TaxonomyOwnership::active()) {
+                if (TaxonomyOwnership::declared()) {
                     throw TaxonomyOwnership::violation(
                         "Term [{$modelReferenceId}] is unavailable in the current owner boundary.",
                     );
@@ -209,7 +210,7 @@ final readonly class TermResolver
                         return $created;
                     },
                 );
-            } catch (UniqueConstraintViolationException $exception) {
+            } catch (DuplicateSiblingSlugException|UniqueConstraintViolationException $exception) {
                 $created = $modelClass::query()
                     ->where('taxonomy', $taxonomy)
                     ->where('parent_key', '__root__')

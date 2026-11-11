@@ -98,7 +98,7 @@ final class Termable extends Model implements Ownable
      */
     public function getTable(): string
     {
-        return TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables));
+        return TaxonomyConfiguration::table(TaxonomyTables::Termables);
     }
 
     /**

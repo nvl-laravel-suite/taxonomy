@@ -20,9 +20,9 @@ use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 final class TaxonomyConfiguration
 {
     /**
-     * Return one validated configurable table name.
+     * Return one validated configurable table name for a logical key or native constant.
      */
-    public static function table(string $key, string $default): string
+    public static function table(string $key): string
     {
         return TaxonomyTables::get($key);
     }

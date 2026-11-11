@@ -9,7 +9,6 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Nvl\Support\Models\ConfiguredModelRegistration;
 use Nvl\Support\OwnerRegistry;
-use Nvl\Support\Ownership\Contracts\OwnershipWriter;
 use Nvl\Support\Ownership\Exceptions\OwnershipConfigurationInvalid;
 use Nvl\Taxonomy\Models\Term;
 
@@ -86,23 +85,6 @@ final class TermModelRegistry
         $class = Container::getInstance()->make(self::class)->termClass();
 
         return new $class($attributes);
-    }
-
-    /**
-     * Persist a package-authored attribute map under the exact source assignment.
-     *
-     * @internal
-     *
-     * @param  array<string, mixed>  $attributes
-     */
-    public static function create(array $attributes): Term
-    {
-        return app(OwnershipWriter::class)->create(self::modelClass(), static function (array $ownership) use ($attributes): Term {
-            $model = self::newInstance();
-            $model->forceFill([...$attributes, ...$ownership])->save();
-
-            return $model;
-        });
     }
 
     /**

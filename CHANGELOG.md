@@ -5,6 +5,17 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Force-deleting an already soft-deleted taxonomised model now removes its attachments instead of failing with "The canonical taxonomy owner is unavailable."; ownership boundaries still apply to the trashed owner.
+- Reuse an open-vocabulary term that a concurrent request created during a sync instead of failing the sync with `DuplicateSiblingSlugException`, and report a term slug race lost at the unique index as `DuplicateSiblingSlugException` rather than a raw database exception.
+- `Term::displayName()` and `displayDescription()` without a locale now answer from the tree's preloaded copy for the current locale.
+- Batched owner reads (`TaxonomyReader::forOwners`) and host taxonomy filters add a plain equality beside each byte-exact text predicate, so PostgreSQL and MySQL use the attachment and term indexes instead of scanning the attachments table. Results are unchanged.
+
+### Changed
+
+- `Term::descendants()`, `Category::tree()` and `TaxonomyTree` now share one tree walk (`TaxonomyTree::nest()` / `TaxonomyTree::preorder()`); results and ordering are unchanged. The internal `TaxonomyConfiguration::table()` no longer takes an ignored default argument and the internal alias `TaxonomyOwnership::active()` is removed in favour of `declared()`.
+
 ## [7.0.1] - 2026-11-09
 
 ### Changed

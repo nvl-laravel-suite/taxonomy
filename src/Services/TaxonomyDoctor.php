@@ -45,14 +45,14 @@ final readonly class TaxonomyDoctor
         $owned = TaxonomyOwnership::declared();
         $ownerScopeColumns = $owned ? ['owner_scope_key'] : [];
         $tables = [
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)) => [
+            TaxonomyConfiguration::table(TaxonomyTables::Terms) => [
                 'id', 'taxonomy', 'parent_id', 'parent_key', 'slug', 'position', 'meta',
                 'revision', 'created_at', 'updated_at', ...$ownerScopeColumns,
             ],
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)) => [
+            TaxonomyConfiguration::table(TaxonomyTables::I18n) => [
                 'id', 'term_id', 'locale', 'name', 'description', 'created_at', 'updated_at', ...$ownerScopeColumns,
             ],
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)) => [
+            TaxonomyConfiguration::table(TaxonomyTables::Termables) => [
                 'id', 'term_id', 'termable_type', 'termable_id', 'taxonomy', 'position',
                 'created_at', 'updated_at', ...$ownerScopeColumns,
             ],
@@ -80,41 +80,41 @@ final readonly class TaxonomyDoctor
         }
 
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
+            TaxonomyConfiguration::table(TaxonomyTables::Terms),
             [
                 ['taxonomy', 'id'],
                 $owned ? ['owner_scope_key', 'taxonomy', 'parent_key', 'slug'] : ['taxonomy', 'parent_key', 'slug'],
             ],
         );
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)),
+            TaxonomyConfiguration::table(TaxonomyTables::I18n),
             [$owned ? ['owner_scope_key', 'term_id', 'locale'] : ['term_id', 'locale']],
         );
         $checks[] = $this->indexCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
+            TaxonomyConfiguration::table(TaxonomyTables::Termables),
             [$owned ? ['owner_scope_key', 'term_id', 'termable_type', 'termable_id'] : ['term_id', 'termable_type', 'termable_id']],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
+            TaxonomyConfiguration::table(TaxonomyTables::Terms),
             [[
                 'columns' => ['taxonomy', 'parent_id'],
-                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms),
                 'foreign_columns' => ['taxonomy', 'id'],
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::I18n), TaxonomyTables::get(TaxonomyTables::I18n)),
+            TaxonomyConfiguration::table(TaxonomyTables::I18n),
             [[
                 'columns' => ['term_id'],
-                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms),
                 'foreign_columns' => ['id'],
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
-            TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Termables), TaxonomyTables::get(TaxonomyTables::Termables)),
+            TaxonomyConfiguration::table(TaxonomyTables::Termables),
             [[
                 'columns' => ['taxonomy', 'term_id'],
-                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::get(TaxonomyTables::Terms), TaxonomyTables::get(TaxonomyTables::Terms)),
+                'foreign_table' => TaxonomyConfiguration::table(TaxonomyTables::Terms),
                 'foreign_columns' => ['taxonomy', 'id'],
             ]],
         );
@@ -380,7 +380,7 @@ final readonly class TaxonomyDoctor
             ->whereColumn('attachment.taxonomy', '!=', 'term.taxonomy')
             ->count();
         $ownerScopeMismatches = 0;
-        if (TaxonomyOwnership::active()) {
+        if (TaxonomyOwnership::declared()) {
             $scope = 'owner_scope_key';
             $ownerScopeMismatches += $connection->table("{$terms} as child")
                 ->join("{$terms} as parent", 'parent.id', '=', 'child.parent_id')

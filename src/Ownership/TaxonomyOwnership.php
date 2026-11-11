@@ -29,11 +29,6 @@ final class TaxonomyOwnership
         return new OwnershipViolation($message);
     }
 
-    public static function active(): bool
-    {
-        return self::declared();
-    }
-
     public static function resource(Model $model): string
     {
         return app(OwnershipResourceRegistry::class)->forModel($model)->key;

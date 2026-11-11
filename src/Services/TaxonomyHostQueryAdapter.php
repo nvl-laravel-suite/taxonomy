@@ -172,8 +172,8 @@ final readonly class TaxonomyHostQueryAdapter
         $model = $terms->getModel();
         $attachments = $this->queries->attachments();
         $pivot = $attachments->getModel();
-        TaxonomyBatchOwnerAdmission::exact($attachments, $pivot->qualifyColumn('termable_type'), $owner->getMorphClass());
-        TaxonomyBatchOwnerAdmission::exact($attachments, $pivot->qualifyColumn('taxonomy'), $vocabulary);
+        TaxonomyBatchOwnerAdmission::exactText($attachments, $pivot->qualifyColumn('termable_type'), $owner->getMorphClass());
+        TaxonomyBatchOwnerAdmission::exactText($attachments, $pivot->qualifyColumn('taxonomy'), $vocabulary);
         $connection = $attachments->getModel()->getConnection();
         $grammar = $connection->getQueryGrammar();
         $left = ExactTaxonomyText::text($grammar->wrap($pivot->qualifyColumn('termable_id')), $connection->getDriverName());
@@ -190,7 +190,7 @@ final readonly class TaxonomyHostQueryAdapter
                     if (Str::isUuid($reference)) {
                         $match->where($model->getQualifiedKeyName(), $reference);
                     } else {
-                        TaxonomyBatchOwnerAdmission::exact($match, $model->qualifyColumn('slug'), $reference);
+                        TaxonomyBatchOwnerAdmission::exactText($match, $model->qualifyColumn('slug'), $reference);
                     }
                 });
             }

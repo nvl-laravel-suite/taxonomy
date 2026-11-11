@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -59,13 +60,13 @@ final readonly class TermWriter
         if (TaxonomyOwnership::declared()) {
             $term = $this->ownershipWriter->create($definition->model, function (array $ownership) use ($definition, $data): Term {
                 $term = new ($definition->model)($this->baseAttributes($data));
-                $term->forceFill($ownership)->save();
+                $this->save($term->forceFill($ownership));
 
                 return $term;
             });
         } else {
             $term = new ($definition->model)($this->baseAttributes($data));
-            $term->forceFill($this->boundary->attributes('taxonomy.terms'))->save();
+            $this->save($term->forceFill($this->boundary->attributes('taxonomy.terms')));
         }
         $this->writeTranslations($term, $data['translations'], TranslationSyncMode::Replace);
 
@@ -104,13 +105,22 @@ final readonly class TermWriter
         }
 
         $this->validate($data, $term->id, allowOmittedTranslations: ! $hasTranslations);
-        $term->fill($this->baseAttributes($data));
-        $term->save();
+        $this->save($term->fill($this->baseAttributes($data)));
         if ($hasTranslations) {
             $this->writeTranslations($term, $data['translations'], $mode);
         }
 
         return $term->refresh()->load('translations');
+    }
+
+    /** Report a sibling-slug race lost at the unique index as the domain duplicate. */
+    private function save(Term $term): void
+    {
+        try {
+            $term->save();
+        } catch (UniqueConstraintViolationException) {
+            throw DuplicateSiblingSlugException::forSlug($term->taxonomy, $term->slug);
+        }
     }
 
     /** @param NormalizedTerm $data */

@@ -20,7 +20,7 @@ Create policies receive the vocabulary name. Update, delete, and move policies r
 - Register vocabulary rules through `TaxonomyRegistry` and owner capabilities through `TaxonomyOwnerRegistry`.
 - Use `TaxonomyTerms::create(array $attributes, $actor)` and `update(Term|string $term, array $attributes, $actor, TranslationSyncMode $mode)` for canonical slugs, parent, position, metadata, and locale keyed `translations`.
 - Use `TaxonomyTerms::move`, `merge`, `delete`, `rebuild`, and `validateMerge` for complete tree operations. Update, move, delete, and merge require expected revisions. A move validates cycles, depth, vocabulary, and ownership while holding locks.
-- Names and descriptions live only in `term_translations`; slugs remain canonical and locale independent. Use `TranslationSyncMode::Replace` only for an explicit retained locale map.
+- Names and descriptions live only in the `i18n` table (`nvl_taxonomy_i18n` by default); slugs remain canonical and locale independent. Use `TranslationSyncMode::Replace` only for an explicit retained locale map.
 - Structural update patches can omit `translations` to preserve every locale. Replacement requires an explicit locale map. An explicit null position is invalid; null metadata clears it.
 - `DeleteTermStrategy` determines handling of children and attachments. Restrict is the default.
 
@@ -48,7 +48,7 @@ Released under the [MIT License](LICENSE).
 Shared [service contracts, model extensions and composition](https://github.com/nvl-laravel-suite/laravel-suite/blob/main/docs/consumer-api.md) apply alongside the package-specific rules above.
 
 
-Owner aliases are persisted in attachment `termable_type` values. Keep aliases stable; changing one requires an explicit migration of existing attachments. Native assignment sync preserves unchanged attachment IDs and creation timestamps and changes only added, removed or repositioned rows. Term deletion defaults to Restrict; direct database deletion still follows the schema's cascading attachment and translation foreign keys.
+Attachment `termable_type` stores the owner's `getMorphClass()`, not its registry alias. Keep it stable; changing it requires an explicit migration of existing attachments. Native assignment sync preserves unchanged attachment IDs and creation timestamps and changes only added, removed or repositioned rows. Term deletion defaults to Restrict; direct database deletion still follows the schema's cascading attachment and translation foreign keys.
 
 Ordinary create/update validation locks only the prospective ancestor chain, and flat root validation does not scan the vocabulary. Descendant reads are limited to the affected subtree. Moves and reparenting retain a locked vocabulary snapshot to serialize cycle and depth validation; budget those operations for the vocabulary size. Attachment mutations also lock the canonical owner row; use a shared cache lock store when coordinating multiple processes.
 
