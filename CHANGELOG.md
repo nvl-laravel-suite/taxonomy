@@ -5,6 +5,8 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [7.0.2] - 2026-11-11
+
 ### Fixed
 
 - Force-deleting an already soft-deleted taxonomised model now removes its attachments instead of failing with "The canonical taxonomy owner is unavailable."; ownership boundaries still apply to the trashed owner.
@@ -15,6 +17,12 @@ All notable changes to `nvl/taxonomy` are documented here.
 ### Changed
 
 - `Term::descendants()`, `Category::tree()` and `TaxonomyTree` now share one tree walk (`TaxonomyTree::nest()` / `TaxonomyTree::preorder()`); results and ordering are unchanged. The internal `TaxonomyConfiguration::table()` no longer takes an ignored default argument and the internal alias `TaxonomyOwnership::active()` is removed in favour of `declared()`.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- correct batched owner reads and concurrent tag creation
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.1] - 2026-11-09
 
