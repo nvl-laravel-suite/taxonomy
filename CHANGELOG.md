@@ -5,9 +5,17 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [7.0.3] - 2026-11-13
+
 ### Fixed
 
 - Normalize table prefixes in `TaxonomyDoctor` foreign-key diagnostics and wrap concurrent term mutations safely on PostgreSQL and SQLite.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- harden package runtime safety, PostgreSQL portability and test performance
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.0.2] - 2026-11-11
 
