@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Contracts\OwnershipQueuedJob;
 use Nvl\Support\Ownership\Exceptions\OwnershipException;
@@ -27,7 +28,7 @@ use Nvl\Taxonomy\Tests\Fixtures\OwnershipTaxonomyScenario as Scenario;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipTerm;
 use Nvl\Taxonomy\Tests\OwnershipTestCase;
 
-uses(OwnershipTestCase::class);
+uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 it('isolates catalogue projections inside the admitted native owner', function (): void {
     $runner = app(OwnershipRunner::class);
     $actor = OwnershipActor::firstOrFail();
@@ -107,12 +108,26 @@ it('keeps authorized reads bounded for one twenty five and one hundred hosts and
     app()->bind(TaxonomyBatchAuthorization::class, fn () => new BatchTaxonomyPolicy(false));
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(7), OwnershipActor::firstOrFail(), function (): void {
         $term = Scenario::term();
-        $hosts = [];
-        for ($i = 0; $i < 100; $i++) {
-            $host = Scenario::host();
-            $hosts[] = $host;
-            app(TaxonomyAssignments::class)->sync($host, 'category', [$term], SystemActor::Background);
+        $host = Scenario::host();
+        app(TaxonomyAssignments::class)->sync($host, 'category', [$term], SystemActor::Background);
+        $assignment = Termable::query()->sole();
+        $hostIds = [$host->id];
+        $hostRows = [];
+        $assignmentRows = [];
+        for ($index = 1; $index < 100; $index++) {
+            $hostId = $host->newUniqueId();
+            $hostIds[] = $hostId;
+            $hostRows[] = [...$host->getRawOriginal(), 'id' => $hostId];
+            $assignmentRows[] = [...$assignment->getRawOriginal(), 'id' => $assignment->newUniqueId(), 'termable_id' => $hostId];
         }
+        $connection = $host->getConnection();
+        $connection->transaction(static function () use ($connection, $host, $assignment, $hostRows, $assignmentRows): void {
+            $connection->table($host->getTable())->insert($hostRows);
+            $connection->table($assignment->getTable())->insert($assignmentRows);
+        });
+        $persisted = $host->newQuery()->whereKey($hostIds)->get()->keyBy('id');
+        $hosts = array_map($persisted->get(...), $hostIds);
+
         $measure = function (array $hosts): int {
             DB::enableQueryLog();
             DB::flushQueryLog();

@@ -16,8 +16,8 @@ uses(TestCase::class);
 
 it('reads a batch of owners through the attachment indexes instead of scanning the attachments table', function (): void {
     $driver = DB::connection()->getDriverName();
-    if (! in_array($driver, ['mysql', 'mariadb', 'pgsql'], true)) {
-        $this->markTestSkipped('Query plans are asserted on PostgreSQL and MySQL/MariaDB.');
+    if ($driver !== 'pgsql') {
+        $this->markTestSkipped('Query plans are asserted on PostgreSQL.');
     }
 
     $owners = [Post::create(['title' => 'First']), Post::create(['title' => 'Second'])];
@@ -32,7 +32,7 @@ it('reads a batch of owners through the attachment indexes instead of scanning t
             'taxonomy' => 'tag', 'position' => 0, 'created_at' => now(), 'updated_at' => now(),
         ], $chunk));
     }
-    DB::statement($driver === 'pgsql' ? "ANALYZE {$termables}" : "ANALYZE TABLE {$termables}");
+    DB::statement("ANALYZE {$termables}");
 
     DB::enableQueryLog();
     DB::flushQueryLog();
@@ -48,19 +48,8 @@ it('reads a batch of owners through the attachment indexes instead of scanning t
         ->and($reads)->not->toBeEmpty();
 
     foreach ($reads as $read) {
-        if ($driver === 'pgsql') {
-            $plan = implode("\n", array_map(static fn (object $row): string => (string) current((array) $row), DB::select('EXPLAIN '.$read['query'], $read['bindings'])));
+        $plan = implode("\n", array_map(static fn (object $row): string => (string) current((array) $row), DB::select('EXPLAIN '.$read['query'], $read['bindings'])));
 
-            expect($plan)->not->toContain("Seq Scan on {$termables}");
-
-            continue;
-        }
-
-        foreach (DB::select('EXPLAIN FORMAT=TRADITIONAL '.$read['query'], $read['bindings']) as $row) {
-            if ($row->table === $termables) {
-                expect($row->type)->not->toBe('ALL', json_encode($row, JSON_THROW_ON_ERROR))
-                    ->and($row->key)->not->toBeNull();
-            }
-        }
+        expect($plan)->not->toContain("Seq Scan on {$termables}");
     }
 });

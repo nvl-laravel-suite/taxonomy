@@ -62,16 +62,12 @@ Producers and exact scheduling connection expressions (variables are resolved in
 
 | Producer | Source connection |
 | --- | --- |
-| [Actions/CreateTermAction.php](../src/Actions/CreateTermAction.php) | `$term->getConnection()` |
-| [Actions/DeleteTermAction.php](../src/Actions/DeleteTermAction.php) | `$child->getConnection()` |
-| [Actions/DeleteTermAction.php](../src/Actions/DeleteTermAction.php) | `$descendant->getConnection()` |
-| [Actions/DeleteTermAction.php](../src/Actions/DeleteTermAction.php) | `$term->getConnection()` |
-| [Actions/MergeTermsAction.php](../src/Actions/MergeTermsAction.php) | `$child->getConnection()` |
-| [Actions/MergeTermsAction.php](../src/Actions/MergeTermsAction.php) | `$destination->getConnection()` |
-| [Actions/MergeTermsAction.php](../src/Actions/MergeTermsAction.php) | `$source->getConnection()` |
-| [Actions/MoveTermAction.php](../src/Actions/MoveTermAction.php) | `$term->getConnection()` |
-| [Actions/RebuildTreeAction.php](../src/Actions/RebuildTreeAction.php) | `$child->getConnection()` |
-| [Actions/UpdateTermAction.php](../src/Actions/UpdateTermAction.php) | `$updated->getConnection()` |
+| [Services/TaxonomyTerms.php](../src/Services/TaxonomyTerms.php) | `$term->getConnection()` |
+| [Services/TaxonomyTerms.php](../src/Services/TaxonomyTerms.php) | `$child->getConnection()` |
+| [Services/TaxonomyTerms.php](../src/Services/TaxonomyTerms.php) | `$descendant->getConnection()` |
+| [Services/TaxonomyTerms.php](../src/Services/TaxonomyTerms.php) | `$destination->getConnection()` |
+| [Services/TaxonomyTerms.php](../src/Services/TaxonomyTerms.php) | `$source->getConnection()` |
+| [Services/TaxonomyTerms.php](../src/Services/TaxonomyTerms.php) | `$updated->getConnection()` |
 | [Services/TermResolver.php](../src/Services/TermResolver.php) | `$created->getConnection()` |
 
 ## Referenced payload types

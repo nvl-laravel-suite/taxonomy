@@ -172,7 +172,7 @@ final readonly class TaxonomyBatchOwnerAdmission
     public static function exact(Builder $query, string $column, string $value): void
     {
         $connection = $query->getModel()->getConnection();
-        $text = ExactTaxonomyText::text($connection->getQueryGrammar()->wrap($column), $connection->getDriverName());
+        $text = ExactTaxonomyText::text($connection->getQueryGrammar()->wrap($column));
         $query->whereRaw(ExactTaxonomyText::value($text, $connection->getDriverName()), [$value, $value]);
     }
 

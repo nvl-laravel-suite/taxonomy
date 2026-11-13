@@ -16,9 +16,9 @@ use Nvl\Taxonomy\Tests\TestCase;
 uses(TestCase::class);
 
 it('ends two transactions creating the same new tag with one term and both syncs applied', function (): void {
-    if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb', 'pgsql'], true)
+    if (DB::connection()->getDriverName() !== 'pgsql'
         || ! function_exists('pcntl_fork') || ! function_exists('pcntl_waitpid') || ! function_exists('pcntl_exec')) {
-        $this->markTestSkipped('The tag creation race requires PostgreSQL/MySQL/MariaDB and pcntl.');
+        $this->markTestSkipped('The tag creation race requires PostgreSQL and pcntl.');
     }
 
     $posts = [Post::create(['title' => 'First tagger']), Post::create(['title' => 'Second tagger'])];

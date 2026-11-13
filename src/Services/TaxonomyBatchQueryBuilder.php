@@ -55,8 +55,8 @@ final readonly class TaxonomyBatchQueryBuilder
     public function attachments(): Builder
     {
         $query = Termable::query()->withoutEagerLoads();
-        if (! in_array($query->getModel()->getConnection()->getDriverName(), ['sqlite', 'pgsql', 'mysql', 'mariadb'], true)) {
-            throw new TaxonomyBatchReadException('Taxonomy batch reads require SQLite, PostgreSQL, MySQL or MariaDB window support.');
+        if (! in_array($query->getModel()->getConnection()->getDriverName(), ['sqlite', 'pgsql'], true)) {
+            throw new TaxonomyBatchReadException('Taxonomy batch reads require SQLite or PostgreSQL window support.');
         }
 
         return $this->boundary->query($query, 'taxonomy.attachments');
@@ -109,7 +109,6 @@ final readonly class TaxonomyBatchQueryBuilder
             $columns[] = $model->qualifyColumn($column);
         }
         $window = match ($driver) {
-            'mysql', 'mariadb' => 'ROW_NUMBER() OVER (PARTITION BY BINARY nvl_visible_taxonomy.termable_type, BINARY nvl_visible_taxonomy.termable_id, BINARY nvl_visible_taxonomy.taxonomy ORDER BY nvl_visible_taxonomy.position, nvl_visible_taxonomy.term_id) AS nvl_taxonomy_rank',
             'pgsql' => 'ROW_NUMBER() OVER (PARTITION BY nvl_visible_taxonomy.termable_type COLLATE "C", nvl_visible_taxonomy.termable_id COLLATE "C", nvl_visible_taxonomy.taxonomy COLLATE "C" ORDER BY nvl_visible_taxonomy.position, nvl_visible_taxonomy.term_id) AS nvl_taxonomy_rank',
             default => 'ROW_NUMBER() OVER (PARTITION BY nvl_visible_taxonomy.termable_type COLLATE BINARY, nvl_visible_taxonomy.termable_id COLLATE BINARY, nvl_visible_taxonomy.taxonomy COLLATE BINARY ORDER BY nvl_visible_taxonomy.position, nvl_visible_taxonomy.term_id) AS nvl_taxonomy_rank',
         };

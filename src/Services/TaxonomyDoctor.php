@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Closure;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder as QueryBuilder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Builder as SchemaBuilder;
 use InvalidArgumentException;
 use Nvl\Support\Ownership\Contracts\OwnershipReadiness;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
@@ -41,8 +42,9 @@ final readonly class TaxonomyDoctor
      */
     public function inspect(): array
     {
-        $schema = Schema::connection(TaxonomyConfiguration::connection());
-        $owned = TaxonomyOwnership::declared();
+        $connection = TermModelRegistry::newInstance()->getConnection();
+        $schema = $connection->getSchemaBuilder();
+        $owned = $this->ownershipDeclared();
         $ownerScopeColumns = $owned ? ['owner_scope_key'] : [];
         $tables = [
             TaxonomyConfiguration::table(TaxonomyTables::Terms) => [
@@ -61,13 +63,22 @@ final readonly class TaxonomyDoctor
         $schemaCompatible = true;
 
         foreach ($tables as $table => $required) {
-            $exists = $schema->hasTable($table);
-            $missing = $exists
-                ? array_values(array_filter(
-                    $required,
-                    static fn (string $column): bool => ! $schema->hasColumn($table, $column),
-                ))
-                : $required;
+            try {
+                [$exists, $missing] = $this->probe($connection, static function () use ($schema, $table, $required): array {
+                    $exists = $schema->hasTable($table);
+                    $missing = $exists
+                        ? array_values(array_filter(
+                            $required,
+                            static fn (string $column): bool => ! $schema->hasColumn($table, $column),
+                        ))
+                        : $required;
+
+                    return [$exists, $missing];
+                });
+            } catch (Throwable) {
+                $exists = false;
+                $missing = $required;
+            }
             $checks[] = new TaxonomyDoctorCheck(
                 key: "schema.{$table}",
                 severity: 'error',
@@ -80,6 +91,8 @@ final readonly class TaxonomyDoctor
         }
 
         $checks[] = $this->indexCheck(
+            $connection,
+            $schema,
             TaxonomyConfiguration::table(TaxonomyTables::Terms),
             [
                 ['taxonomy', 'id'],
@@ -87,14 +100,20 @@ final readonly class TaxonomyDoctor
             ],
         );
         $checks[] = $this->indexCheck(
+            $connection,
+            $schema,
             TaxonomyConfiguration::table(TaxonomyTables::I18n),
             [$owned ? ['owner_scope_key', 'term_id', 'locale'] : ['term_id', 'locale']],
         );
         $checks[] = $this->indexCheck(
+            $connection,
+            $schema,
             TaxonomyConfiguration::table(TaxonomyTables::Termables),
             [$owned ? ['owner_scope_key', 'term_id', 'termable_type', 'termable_id'] : ['term_id', 'termable_type', 'termable_id']],
         );
         $checks[] = $this->foreignKeyCheck(
+            $connection,
+            $schema,
             TaxonomyConfiguration::table(TaxonomyTables::Terms),
             [[
                 'columns' => ['taxonomy', 'parent_id'],
@@ -103,6 +122,8 @@ final readonly class TaxonomyDoctor
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
+            $connection,
+            $schema,
             TaxonomyConfiguration::table(TaxonomyTables::I18n),
             [[
                 'columns' => ['term_id'],
@@ -111,6 +132,8 @@ final readonly class TaxonomyDoctor
             ]],
         );
         $checks[] = $this->foreignKeyCheck(
+            $connection,
+            $schema,
             TaxonomyConfiguration::table(TaxonomyTables::Termables),
             [[
                 'columns' => ['taxonomy', 'term_id'],
@@ -186,7 +209,7 @@ final readonly class TaxonomyDoctor
 
         if ($schemaCompatible) {
             try {
-                array_push($checks, ...$this->dataChecks());
+                array_push($checks, ...$this->probe($connection, fn (): array => $this->dataChecks($connection)));
             } catch (Throwable $exception) {
                 $checks[] = new TaxonomyDoctorCheck(
                     key: 'data.inspect',
@@ -203,11 +226,19 @@ final readonly class TaxonomyDoctor
     /**
      * @param  list<list<string>>  $requiredUniqueColumns
      */
-    private function indexCheck(string $table, array $requiredUniqueColumns): TaxonomyDoctorCheck
-    {
-        $schema = Schema::connection(TaxonomyConfiguration::connection());
+    private function indexCheck(
+        ConnectionInterface $connection,
+        SchemaBuilder $schema,
+        string $table,
+        array $requiredUniqueColumns,
+    ): TaxonomyDoctorCheck {
+        try {
+            $tableExists = $this->probe($connection, static fn (): bool => $schema->hasTable($table));
+        } catch (Throwable) {
+            $tableExists = false;
+        }
 
-        if (! $schema->hasTable($table)) {
+        if (! $tableExists) {
             return new TaxonomyDoctorCheck(
                 key: "indexes.{$table}",
                 severity: 'error',
@@ -217,7 +248,8 @@ final readonly class TaxonomyDoctor
         }
 
         try {
-            $uniqueIndexes = collect($schema->getIndexes($table))
+            $indexes = $this->probe($connection, static fn (): array => $schema->getIndexes($table));
+            $uniqueIndexes = collect($indexes)
                 ->filter(static fn (array $index): bool => $index['unique'])
                 ->map(static function (array $index): array {
                     $normalized = $index['columns'];
@@ -260,11 +292,19 @@ final readonly class TaxonomyDoctor
     /**
      * @param  list<array{columns: list<string>, foreign_table: string, foreign_columns: list<string>}>  $required
      */
-    private function foreignKeyCheck(string $table, array $required): TaxonomyDoctorCheck
-    {
-        $schema = Schema::connection(TaxonomyConfiguration::connection());
+    private function foreignKeyCheck(
+        ConnectionInterface $connection,
+        SchemaBuilder $schema,
+        string $table,
+        array $required,
+    ): TaxonomyDoctorCheck {
+        try {
+            $tableExists = $this->probe($connection, static fn (): bool => $schema->hasTable($table));
+        } catch (Throwable) {
+            $tableExists = false;
+        }
 
-        if (! $schema->hasTable($table)) {
+        if (! $tableExists) {
             return new TaxonomyDoctorCheck(
                 key: "foreign_keys.{$table}",
                 severity: 'error',
@@ -274,11 +314,16 @@ final readonly class TaxonomyDoctor
         }
 
         try {
+            $prefix = $schema->getConnection()->getTablePrefix();
+            $rawForeignKeys = $this->probe($connection, static fn (): array => $schema->getForeignKeys($table));
             $foreignKeys = array_map(
-                $this->normalizeForeignKey(...),
-                $schema->getForeignKeys($table),
+                fn (array $foreignKey): array => $this->normalizeForeignKey($foreignKey, $prefix),
+                $rawForeignKeys,
             );
-            $required = array_map($this->normalizeForeignKey(...), $required);
+            $required = array_map(
+                fn (array $foreignKey): array => $this->normalizeForeignKey($foreignKey, $prefix),
+                $required,
+            );
             $missing = array_values(array_filter(
                 $required,
                 static fn (array $foreignKey): bool => ! in_array(
@@ -312,7 +357,7 @@ final readonly class TaxonomyDoctor
      * @param  array<string, mixed>  $foreignKey
      * @return array{column_map: array<string, string>, foreign_table: string}
      */
-    private function normalizeForeignKey(array $foreignKey): array
+    private function normalizeForeignKey(array $foreignKey, string $tablePrefix = ''): array
     {
         $columns = $foreignKey['columns'] ?? null;
         $foreignColumns = $foreignKey['foreign_columns'] ?? null;
@@ -323,6 +368,10 @@ final readonly class TaxonomyDoctor
             || ! is_string($foreignTable)
             || count($columns) !== count($foreignColumns)) {
             throw new InvalidArgumentException('A taxonomy foreign key definition is malformed.');
+        }
+
+        if ($tablePrefix !== '' && str_starts_with($foreignTable, $tablePrefix)) {
+            $foreignTable = substr($foreignTable, strlen($tablePrefix));
         }
 
         $columnMap = [];
@@ -350,19 +399,13 @@ final readonly class TaxonomyDoctor
     /**
      * @return list<TaxonomyDoctorCheck>
      */
-    private function dataChecks(): array
+    private function dataChecks(ConnectionInterface $connection): array
     {
-        $connection = DB::connection(TermModelRegistry::newInstance()->getConnectionName());
         $terms = TermModelRegistry::newInstance()->getTable();
         $termables = (new Termable)->getTable();
         $translations = (new TermTranslation)->getTable();
         $parentKeyQuery = $connection->table($terms);
-        $parentIdExpression = match ($connection->getDriverName()) {
-            'pgsql', 'sqlite' => $connection->raw('CAST("parent_id" AS TEXT)'),
-            'sqlsrv' => $connection->raw('CAST([parent_id] AS NVARCHAR(36))'),
-            'mariadb', 'mysql' => $connection->raw('CAST(`parent_id` AS CHAR)'),
-            default => $connection->raw('CAST(parent_id AS CHAR)'),
-        };
+        $parentIdExpression = $connection->raw('CAST("parent_id" AS TEXT)');
         $invalidParentKeys = $parentKeyQuery
             ->where(static fn (QueryBuilder $query): QueryBuilder => $query
                 ->whereNull('parent_id')
@@ -380,7 +423,7 @@ final readonly class TaxonomyDoctor
             ->whereColumn('attachment.taxonomy', '!=', 'term.taxonomy')
             ->count();
         $ownerScopeMismatches = 0;
-        if (TaxonomyOwnership::declared()) {
+        if ($this->ownershipDeclared()) {
             $scope = 'owner_scope_key';
             $ownerScopeMismatches += $connection->table("{$terms} as child")
                 ->join("{$terms} as parent", 'parent.id', '=', 'child.parent_id')
@@ -481,7 +524,9 @@ final readonly class TaxonomyDoctor
         $errors = 0;
 
         foreach ($this->taxonomies->all() as $definition) {
-            $parents = $definition->model::query()
+            $model = new ($definition->model);
+            $parents = $model->getConnection()
+                ->table($model->getTable())
                 ->where('taxonomy', $definition->taxonomy)
                 ->pluck('parent_id', 'id')
                 ->all();
@@ -536,5 +581,29 @@ final readonly class TaxonomyDoctor
             passed: $count === 0,
             message: "{$count} {$description} found.",
         );
+    }
+
+    private function ownershipDeclared(): bool
+    {
+        try {
+            return TaxonomyOwnership::declared();
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Isolate read-only probes in a savepoint when an outer transaction is active.
+     *
+     * @template TReturn
+     *
+     * @param  Closure(): TReturn  $callback
+     * @return TReturn
+     */
+    private function probe(ConnectionInterface $connection, Closure $callback): mixed
+    {
+        return $connection->transactionLevel() > 0
+            ? $connection->transaction($callback)
+            : $callback();
     }
 }

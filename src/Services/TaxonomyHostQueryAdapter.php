@@ -176,12 +176,12 @@ final readonly class TaxonomyHostQueryAdapter
         TaxonomyBatchOwnerAdmission::exactText($attachments, $pivot->qualifyColumn('taxonomy'), $vocabulary);
         $connection = $attachments->getModel()->getConnection();
         $grammar = $connection->getQueryGrammar();
-        $left = ExactTaxonomyText::text($grammar->wrap($pivot->qualifyColumn('termable_id')), $connection->getDriverName());
-        $right = ExactTaxonomyText::text($grammar->wrap($owner->getQualifiedKeyName()), $connection->getDriverName());
+        $left = ExactTaxonomyText::text($grammar->wrap($pivot->qualifyColumn('termable_id')));
+        $right = ExactTaxonomyText::text($grammar->wrap($owner->getQualifiedKeyName()));
         $attachments->whereRaw(new ExactTaxonomyText($left, $right, $connection->getDriverName()));
         $attachments->whereColumn($pivot->qualifyColumn('term_id'), $model->getQualifiedKeyName());
-        $pivotVocabulary = ExactTaxonomyText::text($grammar->wrap($pivot->qualifyColumn('taxonomy')), $connection->getDriverName());
-        $termVocabulary = ExactTaxonomyText::text($grammar->wrap($model->qualifyColumn('taxonomy')), $connection->getDriverName());
+        $pivotVocabulary = ExactTaxonomyText::text($grammar->wrap($pivot->qualifyColumn('taxonomy')));
+        $termVocabulary = ExactTaxonomyText::text($grammar->wrap($model->qualifyColumn('taxonomy')));
         $attachments->whereRaw(new ExactTaxonomyText($pivotVocabulary, $termVocabulary, $connection->getDriverName()));
         $terms->whereExists($attachments->selectRaw('1')->toBase());
         $terms->where(function (Builder $matches) use ($references, $model): void {

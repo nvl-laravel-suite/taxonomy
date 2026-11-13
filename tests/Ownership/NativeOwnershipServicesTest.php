@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Gate;
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Taxonomy\Exceptions\InvalidParentException;
@@ -17,7 +18,7 @@ use Nvl\Taxonomy\Tests\Fixtures\OwnershipCompany;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipTaxonomyScenario as Scenario;
 use Nvl\Taxonomy\Tests\OwnershipTestCase;
 
-uses(OwnershipTestCase::class);
+uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 
 it('rejects foreign owner moves and assignment sync without changing local records', function (): void {
     $runner = app(OwnershipRunner::class);

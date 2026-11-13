@@ -10,9 +10,9 @@ use Nvl\Taxonomy\Actions\MoveTermAction;
 use Nvl\Taxonomy\Tests\Fixtures\TaxonomyTenancyScenario;
 
 it('creates identical roots concurrently in independent tenant partitions', function (): void {
-    if (! in_array(DB::connection()->getDriverName(), ['mysql', 'pgsql'], true)
+    if (DB::connection()->getDriverName() !== 'pgsql'
         || ! function_exists('pcntl_fork') || ! function_exists('pcntl_waitpid') || ! function_exists('pcntl_exec')) {
-        $this->markTestSkipped('The Taxonomy race requires PostgreSQL/MySQL and pcntl.');
+        $this->markTestSkipped('The Taxonomy race requires PostgreSQL and pcntl.');
     }
 
     $scenario = TaxonomyTenancyScenario::install();

@@ -116,8 +116,14 @@ final readonly class TermWriter
     /** Report a sibling-slug race lost at the unique index as the domain duplicate. */
     private function save(Term $term): void
     {
+        $connection = $term->getConnection();
+
         try {
-            $term->save();
+            if ($connection->transactionLevel() > 0) {
+                $connection->transaction(static fn (): bool => $term->save());
+            } else {
+                $term->save();
+            }
         } catch (UniqueConstraintViolationException) {
             throw DuplicateSiblingSlugException::forSlug($term->taxonomy, $term->slug);
         }

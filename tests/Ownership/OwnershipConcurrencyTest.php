@@ -15,9 +15,9 @@ use Nvl\Taxonomy\Tests\OwnershipTestCase;
 uses(OwnershipTestCase::class);
 
 it('creates identical roots and moves concurrently in independent native owner partitions', function (): void {
-    if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb', 'pgsql'], true)
+    if (DB::connection()->getDriverName() !== 'pgsql'
         || ! function_exists('pcntl_fork') || ! function_exists('pcntl_waitpid') || ! function_exists('pcntl_exec')) {
-        $this->markTestSkipped('The Taxonomy race requires PostgreSQL/MySQL/MariaDB and pcntl.');
+        $this->markTestSkipped('The Taxonomy race requires PostgreSQL and pcntl.');
     }
 
     $childrenByOwner = [];

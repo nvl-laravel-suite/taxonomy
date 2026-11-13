@@ -69,8 +69,8 @@ final readonly class BatchTaxonomyPolicy implements TaxonomyBatchAuthorization
             TaxonomyBatchOwnerAdmission::exact($attachments, $pivot->qualifyColumn('termable_type'), $ownerPrototype->getMorphClass());
             $connection = $pivot->getConnection();
             $grammar = $connection->getQueryGrammar();
-            $left = ExactTaxonomyText::text($grammar->wrap($pivot->qualifyColumn('termable_id')), $connection->getDriverName());
-            $right = ExactTaxonomyText::text($grammar->wrap($ownerPrototype->getQualifiedKeyName()), $connection->getDriverName());
+            $left = ExactTaxonomyText::text($grammar->wrap($pivot->qualifyColumn('termable_id')));
+            $right = ExactTaxonomyText::text($grammar->wrap($ownerPrototype->getQualifiedKeyName()));
             $attachments->whereRaw(new ExactTaxonomyText($left, $right, $connection->getDriverName()));
             $query->whereExists($attachments->selectRaw('1')->toBase());
         }

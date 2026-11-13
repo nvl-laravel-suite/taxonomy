@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 use Nvl\Ownership\Services\OwnershipRunner;
+use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Taxonomy\Models\Term;
@@ -14,7 +15,7 @@ use Nvl\Taxonomy\Tests\Fixtures\OwnershipCompany;
 use Nvl\Taxonomy\Tests\Fixtures\OwnershipTerm;
 use Nvl\Taxonomy\Tests\OwnershipTestCase;
 
-uses(OwnershipTestCase::class);
+uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
 it('uses the configured root for actions factories relations and route binding', function (): void {
     app(OwnershipRunner::class)->run(OwnershipCompany::findOrFail(7), OwnershipActor::firstOrFail(), function (): void {
         $term = app(TaxonomyTerms::class)->create(['taxonomy' => 'category', 'slug' => 'root', 'translations' => ['en' => ['name' => 'Root']]], SystemActor::Background);

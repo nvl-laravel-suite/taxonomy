@@ -144,43 +144,26 @@ it('removes raw attachment rows when an owning model is deleted', function () {
 });
 
 it('removes attachment rows when an already soft-deleted owner is force deleted', function () {
-    // MySQL DDL commits the wrapping test transaction, so the column is added and removed outside it.
-    $commitsDdl = in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
     $table = (new Post)->getTable();
-    $addsColumn = ! Schema::hasColumn($table, 'archived_at');
-    if ($addsColumn) {
-        if ($commitsDdl) {
-            DB::rollBack();
-        }
+    if (! Schema::hasColumn($table, 'archived_at')) {
         Schema::table($table, static fn (Blueprint $table) => $table->softDeletes('archived_at'));
-        if ($commitsDdl) {
-            DB::beginTransaction();
-        }
     }
 
-    try {
-        app(TaxonomyOwnerRegistry::class)->register('archived_posts', BatchArchivedPost::class);
-        $post = BatchArchivedPost::create(['title' => 'Trashed post']);
-        app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
+    app(TaxonomyOwnerRegistry::class)->register('archived_posts', BatchArchivedPost::class);
+    $post = BatchArchivedPost::create(['title' => 'Trashed post']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['laravel'], SystemActor::Background);
 
-        $post->delete();
+    $post->delete();
 
-        expect($post->trashed())->toBeTrue();
-        $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 1);
-        expect(fn () => app(TaxonomyAssignments::class)->sync($post, 'tag', ['php'], SystemActor::Background))
-            ->toThrow(InvalidArgumentException::class, 'The canonical taxonomy owner is unavailable.');
+    expect($post->trashed())->toBeTrue();
+    $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 1);
+    expect(fn () => app(TaxonomyAssignments::class)->sync($post, 'tag', ['php'], SystemActor::Background))
+        ->toThrow(InvalidArgumentException::class, 'The canonical taxonomy owner is unavailable.');
 
-        $post->forceDelete();
+    $post->forceDelete();
 
-        $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 0);
-        expect(BatchArchivedPost::withTrashed()->whereKey($post->getKey())->exists())->toBeFalse();
-    } finally {
-        if ($addsColumn && $commitsDdl) {
-            DB::rollBack();
-            Schema::table($table, static fn (Blueprint $table) => $table->dropColumn('archived_at'));
-            DB::beginTransaction();
-        }
-    }
+    $this->assertDatabaseCount(TaxonomyTables::get(TaxonomyTables::Termables), 0);
+    expect(BatchArchivedPost::withTrashed()->whereKey($post->getKey())->exists())->toBeFalse();
 });
 
 it('generates a tree of categories', function () {
@@ -1033,4 +1016,20 @@ it('limits locked descendant reads to the affected taxonomy subtree', function (
     });
 
     expect($seen)->not->toContain($unrelated->id);
+});
+
+it('isolates sibling slug unique constraint violations inside outer transactions', function (): void {
+    $terms = app(TaxonomyTerms::class);
+    $actor = SystemActor::Background;
+    $terms->create(['taxonomy' => 'tag', 'slug' => 'taken-slug', 'translations' => ['en' => ['name' => 'Taken']]], $actor);
+
+    DB::transaction(function () use ($terms, $actor): void {
+        expect(fn () => $terms->create(['taxonomy' => 'tag', 'slug' => 'taken-slug', 'translations' => ['en' => ['name' => 'Duplicate']]], $actor))
+            ->toThrow(DuplicateSiblingSlugException::class);
+
+        $survivor = $terms->create(['taxonomy' => 'tag', 'slug' => 'survivor-slug', 'translations' => ['en' => ['name' => 'Survivor']]], $actor);
+        expect($survivor->exists)->toBeTrue();
+    });
+
+    expect(Tag::query()->where('slug', 'survivor-slug')->exists())->toBeTrue();
 });

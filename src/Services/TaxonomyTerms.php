@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
@@ -17,6 +18,7 @@ use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Exceptions\CircularHierarchyException;
+use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
 use Nvl\Taxonomy\Exceptions\InvalidParentException;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
@@ -155,7 +157,7 @@ final readonly class TaxonomyTerms
 
                 foreach ($children as $child) {
                     $child->parent_id = $reparentTo;
-                    $child->save();
+                    $this->saveTerm($child);
                     $this->domainEvents->dispatch(new TermChanged(
                         $child->id,
                         $child->taxonomy,
@@ -235,7 +237,7 @@ final readonly class TaxonomyTerms
 
             $term->parent_id = $parentId;
             $term->position = $position;
-            $term->save();
+            $this->saveTerm($term);
             $this->domainEvents->dispatch(new TermChanged(
                 $term->id,
                 $term->taxonomy,
@@ -347,7 +349,7 @@ final readonly class TaxonomyTerms
 
             foreach ($context->children as $child) {
                 $child->parent_id = $destination->id;
-                $child->save();
+                $this->saveTerm($child);
                 $this->domainEvents->dispatch(new TermChanged(
                     $child->id,
                     $child->taxonomy,
@@ -517,5 +519,21 @@ final readonly class TaxonomyTerms
     private function connectionFor(): ?string
     {
         return TermModelRegistry::newInstance()->getConnectionName();
+    }
+
+    /** Persist a moved or reparented term inside a savepoint so sibling-slug races do not poison outer PostgreSQL transactions. */
+    private function saveTerm(Term $term): void
+    {
+        $connection = $term->getConnection();
+
+        try {
+            if ($connection->transactionLevel() > 0) {
+                $connection->transaction(static fn (): bool => $term->save());
+            } else {
+                $term->save();
+            }
+        } catch (UniqueConstraintViolationException) {
+            throw DuplicateSiblingSlugException::forSlug($term->taxonomy, $term->slug);
+        }
     }
 }

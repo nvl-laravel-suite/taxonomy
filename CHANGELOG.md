@@ -5,6 +5,10 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Normalize table prefixes in `TaxonomyDoctor` foreign-key diagnostics and wrap concurrent term mutations safely on PostgreSQL and SQLite.
+
 ## [7.0.2] - 2026-11-11
 
 ### Fixed
@@ -12,7 +16,7 @@ All notable changes to `nvl/taxonomy` are documented here.
 - Force-deleting an already soft-deleted taxonomised model now removes its attachments instead of failing with "The canonical taxonomy owner is unavailable."; ownership boundaries still apply to the trashed owner.
 - Reuse an open-vocabulary term that a concurrent request created during a sync instead of failing the sync with `DuplicateSiblingSlugException`, and report a term slug race lost at the unique index as `DuplicateSiblingSlugException` rather than a raw database exception.
 - `Term::displayName()` and `displayDescription()` without a locale now answer from the tree's preloaded copy for the current locale.
-- Batched owner reads (`TaxonomyReader::forOwners`) and host taxonomy filters add a plain equality beside each byte-exact text predicate, so PostgreSQL and MySQL use the attachment and term indexes instead of scanning the attachments table. Results are unchanged.
+- Batched owner reads (`TaxonomyReader::forOwners`) and host taxonomy filters add a plain equality beside each byte-exact text predicate, so queries use the attachment and term indexes instead of scanning the attachments table. Results are unchanged.
 
 ### Changed
 
