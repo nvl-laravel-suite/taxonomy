@@ -1037,6 +1037,7 @@ it('keeps move merge delete and attachments on the configured connection', funct
             '2026_01_01_000000_nvl_taxonomy_create_terms_table.php',
             '2026_01_01_000001_nvl_taxonomy_create_termables_table.php',
             '2026_07_26_083129_nvl_taxonomy_create_terms_i18n_table.php',
+            '2026_11_16_013940_nvl_taxonomy_add_membership_order.php',
         ] as $migration) {
             (require __DIR__.'/../database/migrations/'.$migration)->up();
         }

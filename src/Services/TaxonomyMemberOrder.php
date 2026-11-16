@@ -13,6 +13,7 @@ use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Ownership\Contracts\OwnershipModelPersistence;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization;
+use Nvl\Taxonomy\Enums\TaxonomyMembershipOperation;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
@@ -31,6 +32,7 @@ final readonly class TaxonomyMemberOrder
         private TaxonomyBatchAuthorization $policy,
         private TaxonomyActorPolicy $actors,
         private OwnershipModelPersistence $persistence,
+        private TaxonomyMembershipGuard $guard,
     ) {}
 
     /**
@@ -71,8 +73,8 @@ final readonly class TaxonomyMemberOrder
         $connection = TermModelRegistry::newInstance()->getConnection();
         $connection->transaction(function () use ($taxonomy, $termId, $validated, $actor): void {
             $term = $this->admit($taxonomy, $termId, $actor, 'reorder-members', lock: true);
-            $persist = function () use ($term, $validated): bool {
-                $this->writePositions($term, $validated);
+            $persist = function () use ($term, $validated, $actor): bool {
+                $this->writePositions($term, $validated, $actor);
 
                 return true;
             };
@@ -85,13 +87,20 @@ final readonly class TaxonomyMemberOrder
     }
 
     /** @param array<string, int|null> $positions */
-    private function writePositions(Term $term, array $positions): void
+    private function writePositions(Term $term, array $positions, Authenticatable|SystemActor $actor): void
     {
         $members = $this->members($term);
         $selected = (clone $members)->whereKey(array_keys($positions))->orderBy('id')->lockForUpdate()->get(['id', 'member_position']);
         if ($selected->count() !== count($positions)) {
             throw new InvalidArgumentException('Each reordered attachment must belong to the selected term.');
         }
+        $this->guard->reviewAttachedOwners(
+            $term->taxonomy,
+            (clone $members)->whereKey(array_keys($positions))->toBase(),
+            $actor,
+            TaxonomyMembershipOperation::Reorder,
+            static fn (array $current): array => $current,
+        );
         $now = now();
         foreach ($selected as $member) {
             if ($member->member_position !== $positions[$member->id]) {

@@ -13,6 +13,7 @@ use Nvl\Taxonomy\Concerns\GuardsOwnerScope;
 use Nvl\Taxonomy\Database\Factories\TermableFactory;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
+use Nvl\Taxonomy\Services\TaxonomyMembershipGuard;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 
 /**
@@ -35,8 +36,17 @@ final class TermablePivot extends MorphPivot
         if (TaxonomyOwnership::declared()) {
             throw new OwnershipViolation('Use Taxonomy attachment workflows.');
         }
+        TaxonomyMembershipGuard::assertRelationWritesAllowed();
 
         return parent::save($options);
+    }
+
+    /** Refuse unreviewed relationship detaches while a membership policy is bound. */
+    public function delete(): mixed
+    {
+        TaxonomyMembershipGuard::assertRelationWritesAllowed();
+
+        return parent::delete();
     }
 
     /** @var list<string> */

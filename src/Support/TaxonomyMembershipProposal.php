@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Nvl\Taxonomy\Support;
 
 use InvalidArgumentException;
+use Nvl\Taxonomy\Enums\TaxonomyMembershipOperation;
 use Nvl\Taxonomy\Models\Term;
 
-/** Proposed complete membership and its source identity.
+/** Proposed complete membership, its source identity and the write path that produces it.
  * @api
  */
 final readonly class TaxonomyMembershipProposal
@@ -15,9 +16,12 @@ final readonly class TaxonomyMembershipProposal
     /** @var list<Term|string> */
     public array $terms;
 
-    /** @param array<array-key,mixed> $terms Ordered, pre-validation rule output. */
-    public function __construct(public string $source, array $terms)
-    {
+    /** @param array<array-key,mixed> $terms Ordered, pre-validation rule output: the complete resulting set. */
+    public function __construct(
+        public string $source,
+        array $terms,
+        public TaxonomyMembershipOperation $operation = TaxonomyMembershipOperation::Reconcile,
+    ) {
         if (preg_match('/^[a-z][a-z0-9._-]{0,63}$/D', $source) !== 1 || ! array_is_list($terms)) {
             throw new InvalidArgumentException('Taxonomy membership proposals require a canonical source and an ordered term list.');
         }

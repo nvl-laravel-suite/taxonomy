@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
+use Nvl\Taxonomy\Models\MembershipMatch;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermablePivot;
@@ -84,6 +85,10 @@ trait HasTaxonomies
                 ->where('termable_type', $model->getMorphClass())
                 ->where('termable_id', TaxonomyConfiguration::modelIdentifier($canonical));
             $query->delete();
+            MembershipMatch::query()
+                ->where('owner_type', $model->getMorphClass())
+                ->where('owner_id', TaxonomyConfiguration::modelIdentifier($canonical))
+                ->delete();
         };
 
         static::deleting($deleteAttachments);

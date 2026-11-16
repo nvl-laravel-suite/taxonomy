@@ -51,7 +51,21 @@ pass a [TaxonomyMembershipProvider](src/Contracts/TaxonomyMembershipProvider.php
 to `TaxonomyAssignments::reconcile` for host-owned rule evaluation. An
 `Apply` proposal replaces the owner vocabulary membership and stamps each
 attachment with its source. A `Shadow` proposal records the observation without
-creating terms or changing assignments. The provider's `record` method runs
+creating terms or changing assignments. Both are stored as the latest
+`MembershipMatch` per owner, taxonomy and source. A bound policy also reviews
+attach, detach, sync, merge, delete and reorder (source `manual`); it must
+return `Apply` or the write is rejected. Sync clears the source on every row;
+attach clears it on the incoming terms. While a policy is bound, the
+relationship helpers (`$model->tags()->attach()`, `sync()`, `detach()`) throw
+`InvalidTermOperationException`; write memberships through
+`TaxonomyAssignments` instead. Owner deletion removes the owner's matches
+together with its attachments.
+
+Manual writes lock the owner and then its terms, while term delete and merge
+lock the term and then its owners. On PostgreSQL the two orders can deadlock;
+the database aborts one transaction and the package retries it up to
+`nvl-taxonomy.transactions.attempts` times. This is an accepted, retried
+deadlock, not data loss. The provider's `record` method runs
 under the same owner lock and transaction, so use the canonical connection for
 durable observations. Reserve remote effects for post-commit processing.
 `TermMerged` gives listeners both term IDs after the source transaction commits.

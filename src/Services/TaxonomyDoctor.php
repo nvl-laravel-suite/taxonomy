@@ -58,6 +58,9 @@ final readonly class TaxonomyDoctor
                 'id', 'term_id', 'termable_type', 'termable_id', 'taxonomy', 'position',
                 'member_position', 'membership_source', 'created_at', 'updated_at', ...$ownerScopeColumns,
             ],
+            TaxonomyConfiguration::table(TaxonomyTables::MembershipMatches) => [
+                'id', 'owner_type', 'owner_id', 'taxonomy', 'source', 'proposal', 'mode', 'matched_at', ...$ownerScopeColumns,
+            ],
         ];
         $checks = [];
         $schemaCompatible = true;
@@ -111,6 +114,12 @@ final readonly class TaxonomyDoctor
             TaxonomyConfiguration::table(TaxonomyTables::Termables),
             [$owned ? ['owner_scope_key', 'term_id', 'termable_type', 'termable_id'] : ['term_id', 'termable_type', 'termable_id']],
         );
+        $checks[] = $this->indexCheck(
+            $connection,
+            $schema,
+            TaxonomyConfiguration::table(TaxonomyTables::MembershipMatches),
+            [$owned ? ['owner_scope_key', 'owner_type', 'owner_id', 'taxonomy', 'source'] : ['owner_type', 'owner_id', 'taxonomy', 'source']],
+        );
         $checks[] = $this->foreignKeyCheck(
             $connection,
             $schema,
@@ -151,7 +160,7 @@ final readonly class TaxonomyDoctor
         if ($owned) {
             $ready = true;
             try {
-                foreach (['taxonomy.terms', 'taxonomy.translations', 'taxonomy.attachments'] as $resource) {
+                foreach (['taxonomy.terms', 'taxonomy.translations', 'taxonomy.attachments', 'taxonomy.membership_matches'] as $resource) {
                     $this->readiness->assertActive($resource);
                 }
                 foreach ($this->owners->all() as $ownerClass) {

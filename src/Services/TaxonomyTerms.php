@@ -15,6 +15,7 @@ use LogicException;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
+use Nvl\Taxonomy\Enums\TaxonomyMembershipOperation;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
 use Nvl\Taxonomy\Events\TermMerged;
@@ -46,6 +47,7 @@ final readonly class TaxonomyTerms
         private TaxonomyOwnerRegistry $owners,
         private DomainEventDispatcher $domainEvents,
         private TaxonomyActorPolicy $actors,
+        private TaxonomyMembershipGuard $guard,
     ) {}
 
     /** @param array<string,mixed> $attributes */
@@ -143,6 +145,18 @@ final readonly class TaxonomyTerms
                 );
             }
 
+            $descendants = $strategy === DeleteTermStrategy::Cascade ? $this->hierarchy->descendants($term) : new Collection;
+            if ($strategy !== DeleteTermStrategy::Restrict) {
+                $removed = [$term->id, ...$descendants->modelKeys()];
+                $this->guard->reviewAttachedOwners(
+                    $term->taxonomy,
+                    $term->getConnection()->table((new Termable)->getTable())->where('taxonomy', $term->taxonomy)->whereIn('term_id', $removed),
+                    $actor,
+                    TaxonomyMembershipOperation::Delete,
+                    static fn (array $current): array => array_values(array_diff($current, $removed)),
+                );
+            }
+
             if ($strategy === DeleteTermStrategy::Reparent) {
                 if ($reparentTo === $term->id) {
                     throw new CircularHierarchyException(
@@ -167,7 +181,7 @@ final readonly class TaxonomyTerms
                     ), $child->getConnection());
                 }
             } elseif ($strategy === DeleteTermStrategy::Cascade) {
-                foreach ($this->hierarchy->descendants($term)->reverse() as $descendant) {
+                foreach ($descendants->reverse() as $descendant) {
                     $descendant->attachments()->delete();
                     $this->domainEvents->dispatch(new TermChanged(
                         $descendant->id,
@@ -293,6 +307,17 @@ final readonly class TaxonomyTerms
 
             $table = (new Termable)->getTable();
             $database = DB::connection($connection);
+            $this->guard->reviewAttachedOwners(
+                $source->taxonomy,
+                $database->table($table)->where('taxonomy', $source->taxonomy)->where('term_id', $source->id)
+                    ->when(is_string($ownerScope), static fn ($query) => $query->where('owner_scope_key', $ownerScope)),
+                $actor,
+                TaxonomyMembershipOperation::Merge,
+                static fn (array $current): array => array_values(array_unique(array_map(
+                    static fn (string $id): string => $id === $source->id ? $destination->id : $id,
+                    $current,
+                ))),
+            );
             $destinationAttachments = $database
                 ->table($table)
                 ->where('term_id', $destination->id)

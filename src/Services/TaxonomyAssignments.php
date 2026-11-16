@@ -8,12 +8,13 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Nvl\Support\Enums\SystemActor;
-use Nvl\Taxonomy\Contracts\TaxonomyMembershipPolicy;
 use Nvl\Taxonomy\Contracts\TaxonomyMembershipProvider;
 use Nvl\Taxonomy\Enums\TaxonomyMembershipMode;
+use Nvl\Taxonomy\Enums\TaxonomyMembershipOperation;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
+use Nvl\Taxonomy\Support\TaxonomyMembershipProposal;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 
 /**
@@ -28,6 +29,7 @@ final readonly class TaxonomyAssignments
         private TaxonomyBoundary $boundary,
         private TaxonomyActorPolicy $actors,
         private TaxonomyOwnerRegistry $owners,
+        private TaxonomyMembershipMatches $matches,
     ) {}
 
     /** @param list<Term|string> $terms */
@@ -50,18 +52,22 @@ final readonly class TaxonomyAssignments
         $this->mutate($owner, $taxonomy, $actor, fn (Model $canonical, Authenticatable|SystemActor $current) => $this->attachments->sync($canonical, $taxonomy, $terms, $current));
     }
 
-    /** Reconcile an explicitly authorized provider proposal under the real owner lock. */
+    /**
+     * Reconcile a provider proposal under the real owner lock, store it as the latest match and apply it when allowed.
+     *
+     * The match row, any applied memberships and the provider's record() commit or roll back together.
+     */
     public function reconcile(Model $owner, string $taxonomy, TaxonomyMembershipProvider $provider, Authenticatable|SystemActor $actor): TaxonomyMembershipMode
     {
         return $this->mutate($owner, $taxonomy, $actor, function (Model $canonical, Authenticatable|SystemActor $current) use ($taxonomy, $provider): TaxonomyMembershipMode {
             $definition = app(TaxonomyRegistry::class)->get($taxonomy);
             $this->attachments->assertOwnerCapability($canonical, $taxonomy);
-            $policy = app(TaxonomyMembershipPolicy::class);
-            $proposal = $provider->propose($canonical, $definition, $current);
-            $mode = $policy->mode($canonical, $definition, $current, $proposal);
-            if ($mode === TaxonomyMembershipMode::Apply) {
-                $this->attachments->sync($canonical, $taxonomy, $proposal->terms, $current, $proposal->source);
-            }
+            $proposed = $provider->propose($canonical, $definition, $current);
+            $proposal = $proposed->operation === TaxonomyMembershipOperation::Reconcile
+                ? $proposed
+                : new TaxonomyMembershipProposal($proposed->source, $proposed->terms);
+            $mode = $this->attachments->reconcile($canonical, $taxonomy, $proposal, $current);
+            $this->matches->store($canonical, $taxonomy, $proposal, $mode);
             $provider->record($canonical, $definition, $current, $proposal, $mode);
 
             return $mode;

@@ -68,6 +68,11 @@ return [
         'locale' => null,
     ],
     'connection' => null,
-    'tables' => ['terms' => TaxonomyTables::Terms, 'i18n' => TaxonomyTables::I18n, 'termables' => TaxonomyTables::Termables],
+    'tables' => [
+        'terms' => TaxonomyTables::Terms,
+        'i18n' => TaxonomyTables::I18n,
+        'termables' => TaxonomyTables::Termables,
+        'membership_matches' => TaxonomyTables::MembershipMatches,
+    ],
 
 ];

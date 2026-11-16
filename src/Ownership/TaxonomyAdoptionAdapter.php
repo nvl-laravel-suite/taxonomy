@@ -17,6 +17,7 @@ use Nvl\Ownership\ValueObjects\OwnershipBackfillResult;
 use Nvl\Ownership\ValueObjects\OwnershipVerification;
 use Nvl\Support\Ownership\Exceptions\OwnershipConfigurationInvalid;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
+use Nvl\Taxonomy\Models\MembershipMatch;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 
@@ -37,7 +38,7 @@ final readonly class TaxonomyAdoptionAdapter implements OwnershipAdoptionAdapter
     /** @return list<string> */
     public function resources(): array
     {
-        return ['taxonomy.terms', 'taxonomy.translations', 'taxonomy.attachments'];
+        return ['taxonomy.terms', 'taxonomy.translations', 'taxonomy.attachments', 'taxonomy.membership_matches'];
     }
 
     /** Prepare additive partitions and replace only the package's known global receipt identity. */
@@ -73,6 +74,7 @@ final readonly class TaxonomyAdoptionAdapter implements OwnershipAdoptionAdapter
         $this->unique($root, ['owner_scope_key', 'taxonomy', 'parent_key', 'slug'], 'taxonomy_owner_sibling_slug_unique');
         $this->unique(new (TermTranslation::class), ['owner_scope_key', 'term_id', 'locale'], 'taxonomy_owner_locale_unique');
         $this->unique(new (Termable::class), ['owner_scope_key', 'term_id', 'termable_type', 'termable_id'], 'taxonomy_owner_attachment_unique');
+        $this->unique(new (MembershipMatch::class), ['owner_scope_key', 'owner_type', 'owner_id', 'taxonomy', 'source'], 'taxonomy_owner_membership_match_unique');
     }
 
     /** @param list<string> $columns */
@@ -130,5 +132,7 @@ final readonly class TaxonomyAdoptionAdapter implements OwnershipAdoptionAdapter
             throw new OwnershipConfigurationInvalid('Owned Taxonomy attachments require canonical host resources.');
         }
         $this->constraints->polymorphicReference($root->getConnection(), $attachment->getTable(), 'termable_type', 'termable_id', $targets);
+        $match = new ($this->resources->get('taxonomy.membership_matches')->model);
+        $this->constraints->polymorphicReference($root->getConnection(), $match->getTable(), 'owner_type', 'owner_id', $targets);
     }
 }

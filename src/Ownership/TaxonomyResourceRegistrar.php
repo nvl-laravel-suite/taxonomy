@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use Nvl\Support\Ownership\Services\OwnershipResourceRegistry;
 use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 use Nvl\Support\Ownership\ValueObjects\OwnershipResourceDefinition;
+use Nvl\Taxonomy\Models\MembershipMatch;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Models\TermTranslation;
 use Nvl\Taxonomy\Services\TermModelRegistry;
@@ -37,5 +38,6 @@ final readonly class TaxonomyResourceRegistrar
         $resources->register(new OwnershipResourceDefinition('taxonomy.terms', 'taxonomy', $class, $class::ownershipDefinition(), immutableFields: $owned ? ['taxonomy'] : []));
         $resources->register(new OwnershipResourceDefinition('taxonomy.translations', 'taxonomy', TermTranslation::class, $owned ? OwnershipDefinition::inherited('term') : OwnershipDefinition::unscoped(), parentResource: $owned ? 'taxonomy.terms' : null));
         $resources->register(new OwnershipResourceDefinition('taxonomy.attachments', 'taxonomy', Termable::class, $owned ? OwnershipDefinition::inherited('termable') : OwnershipDefinition::unscoped(), parentResources: $owned ? $parents : [], immutableFields: $owned ? ['taxonomy'] : []));
+        $resources->register(new OwnershipResourceDefinition('taxonomy.membership_matches', 'taxonomy', MembershipMatch::class, $owned ? OwnershipDefinition::inherited('owner') : OwnershipDefinition::unscoped(), parentResources: $owned ? $parents : [], immutableFields: $owned ? ['taxonomy', 'source'] : []));
     }
 }

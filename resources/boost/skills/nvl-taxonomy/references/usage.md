@@ -114,6 +114,12 @@ ordered vocabulary assignment set atomically. Inputs are `list<Term|string>`;
 persisted IDs/models identify exact terms. Every operation keeps owner locks and
 one connection transaction, and an error cannot leave partial assignments.
 
+A bound `TaxonomyMembershipPolicy` reviews attach, detach, sync, reconcile, merge,
+delete and reorder; manual operations arrive with source `manual` and must return
+`Apply` or the write is rejected. While a policy is bound, relationship helpers
+such as `$model->tags()->attach()` throw `InvalidTermOperationException`; write
+through `TaxonomyAssignments`. Sync clears the provider source on every row.
+
 `TaxonomyReader::resolve($taxonomy,$references,$actor)` resolves ordered normalized
 references. Existing UUIDs do not create records. Missing slugs may create roots
 only for registered open vocabularies and require separate Create authorization.

@@ -127,6 +127,29 @@
                 "Shadow"
             ]
         },
+        "Nvl\\Taxonomy\\Enums\\TaxonomyMembershipOperation": {
+            "kind": "enum",
+            "file": "src/Enums/TaxonomyMembershipOperation.php",
+            "methods": [
+                "cases",
+                "from",
+                "isManual",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Attach",
+                "Delete",
+                "Detach",
+                "Merge",
+                "Reconcile",
+                "Reorder",
+                "Sync"
+            ]
+        },
         "Nvl\\Taxonomy\\Enums\\TaxonomyResponseCode": {
             "kind": "enum",
             "file": "src/Enums/TaxonomyResponseCode.php",
@@ -428,6 +451,36 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Taxonomy\\Models\\MembershipMatch": {
+            "kind": "class",
+            "file": "src/Models/MembershipMatch.php",
+            "methods": [
+                "delete",
+                "fresh",
+                "getConnectionName",
+                "getTable",
+                "newQueryForRestoration",
+                "owner",
+                "ownershipDefinition",
+                "refresh",
+                "refreshForUpdate",
+                "save"
+            ],
+            "properties": [
+                "id",
+                "matched_at",
+                "mode",
+                "owner",
+                "owner_id",
+                "owner_scope_key",
+                "owner_type",
+                "proposal",
+                "source",
+                "taxonomy",
+                "timestamps"
+            ],
+            "constants": []
+        },
         "Nvl\\Taxonomy\\Models\\Term": {
             "kind": "class",
             "file": "src/Models/Term.php",
@@ -667,6 +720,7 @@
                 "__construct"
             ],
             "properties": [
+                "operation",
                 "source",
                 "terms"
             ],

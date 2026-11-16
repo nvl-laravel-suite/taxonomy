@@ -19,6 +19,7 @@
                 "slugs.generator",
                 "slugs.locale",
                 "tables.i18n",
+                "tables.membership_matches",
                 "tables.termables",
                 "tables.terms",
                 "taxonomies.category.allowed_owners",

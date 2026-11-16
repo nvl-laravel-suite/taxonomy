@@ -16,6 +16,7 @@ Search for the relevant fully qualified service or contract and read only its ma
 - `Nvl\Taxonomy\Database\Factories\TermableFactory`
 - `Nvl\Taxonomy\Enums\DeleteTermStrategy`
 - `Nvl\Taxonomy\Enums\TaxonomyMembershipMode`
+- `Nvl\Taxonomy\Enums\TaxonomyMembershipOperation`
 - `Nvl\Taxonomy\Enums\TaxonomyResponseCode`
 - `Nvl\Taxonomy\Enums\TermChangeOperation`
 - `Nvl\Taxonomy\Events\TermChanged`
@@ -34,6 +35,7 @@ Search for the relevant fully qualified service or contract and read only its ma
 - `Nvl\Taxonomy\Exceptions\TermNotFoundException`
 - `Nvl\Taxonomy\Exceptions\UnknownTaxonomyException`
 - `Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException`
+- `Nvl\Taxonomy\Models\MembershipMatch`
 - `Nvl\Taxonomy\Models\Term`
 - `Nvl\Taxonomy\Models\TermTranslation`
 - `Nvl\Taxonomy\Models\Termable`
@@ -179,6 +181,25 @@ public static function tryFrom(string|int $value): ?static
 enum Nvl\Taxonomy\Enums\TaxonomyMembershipMode implements BackedEnum, UnitEnum: string
 public const Nvl\Taxonomy\Enums\TaxonomyMembershipMode Apply=Nvl\Taxonomy\Enums\TaxonomyMembershipMode::Apply="apply"
 public const Nvl\Taxonomy\Enums\TaxonomyMembershipMode Shadow=Nvl\Taxonomy\Enums\TaxonomyMembershipMode::Shadow="shadow"
+public readonly string $name
+public static function cases(): array
+public readonly string $value
+public static function from(string|int $value): static
+public static function tryFrom(string|int $value): ?static
+```
+
+## Nvl\Taxonomy\Enums\TaxonomyMembershipOperation
+
+```text
+enum Nvl\Taxonomy\Enums\TaxonomyMembershipOperation implements BackedEnum, UnitEnum: string
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipOperation Attach=Nvl\Taxonomy\Enums\TaxonomyMembershipOperation::Attach="attach"
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipOperation Delete=Nvl\Taxonomy\Enums\TaxonomyMembershipOperation::Delete="delete"
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipOperation Detach=Nvl\Taxonomy\Enums\TaxonomyMembershipOperation::Detach="detach"
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipOperation Merge=Nvl\Taxonomy\Enums\TaxonomyMembershipOperation::Merge="merge"
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipOperation Reconcile=Nvl\Taxonomy\Enums\TaxonomyMembershipOperation::Reconcile="reconcile"
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipOperation Reorder=Nvl\Taxonomy\Enums\TaxonomyMembershipOperation::Reorder="reorder"
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipOperation Sync=Nvl\Taxonomy\Enums\TaxonomyMembershipOperation::Sync="sync"
+public function isManual(): bool
 public readonly string $name
 public static function cases(): array
 public readonly string $value
@@ -488,6 +509,45 @@ public function translationParameters(): array
 @return array<string, (scalar | null)>
 ```
 
+## Nvl\Taxonomy\Models\MembershipMatch
+
+```text
+final class Nvl\Taxonomy\Models\MembershipMatch extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable
+public function delete(): mixed
+@return ($this is Pivot ? (bool | int | null) : (bool | null))
+resolved @return ($this is Illuminate\Database\Eloquent\Relations\Pivot ? (bool | int | null) : (bool | null))
+public function fresh(mixed $with=[]): ?static
+@param (array<array-key, mixed> | string) $with
+public function getConnectionName(): ?string
+public function getTable(): string
+public function newQueryForRestoration(mixed $ids): Illuminate\Database\Eloquent\Builder
+@param (int | string | array<array-key, (int | string)>) $ids
+@return Builder<static>
+resolved @return Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\MembershipMatch>
+public function owner(): Illuminate\Database\Eloquent\Relations\MorphTo
+@return MorphTo<Model, $this>
+resolved @return Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, $this>
+public static function ownershipDefinition(): Nvl\Support\Ownership\ValueObjects\OwnershipDefinition
+public function refresh(): static
+public function refreshForUpdate(): static
+public function save(array $options=[]): bool
+@param array<string, mixed> $options
+public mixed $timestamps=false
+@property string $id
+@property CarbonImmutable $matched_at
+resolved @property Carbon\CarbonImmutable $matched_at
+@property TaxonomyMembershipMode $mode
+resolved @property Nvl\Taxonomy\Enums\TaxonomyMembershipMode $mode
+@property-read Model $owner
+resolved @property-read Illuminate\Database\Eloquent\Model $owner
+@property string $owner_id
+@property (string | null) $owner_scope_key
+@property string $owner_type
+@property list<string> $proposal
+@property string $source
+@property string $taxonomy
+```
+
 ## Nvl\Taxonomy\Models\Term
 
 ```text
@@ -719,7 +779,7 @@ resolved @property (Illuminate\Support\Carbon | null) $updated_at
 
 ```text
 final readonly class Nvl\Taxonomy\Services\TaxonomyAssignments
-public function __construct(Nvl\Taxonomy\Services\TermAttachmentWriter $attachments, Nvl\Taxonomy\Ownership\TaxonomyBoundary $boundary, Nvl\Taxonomy\Services\TaxonomyActorPolicy $actors, Nvl\Taxonomy\Services\TaxonomyOwnerRegistry $owners): mixed
+public function __construct(Nvl\Taxonomy\Services\TermAttachmentWriter $attachments, Nvl\Taxonomy\Ownership\TaxonomyBoundary $boundary, Nvl\Taxonomy\Services\TaxonomyActorPolicy $actors, Nvl\Taxonomy\Services\TaxonomyOwnerRegistry $owners, Nvl\Taxonomy\Services\TaxonomyMembershipMatches $matches): mixed
 public function attach(Illuminate\Database\Eloquent\Model $owner, string $taxonomy, array $terms, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor): void
 @param list<(Term | string)> $terms
 resolved @param list<(Nvl\Taxonomy\Models\Term | string)> $terms
@@ -736,7 +796,7 @@ resolved @param list<(Nvl\Taxonomy\Models\Term | string)> $terms
 
 ```text
 final readonly class Nvl\Taxonomy\Services\TaxonomyMemberOrder
-public function __construct(Nvl\Taxonomy\Services\TaxonomyBatchQueryBuilder $queries, Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization $catalog, Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization $policy, Nvl\Taxonomy\Services\TaxonomyActorPolicy $actors, Nvl\Support\Ownership\Contracts\OwnershipModelPersistence $persistence): mixed
+public function __construct(Nvl\Taxonomy\Services\TaxonomyBatchQueryBuilder $queries, Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization $catalog, Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization $policy, Nvl\Taxonomy\Services\TaxonomyActorPolicy $actors, Nvl\Support\Ownership\Contracts\OwnershipModelPersistence $persistence, Nvl\Taxonomy\Services\TaxonomyMembershipGuard $guard): mixed
 public function read(string $taxonomy, string $termId, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, int $perPage=100, int $page=1): Illuminate\Contracts\Pagination\Paginator
 @return Paginator<int, Termable>
 resolved @return Illuminate\Contracts\Pagination\Paginator<int, Nvl\Taxonomy\Models\Termable>
@@ -792,7 +852,7 @@ resolved @return Illuminate\Database\Eloquent\Collection<int, Nvl\Taxonomy\Model
 
 ```text
 final readonly class Nvl\Taxonomy\Services\TaxonomyTerms
-public function __construct(Nvl\Taxonomy\Services\TermWriter $writer, Nvl\Taxonomy\Support\TaxonomyRegistry $taxonomies, Nvl\Taxonomy\Services\TermModelResolver $terms, Nvl\Taxonomy\Services\TermHierarchy $hierarchy, Nvl\Taxonomy\Services\TermMergeValidator $validator, Nvl\Taxonomy\Services\TaxonomyOwnerRegistry $owners, Nvl\Support\Events\DomainEventDispatcher $domainEvents, Nvl\Taxonomy\Services\TaxonomyActorPolicy $actors): mixed
+public function __construct(Nvl\Taxonomy\Services\TermWriter $writer, Nvl\Taxonomy\Support\TaxonomyRegistry $taxonomies, Nvl\Taxonomy\Services\TermModelResolver $terms, Nvl\Taxonomy\Services\TermHierarchy $hierarchy, Nvl\Taxonomy\Services\TermMergeValidator $validator, Nvl\Taxonomy\Services\TaxonomyOwnerRegistry $owners, Nvl\Support\Events\DomainEventDispatcher $domainEvents, Nvl\Taxonomy\Services\TaxonomyActorPolicy $actors, Nvl\Taxonomy\Services\TaxonomyMembershipGuard $guard): mixed
 public function create(array $attributes, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor): Nvl\Taxonomy\Models\Term
 @param array<string, mixed> $attributes
 public function delete(Nvl\Taxonomy\Models\Term|string $term, int $expectedRevision, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Taxonomy\Enums\DeleteTermStrategy $strategy=\Nvl\Taxonomy\Enums\DeleteTermStrategy::Restrict, ?string $reparentTo=null): bool
@@ -842,8 +902,9 @@ public readonly string $taxonomy
 
 ```text
 final readonly class Nvl\Taxonomy\Support\TaxonomyMembershipProposal
-public function __construct(string $source, array $terms): mixed
+public function __construct(string $source, array $terms, Nvl\Taxonomy\Enums\TaxonomyMembershipOperation $operation=\Nvl\Taxonomy\Enums\TaxonomyMembershipOperation::Reconcile): mixed
 @param array<array-key, mixed> $terms
+public readonly Nvl\Taxonomy\Enums\TaxonomyMembershipOperation $operation
 public readonly string $source
 public readonly array $terms
 @var list<(Term | string)>

@@ -14,6 +14,7 @@ use InvalidArgumentException;
 use LogicException;
 use Nvl\Support\Ownership\Exceptions\OwnershipViolation;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
+use Nvl\Taxonomy\Services\TaxonomyMembershipGuard;
 
 /**
  * A polymorphic many-to-many relation whose polymorphic identifier is stored
@@ -145,6 +146,7 @@ final class StringMorphToMany extends MorphToMany
         if (TaxonomyOwnership::declared()) {
             throw new OwnershipViolation('Use Taxonomy attachment workflows for owned relationship mutations.');
         }
+        TaxonomyMembershipGuard::assertRelationWritesAllowed();
 
         return parent::newPivotStatement();
     }

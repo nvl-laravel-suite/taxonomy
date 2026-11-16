@@ -5,6 +5,21 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `TaxonomyMembershipOperation` enum and the `operation` field on `TaxonomyMembershipProposal`.
+- `MembershipMatch` model and the `nvl_taxonomy_membership_matches` table (`tables.membership_matches`) storing the latest proposal per owner, taxonomy and source.
+- A membership guard that reviews attach, detach, sync, reconcile, merge, delete and reorder with the bound `TaxonomyMembershipPolicy`.
+
+### Changed
+
+- A bound `TaxonomyMembershipPolicy` now also reviews manual and structural writes (source `manual`) and must return `Apply`; while one is bound, `HasTaxonomies` relationship helpers refuse writes.
+- Sync clears the provider source on every row; attach clears it on the incoming terms.
+
+### Fixed
+
+- Membership authority is enforced on every write path; shadow proposals are stored.
+
 ## [7.1.0] - 2026-11-16
 
 ### Highlights

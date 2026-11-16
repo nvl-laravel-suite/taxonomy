@@ -17,10 +17,15 @@ final class TaxonomyTables
 
     public const string Termables = 'nvl_taxonomy_termables';
 
+    public const string MembershipMatches = 'nvl_taxonomy_membership_matches';
+
     /** Return one configured logical or historical package table. */
     public static function get(string $key): string
     {
-        return PackageStorage::resolveTable('taxonomy', $key);
+        return match ($key) {
+            self::MembershipMatches, 'membership_matches' => PackageStorage::table('taxonomy', 'membership_matches', self::MembershipMatches),
+            default => PackageStorage::resolveTable('taxonomy', $key),
+        };
     }
 
     private function __construct() {}

@@ -19,6 +19,17 @@ or provider reconciliation. Existing attachments retain their IDs, owner-side
 positions and timestamps. New positions and provenance start at null. Before
 rolling back the migration, back up and explicitly clear the new values.
 
+Run the membership-matches migration. Policies now also receive manual and
+structural operations. A bound `TaxonomyMembershipPolicy` must return `Apply` for attach, detach,
+sync, merge, delete and reorder proposals (source `manual`, with the new
+`operation` field set); any other answer rejects the whole write. Without a bound
+policy, manual writes behave as before. Sync clears the provider source on every
+row; attach clears it on the incoming terms only. While a policy is bound, the
+`HasTaxonomies` relationship helpers refuse writes; move them to
+`TaxonomyAssignments`. Owned installations adopt the new
+`taxonomy.membership_matches` resource with the other Taxonomy resources.
+`TermAttachmentWriter::sync()` no longer accepts a source argument.
+
 ## Historical upgrade notes
 
 The following sections describe pre-Light releases and their old APIs, compatibility windows and commands. They remain useful for understanding existing installations, but are not Light setup instructions. The old Tenancy bridge, DTO/Action contracts, package HTTP and type generation are retired in Light.
@@ -53,7 +64,7 @@ Replace per-owner term and translated-name loops with the container-bound `Nvl\T
 
 Requests accept at most 100 input owners and 20 declared vocabularies. A visible owner/vocabulary set above 100 terms now fails explicitly before term/translation transfer. Review callers with dense attachment sets rather than silently truncating them. The default batch policy preserves existing explicit owner/vocabulary capabilities; private deployments must bind a query-free SQL implementation of `Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization` before using the reader or audited host scopes.
 
-Host scopes retain their empty-reference semantics and accept an optional compatible policy. They require canonical builder storage, enforce live owner and tenant guards around caller OR clauses, and use registered visible term models for bounded category traversal. A removed host soft-delete scope does not opt deleted records into these package filters. UUID and slug references remain independent, including two references to one term. Read the measured budgets and row ceilings in [README.md](README.md#batched-owner-reads). No schema or stored-identity conversion accompanies these read APIs.
+Host scopes retain their empty-reference semantics and accept an optional compatible policy. They require canonical builder storage, enforce live owner and tenant guards around caller OR clauses, and use registered visible term models for bounded category traversal. A removed host soft-delete scope does not opt deleted records into these package filters. UUID and slug references remain independent, including two references to one term. Read the measured budgets and row ceilings in [README.md](README.md#assignments-and-reads). No schema or stored-identity conversion accompanies these read APIs.
 
 Review registered owners whose table basename matches the requested vocabulary's term-model table or the attachment table, including schema-qualified names and case variants. Nonempty host term filters and category filters now reject that ambiguous correlation with `Nvl\Taxonomy\Exceptions\TaxonomyBatchReadException` before SQL. Use the bounded owner reader for display payloads; empty host term filters retain their existing semantics.
 

@@ -45,6 +45,35 @@ final readonly class TermResolver
     ) {}
 
     /**
+     * Replace references to existing terms with their ids and drop repeats, without creating terms.
+     *
+     * Unknown references stay as given, so a policy sees each proposed term once.
+     *
+     * @param  list<Term|string>  $references
+     * @return list<Term|string>
+     */
+    public function existingReferences(string $taxonomy, array $references, Authenticatable|SystemActor $actor): array
+    {
+        $known = [];
+        foreach ($this->resolve($taxonomy, $references, $actor, createMissing: false) as $term) {
+            $known[$term->id] = $term->id;
+            $known[$term->slug] = $term->id;
+        }
+        $unique = [];
+        foreach ($references as $reference) {
+            if ($reference instanceof Term) {
+                $key = $known[$reference->id] ?? $reference->id;
+            } else {
+                $input = trim($reference);
+                $key = $known[$input] ?? (Str::isUuid($input) ? $input : ($known[$this->slugs->generate($input)] ?? $input));
+            }
+            $unique[$key] ??= $known[$key] ?? $reference;
+        }
+
+        return array_values($unique);
+    }
+
+    /**
      * Resolve ordered references and create missing roots when permitted.
      *
      * @param  array<array-key, Term|string>  $references  Raw references validated as a list before resolution
