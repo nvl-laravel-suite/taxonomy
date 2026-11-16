@@ -14,7 +14,7 @@
         "ext-ctype": "*",
         "ext-filter": "*",
         "laravel/framework": "^13.0",
-        "nvl/core": "^7.0",
+        "nvl/core": "^7.3.0",
         "nvl/translatable": "^7.0",
         "php": "^8.4"
     },
