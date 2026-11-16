@@ -5,6 +5,8 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [7.2.0] - 2026-11-16
+
 ### Added
 
 - `TaxonomyMembershipOperation` enum and the `operation` field on `TaxonomyMembershipProposal`.
@@ -19,6 +21,12 @@ All notable changes to `nvl/taxonomy` are documented here.
 ### Fixed
 
 - Membership authority is enforced on every write path; shadow proposals are stored.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- adoption flow, PostgreSQL proof, release health and 7.2 floors
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.1.0] - 2026-11-16
 
