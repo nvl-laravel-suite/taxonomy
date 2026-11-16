@@ -343,13 +343,17 @@ class Term extends Model implements Ownable, TranslatableModel
         ];
     }
 
-    /** Resolve framework route binding through the configured structural root.
+    /**
+     * Resolve framework route binding through the configured structural root.
+     *
+     * A specialized subclass such as Category or Tag binds through itself, keeping its class and vocabulary scope.
+     *
      * @param  mixed  $value
      * @param  string|null  $field
      */
     public function resolveRouteBinding($value, $field = null): ?Term
     {
-        $model = TermModelRegistry::newInstance();
+        $model = static::class === self::class ? TermModelRegistry::newInstance() : $this;
 
         return $model->newQuery()->where($field ?? $model->getRouteKeyName(), $value)->first();
     }

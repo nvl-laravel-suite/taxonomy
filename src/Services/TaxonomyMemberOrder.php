@@ -46,7 +46,7 @@ final readonly class TaxonomyMemberOrder
             throw new InvalidArgumentException('Invalid Taxonomy membership page.');
         }
 
-        $term = $this->admit($taxonomy, $termId, $actor, 'read-members');
+        [$term] = $this->admit($taxonomy, $termId, $actor, 'read-members');
 
         return $this->members($term)->orderByRaw('member_position IS NULL')
             ->orderBy('member_position')->orderBy('id')
@@ -72,7 +72,7 @@ final readonly class TaxonomyMemberOrder
         }
         $connection = TermModelRegistry::newInstance()->getConnection();
         $connection->transaction(function () use ($taxonomy, $termId, $validated, $actor): void {
-            $term = $this->admit($taxonomy, $termId, $actor, 'reorder-members', lock: true);
+            [$term, $actor] = $this->admit($taxonomy, $termId, $actor, 'reorder-members', lock: true);
             $persist = function () use ($term, $validated, $actor): bool {
                 $this->writePositions($term, $validated, $actor);
 
@@ -109,7 +109,12 @@ final readonly class TaxonomyMemberOrder
         }
     }
 
-    private function admit(string $taxonomy, string $termId, Authenticatable|SystemActor $actor, string $ability, bool $lock = false): Term
+    /**
+     * Authorize the canonical actor and load the term, returning both so writes review the fresh actor.
+     *
+     * @return array{0: Term, 1: Authenticatable|SystemActor}
+     */
+    private function admit(string $taxonomy, string $termId, Authenticatable|SystemActor $actor, string $ability, bool $lock = false): array
     {
         if (! Str::isUuid($termId)) {
             throw new InvalidArgumentException('Taxonomy term identities must be UUIDs.');
@@ -123,7 +128,7 @@ final readonly class TaxonomyMemberOrder
         $term = $query->firstOrFail();
         $this->actors->authorize($actor, $ability, $term, $taxonomy);
 
-        return $term;
+        return [$term, $actor];
     }
 
     /** @return Builder<Termable> */

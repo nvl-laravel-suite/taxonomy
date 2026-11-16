@@ -161,3 +161,13 @@ Replace host constructor dependencies on selected concrete Actions with their fo
 Default workflow registrations use `bindIf`, retaining host interfaces/instances registered before discovery. Register substitutes at the interface key; newly resolved host services receive late replacements. Substituting a workflow does not exercise the native authorization, storage, or lifecycle invariants, which require the owning integration coverage.
 
 Use transient `TaxonomyTreeContract` and `TermResolverContract` for the existing service APIs. Preserve Eloquent Term handles and localized children semantics; the resolver’s `createMissing` default remains true. Private registries, writers, locale and tenant dependencies do not become public extension interfaces.
+
+Unreleased: a bound `TaxonomyMembershipPolicy` now receives the freshly
+reloaded actor for delete, merge and reorder, as it already did for assignments.
+Merge proposals list an owner's resulting terms in the committed order, so a
+policy that compared positions sees the destination where it stays. Unknown
+assignment references that normalize to the same slug are proposed once. Binding
+a route parameter typed as `Category` or `Tag` now resolves only terms of that
+vocabulary and returns that class; bind through the configured root model when a
+route must accept any vocabulary. Merges no longer reject soft-deleted owners.
+None of these changes needs a migration.

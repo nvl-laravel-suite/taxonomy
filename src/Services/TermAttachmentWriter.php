@@ -197,6 +197,7 @@ final readonly class TermAttachmentWriter
             [, $ownerAlias, $ownerId] = $this->context($canonical, $taxonomy, lock: true);
             $current = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy)
                 ->orderBy('position')
+                ->orderBy('term_id')
                 ->pluck('term_id')
                 ->filter(static fn (mixed $id): bool => is_string($id))
                 ->values()
@@ -241,7 +242,7 @@ final readonly class TermAttachmentWriter
             }
         }
 
-        $current = (clone $query)->lockForUpdate()->orderBy('position')->pluck('term_id')
+        $current = (clone $query)->lockForUpdate()->orderBy('position')->orderBy('term_id')->pluck('term_id')
             ->filter(static fn (mixed $id): bool => is_string($id))->values()->all();
         $resulting = $references === [] ? [] : array_values(array_diff($current, $ids));
         $this->guard->review($canonical, $definition, $actor, new TaxonomyMembershipProposal(TaxonomyMembershipGuard::ManualSource, $resulting, TaxonomyMembershipOperation::Detach));

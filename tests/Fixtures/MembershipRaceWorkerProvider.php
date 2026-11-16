@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Tests\Fixtures;
 
+use Closure;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
@@ -21,6 +22,9 @@ final class MembershipRaceWorkerProvider extends ServiceProvider
 {
     /** @var array<string, mixed> */
     public static array $source = [];
+
+    /** Runs once inside the first policy review, while the reviewing worker holds its locks. */
+    public static ?Closure $onFirstReview = null;
 
     /** Configure the worker before the package providers boot. */
     public function register(): void
@@ -45,6 +49,12 @@ final class MembershipRaceWorkerProvider extends ServiceProvider
         {
             public function mode(Model $owner, TaxonomyDefinition $taxonomy, Authenticatable|SystemActor $actor, TaxonomyMembershipProposal $proposal): TaxonomyMembershipMode
             {
+                $hook = MembershipRaceWorkerProvider::$onFirstReview;
+                MembershipRaceWorkerProvider::$onFirstReview = null;
+                if ($hook !== null) {
+                    $hook();
+                }
+
                 return TaxonomyMembershipMode::Apply;
             }
         });

@@ -26,6 +26,7 @@ use Nvl\Support\Ownership\Services\OwnershipStorageTables;
 use Nvl\Support\Ownership\ValueObjects\OwnershipResourceDefinition;
 use Nvl\Support\Providers\LocaleServiceProvider;
 use Nvl\Support\Providers\SupportServiceProvider;
+use Nvl\Support\Testing\TestServiceHosts;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
 use Nvl\Taxonomy\Services\TermModelRegistry;
@@ -96,7 +97,7 @@ abstract class OwnershipTestCase extends TestCase
             $driver = (string) getenv('NVL_OWNERSHIP_TEST_DRIVER');
             $host = getenv('NVL_OWNERSHIP_TEST_HOST') ?: '/tmp';
             $port = getenv('NVL_OWNERSHIP_TEST_PORT') ?: '5432';
-            if (! in_array($host, ['127.0.0.1', 'localhost', '::1', '/tmp'], true) || ! ctype_digit($port)) {
+            if (! TestServiceHosts::admitsDatabaseHost($host) || ! ctype_digit($port)) {
                 throw new \RuntimeException('Native ownership fixtures require a loopback service and explicit numeric port.');
             }
             $connection = ['driver' => $driver, 'url' => null, 'host' => $host, 'port' => $port, 'database' => $database, 'username' => getenv('NVL_OWNERSHIP_TEST_USERNAME') ?: get_current_user(), 'password' => getenv('NVL_OWNERSHIP_TEST_PASSWORD') ?: '', 'prefix' => '', 'timezone' => 'UTC'];
@@ -146,6 +147,7 @@ abstract class OwnershipTestCase extends TestCase
                 $table->uuid('id')->primary();
                 $table->unsignedBigInteger('company_id');
                 $table->string('name');
+                $table->softDeletes();
                 $table->foreign('company_id')->references('id')->on('taxonomy_owned_companies');
             });
         }

@@ -6,13 +6,14 @@ namespace Nvl\Taxonomy\Tests\Fixtures;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Nvl\Support\Config\PackageStorage;
 use Nvl\Support\Ownership\Contracts\Ownable;
 use Nvl\Support\Ownership\Traits\HasOwnership;
 use Nvl\Support\Ownership\ValueObjects\OwnershipDefinition;
 use Nvl\Taxonomy\Concerns\HasTaxonomies;
 
-/** Native host target independent from NVL tenancy.
+/** Native soft-deletable host target independent from NVL tenancy.
  * @property string $id
  * @property int $company_id
  * @property string $name
@@ -20,7 +21,7 @@ use Nvl\Taxonomy\Concerns\HasTaxonomies;
  */
 class OwnershipTaxonomyOwner extends Model implements Ownable
 {
-    use HasOwnership, HasUuids;
+    use HasOwnership, HasUuids, SoftDeletes;
     use HasTaxonomies;
 
     protected $table = 'taxonomy_owned_subjects';

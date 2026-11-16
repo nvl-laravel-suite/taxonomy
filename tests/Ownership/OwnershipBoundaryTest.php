@@ -217,3 +217,32 @@ it('rejects raw host identities belonging to another native owner', function ():
         expect(fn () => DB::transaction(fn () => DB::table((new Termable)->getTable())->insert($row)))->toThrow(QueryException::class);
     });
 });
+
+it('merges archived owners without weakening ownership', function (): void {
+    $runner = app(OwnershipRunner::class);
+    $actor = OwnershipActor::firstOrFail();
+    [$foreignTerm, $foreignHost] = $runner->run(OwnershipCompany::findOrFail(8), $actor, function (): array {
+        $term = Scenario::term('foreign-archived');
+        $host = Scenario::host();
+        app(TaxonomyAssignments::class)->sync($host, 'category', [$term], SystemActor::Background);
+        $host->delete();
+
+        return [$term, $host];
+    });
+    $runner->run(OwnershipCompany::findOrFail(7), $actor, function (): void {
+        $source = Scenario::term('archived-source');
+        $destination = Scenario::term('archived-destination');
+        $archived = Scenario::host();
+        app(TaxonomyAssignments::class)->sync($archived, 'category', [$source], SystemActor::Background);
+        $archived->delete();
+
+        app(TaxonomyTerms::class)->merge($source, $destination, SystemActor::Background, $source->revision, $destination->revision);
+
+        expect($archived->fresh()?->trashed())->toBeTrue()
+            ->and(Termable::query()->where('termable_id', $archived->id)->pluck('term_id')->all())->toBe([$destination->id])
+            ->and(TermModelRegistry::query()->whereKey($source->id)->exists())->toBeFalse();
+    });
+    $runner->run(OwnershipCompany::findOrFail(8), $actor, function () use ($foreignTerm, $foreignHost): void {
+        expect(Termable::query()->where('termable_id', $foreignHost->id)->pluck('term_id')->all())->toBe([$foreignTerm->id]);
+    });
+});

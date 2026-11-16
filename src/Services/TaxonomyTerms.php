@@ -130,7 +130,7 @@ final readonly class TaxonomyTerms
         ): bool {
             $term = $this->terms->lock($term);
             $destination = $reparentTo === null ? null : $this->terms->lock($reparentTo);
-            $this->actors->authorize($actor, 'delete', $term, $term->taxonomy, $destination);
+            $actor = $this->actors->authorize($actor, 'delete', $term, $term->taxonomy, $destination);
 
             if ($term->revision !== $expectedRevision) {
                 throw StaleTermVersionException::forTerm($term->id);
@@ -299,7 +299,7 @@ final readonly class TaxonomyTerms
             );
             $source = $context->source;
             $destination = $context->destination;
-            $this->actors->authorize($actor, 'merge', $source, $source->taxonomy, $destination);
+            $actor = $this->actors->authorize($actor, 'merge', $source, $source->taxonomy, $destination);
             $ownerScope = TaxonomyOwnership::declared() ? $source->getRawOriginal('owner_scope_key') : null;
             if (TaxonomyOwnership::declared() && ! is_string($ownerScope)) {
                 throw TaxonomyOwnership::violation('A merged Taxonomy term lacks owner scope.');
@@ -313,10 +313,7 @@ final readonly class TaxonomyTerms
                     ->when(is_string($ownerScope), static fn ($query) => $query->where('owner_scope_key', $ownerScope)),
                 $actor,
                 TaxonomyMembershipOperation::Merge,
-                static fn (array $current): array => array_values(array_unique(array_map(
-                    static fn (string $id): string => $id === $source->id ? $destination->id : $id,
-                    $current,
-                ))),
+                static fn (array $current): array => self::mergedMembership($current, $source->id, $destination->id),
             );
             $destinationAttachments = $database
                 ->table($table)
@@ -350,6 +347,7 @@ final readonly class TaxonomyTerms
                         $key = $this->attachmentKey($attachment);
                         $attachmentId = $this->attachmentId($attachment);
 
+                        // Same rule as mergedMembership(): drop the source beside an attached destination, else replace it in place.
                         if (isset($destinationAttachmentKeys[$key])) {
                             $duplicates[] = $attachmentId;
                         } else {
@@ -469,6 +467,24 @@ final readonly class TaxonomyTerms
         );
     }
 
+    /**
+     * Return one owner's ordered term ids after a merge, exactly as the attachment rows are written.
+     *
+     * An owner already attached to the destination loses the source row and keeps the destination where it is;
+     * otherwise the source row becomes the destination in place.
+     *
+     * @param  list<string>  $current
+     * @return list<string>
+     */
+    private static function mergedMembership(array $current, string $source, string $destination): array
+    {
+        if (in_array($destination, $current, true)) {
+            return array_values(array_filter($current, static fn (string $id): bool => $id !== $source));
+        }
+
+        return array_map(static fn (string $id): string => $id === $source ? $destination : $id, $current);
+    }
+
     private function attachmentKey(object $attachment): string
     {
         $attributes = get_object_vars($attachment);
@@ -507,7 +523,7 @@ final readonly class TaxonomyTerms
         }
         $owner = (new $modelClass)->newQueryWithoutScopes()->whereKey($identifier)->first();
         if (! $owner instanceof Model
-            || $this->owners->resolve($owner, lock: true)->getRawOriginal('owner_scope_key') !== $ownerScope) {
+            || $this->owners->resolveForDeletion($owner)->getRawOriginal('owner_scope_key') !== $ownerScope) {
             throw TaxonomyOwnership::violation('A Taxonomy attachment belongs to another owner.');
         }
     }

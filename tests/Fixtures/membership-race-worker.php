@@ -75,6 +75,23 @@ try {
     $directory = $options['directory'];
     $post = Post::query()->findOrFail($options['owner']);
     $assignments = $app->make(TaxonomyAssignments::class);
+    /**
+     * Start a race role. The holder starts on go and parks inside its policy review with its locks held;
+     * the waiter starts on go-waiter, after the parent has seen the holder parked.
+     */
+    $raceStart = static function (mixed $holds) use ($signal, $await, $directory, $identity, $options): void {
+        if (! is_bool($holds)) {
+            throw new RuntimeException('Race workers must be told whether they hold the lock boundary.');
+        }
+        if ($holds) {
+            MembershipRaceWorkerProvider::$onFirstReview = static function () use ($signal, $await, $directory, $identity): void {
+                $signal($directory.'/holding', $identity);
+                $await($directory.'/release');
+            };
+        }
+        $signal($directory.'/ready-'.$options['role'], $identity);
+        $await($directory.($holds ? '/go' : '/go-waiter'));
+    };
 
     if ($options['role'] === 'reconcile') {
         $provider = new class($signal, $await, $directory, $identity) implements TaxonomyMembershipProvider
@@ -101,16 +118,14 @@ try {
         $assignments->sync($post, 'tag', ['manual'], SystemActor::Background);
         $outcome = ['status' => 'synced'];
     } elseif ($options['role'] === 'race-sync') {
-        $signal($directory.'/ready-race-sync', $identity);
-        $await($directory.'/go');
+        $raceStart($options['holds'] ?? null);
         $assignments->sync($post, 'tag', ['race-term'], SystemActor::Background);
         $outcome = ['status' => 'synced'];
     } else {
         if (! is_string($options['term'] ?? null) || ! is_int($options['revision'] ?? null)) {
             throw new RuntimeException('The delete race worker requires the term identity and revision.');
         }
-        $signal($directory.'/ready-race-delete', $identity);
-        $await($directory.'/go');
+        $raceStart($options['holds'] ?? null);
         $deleted = $app->make(TaxonomyTerms::class)->delete($options['term'], $options['revision'], SystemActor::Background, DeleteTermStrategy::Detach);
         $outcome = ['status' => $deleted ? 'deleted' : 'kept'];
     }

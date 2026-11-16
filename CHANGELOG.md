@@ -5,6 +5,20 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Term delete and merge, and member reorder, pass the freshly resolved canonical actor to the membership policy instead of the caller's instance.
+- The merge proposal shown to the membership policy now matches the committed order: an owner already attached to the destination keeps the destination in place and drops the source; otherwise the source is replaced in place.
+- Attach, detach, delete, merge and reorder proposals list each owner's current terms in the owner batch read order (position, then term id), so tied positions no longer make the proposal order nondeterministic.
+- Manual assignment proposals deduplicate unknown references by the slug they will become, so the policy sees each new term once.
+- Route binding through `Category`, `Tag` or another specialized subclass returns that class and stays inside its vocabulary.
+- Merges keep attachments of soft-deleted owners instead of rejecting them, while still checking the owner's scope.
+
+### Changed
+
+- The README documents how to map localized category fields beyond name and description to a host-owned companion table.
+- PostgreSQL tests now prove the sibling-slug unique index path and real lock contention in the delete and sync race.
+
 ## [7.2.0] - 2026-11-16
 
 ### Added

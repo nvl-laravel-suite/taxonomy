@@ -47,7 +47,8 @@ final readonly class TermResolver
     /**
      * Replace references to existing terms with their ids and drop repeats, without creating terms.
      *
-     * Unknown references stay as given, so a policy sees each proposed term once.
+     * Unknown references stay as given and are deduplicated by the slug they would become,
+     * so a policy sees each proposed term once.
      *
      * @param  list<Term|string>  $references
      * @return list<Term|string>
@@ -65,7 +66,8 @@ final readonly class TermResolver
                 $key = $known[$reference->id] ?? $reference->id;
             } else {
                 $input = trim($reference);
-                $key = $known[$input] ?? (Str::isUuid($input) ? $input : ($known[$this->slugs->generate($input)] ?? $input));
+                $slug = Str::isUuid($input) ? $input : $this->slugs->generate($input);
+                $key = $known[$input] ?? $known[$slug] ?? $slug;
             }
             $unique[$key] ??= $known[$key] ?? $reference;
         }

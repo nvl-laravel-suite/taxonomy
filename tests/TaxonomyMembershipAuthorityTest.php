@@ -6,9 +6,11 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Nvl\Support\Enums\SystemActor;
 use Nvl\Taxonomy\Contracts\TaxonomyMembershipPolicy;
 use Nvl\Taxonomy\Contracts\TaxonomyMembershipProvider;
@@ -23,6 +25,7 @@ use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Services\TaxonomyAssignments;
 use Nvl\Taxonomy\Services\TaxonomyMemberOrder;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
+use Nvl\Taxonomy\Services\TaxonomyReader;
 use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TermAttachmentWriter;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
@@ -44,6 +47,9 @@ function bindMembershipAuthorityPolicy(TaxonomyMembershipMode $mode): object
         /** @var list<string> Owner keys reviewed, in order. */
         public array $owners = [];
 
+        /** @var list<Authenticatable|SystemActor> Actors reviewed, in order. */
+        public array $actors = [];
+
         /** Owner key whose review is denied with Shadow, whatever the mode. */
         public ?string $deny = null;
 
@@ -53,6 +59,7 @@ function bindMembershipAuthorityPolicy(TaxonomyMembershipMode $mode): object
         {
             $this->reviewed[] = $proposal;
             $this->owners[] = (string) $owner->getKey();
+            $this->actors[] = $actor;
 
             return (string) $owner->getKey() === $this->deny ? TaxonomyMembershipMode::Shadow : $this->mode;
         }
@@ -395,3 +402,94 @@ it('shows the policy each attached term once', function (): void {
     expect(membershipAuthorityTermIds($policy->reviewed[0]))->toBe([$alpha->id, 'fresh'])
         ->and($post->fresh()->tags->pluck('slug')->all())->toBe(['alpha', 'fresh']);
 });
+
+it('uses canonical actors for delete merge and reorder', function (Closure $operation): void {
+    $actor = new class extends User
+    {
+        protected $table = 'taxonomy_posts';
+    };
+    $actor->forceFill(['title' => 'Persisted'])->save();
+    foreach (['delete', 'merge', 'read', 'reorder-members'] as $ability) {
+        Gate::define('taxonomy.'.$ability, static fn (mixed $current): bool => $current === SystemActor::Background || $current instanceof User);
+    }
+    $post = Post::create(['title' => 'Owner']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['alpha', 'beta'], SystemActor::Background);
+    $alpha = Tag::query()->where('slug', 'alpha')->sole();
+    $beta = Tag::query()->where('slug', 'beta')->sole();
+    $policy = bindMembershipAuthorityPolicy(TaxonomyMembershipMode::Apply);
+    $actor->title = 'Forged';
+
+    $operation($actor, $alpha, $beta);
+
+    expect($policy->actors)->toHaveCount(1)
+        ->and($policy->actors[0])->toBeInstanceOf($actor::class)
+        ->and($policy->actors[0])->not->toBe($actor)
+        ->and($policy->actors[0]->title)->toBe('Persisted');
+})->with([
+    'delete' => [static fn (User $actor, Tag $alpha) => app(TaxonomyTerms::class)->delete($alpha, $alpha->revision, $actor, DeleteTermStrategy::Detach)],
+    'merge' => [static fn (User $actor, Tag $alpha, Tag $beta) => app(TaxonomyTerms::class)->merge($alpha, $beta, $actor, $alpha->revision, $beta->revision)],
+    'reorder' => [static fn (User $actor, Tag $alpha) => app(TaxonomyMemberOrder::class)->reorder('tag', $alpha->id, [
+        Termable::query()->where('term_id', $alpha->id)->sole()->id => 0,
+    ], $actor)],
+]);
+
+it('merge proposal equals committed membership order', function (): void {
+    $actor = SystemActor::Background;
+    $both = Post::create(['title' => 'Both']);
+    $sourceOnly = Post::create(['title' => 'Source only']);
+    app(TaxonomyAssignments::class)->sync($both, 'tag', ['source', 'middle', 'destination'], $actor);
+    app(TaxonomyAssignments::class)->sync($sourceOnly, 'tag', ['source', 'middle'], $actor);
+    $source = Tag::query()->where('slug', 'source')->sole();
+    $destination = Tag::query()->where('slug', 'destination')->sole();
+    $middle = Tag::query()->where('slug', 'middle')->sole();
+    $policy = bindMembershipAuthorityPolicy(TaxonomyMembershipMode::Apply);
+
+    app(TaxonomyTerms::class)->merge($source, $destination, $actor, $source->revision, $destination->revision);
+
+    $committed = static fn (Post $post): array => Termable::query()->where('termable_id', (string) $post->getKey())
+        ->orderBy('position')->pluck('term_id')->all();
+    $proposals = array_combine($policy->owners, array_map(membershipAuthorityTermIds(...), $policy->reviewed));
+    expect($proposals[(string) $both->getKey()])->toBe([$middle->id, $destination->id])
+        ->and($committed($both))->toBe($proposals[(string) $both->getKey()])
+        ->and($proposals[(string) $sourceOnly->getKey()])->toBe([$destination->id, $middle->id])
+        ->and($committed($sourceOnly))->toBe($proposals[(string) $sourceOnly->getKey()]);
+});
+
+it('deduplicates unknown normalized aliases before review', function (): void {
+    $post = Post::create(['title' => 'Aliases']);
+    $policy = bindMembershipAuthorityPolicy(TaxonomyMembershipMode::Apply);
+
+    app(TaxonomyAssignments::class)->attach($post, 'tag', ['Fresh Idea', 'fresh idea', ' fresh-idea '], SystemActor::Background);
+
+    expect(membershipAuthorityTermIds($policy->reviewed[0]))->toBe(['Fresh Idea'])
+        ->and($post->fresh()->tags->pluck('slug')->all())->toBe(['fresh-idea']);
+});
+
+it('proposes tied positions in the owner batch read order', function (Closure $operation, array $resultingSlugs): void {
+    $actor = SystemActor::Background;
+    $terms = app(TaxonomyTerms::class);
+    // Created in reverse, so term id order differs from the order the attachments are inserted.
+    foreach (['zulu', 'yankee', 'xray'] as $slug) {
+        $terms->create(['taxonomy' => 'tag', 'slug' => $slug, 'translations' => ['en' => ['name' => $slug]]], $actor);
+    }
+    $post = Post::create(['title' => 'Tied']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['xray', 'yankee', 'zulu'], $actor);
+    Termable::query()->where('termable_id', (string) $post->getKey())->update(['position' => 0]);
+    $policy = bindMembershipAuthorityPolicy(TaxonomyMembershipMode::Apply);
+
+    $operation($post);
+
+    $batch = app(TaxonomyReader::class)->forOwners([$post], ['tag'], $actor, 'en');
+    $read = array_map(static fn (Term $term): string => $term->id, $batch['owners']->{$post->getMorphClass()}->{(string) $post->getKey()}->tag);
+    $slugOf = static fn (string $reference): string => Str::isUuid($reference) ? Tag::query()->findOrFail($reference)->slug : $reference;
+    // A proposed new term is still its raw reference; the committed read lists its created id.
+    expect(array_map($slugOf, membershipAuthorityTermIds($policy->reviewed[0])))->toBe($resultingSlugs)
+        ->and(array_map($slugOf, $read))->toBe($resultingSlugs);
+})->with([
+    'delete' => [static function (): void {
+        $removed = Tag::query()->where('slug', 'yankee')->sole();
+        app(TaxonomyTerms::class)->delete($removed, $removed->revision, SystemActor::Background, DeleteTermStrategy::Detach);
+    }, ['zulu', 'xray']],
+    'detach' => [static fn (Post $post) => app(TaxonomyAssignments::class)->detach($post, 'tag', ['yankee'], SystemActor::Background), ['zulu', 'xray']],
+    'attach' => [static fn (Post $post) => app(TaxonomyAssignments::class)->attach($post, 'tag', ['whiskey'], SystemActor::Background), ['zulu', 'yankee', 'xray', 'whiskey']],
+]);

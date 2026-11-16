@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +42,7 @@ use Nvl\Taxonomy\Services\TaxonomyReader;
 use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TaxonomyTree;
 use Nvl\Taxonomy\Services\TermHierarchy;
+use Nvl\Taxonomy\Services\TermModelRegistry;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
 use Nvl\Taxonomy\Support\TaxonomyMembershipProposal;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
@@ -1155,15 +1157,40 @@ it('limits locked descendant reads to the affected taxonomy subtree', function (
 it('isolates sibling slug unique constraint violations inside outer transactions', function (): void {
     $terms = app(TaxonomyTerms::class);
     $actor = SystemActor::Background;
-    $terms->create(['taxonomy' => 'tag', 'slug' => 'taken-slug', 'translations' => ['en' => ['name' => 'Taken']]], $actor);
+    $connection = TermModelRegistry::newInstance()->getConnection();
+    $armed = false;
+    $injected = false;
+    $contestedInserts = 0;
+    $connection->beforeExecuting(function (string $sql, array $bindings) use (&$contestedInserts): void {
+        if (str_starts_with(strtolower(ltrim($sql)), 'insert into') && in_array('contested-slug', $bindings, true)) {
+            $contestedInserts++;
+        }
+    });
+    // Insert the competing sibling after the writer's duplicate check, so only the unique index can refuse the write.
+    $connection->listen(function (QueryExecuted $query) use ($connection, &$armed, &$injected): void {
+        if (! $armed || ! str_contains($query->sql, 'exists') || ! in_array('contested-slug', $query->bindings, true)) {
+            return;
+        }
+        $armed = false;
+        $connection->table(TaxonomyTables::get(TaxonomyTables::Terms))->insert([
+            'id' => (string) Str::uuid7(), 'taxonomy' => 'tag', 'slug' => 'contested-slug', 'parent_key' => '__root__',
+            'position' => 0, 'revision' => 1, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $injected = true;
+    });
 
-    DB::transaction(function () use ($terms, $actor): void {
-        expect(fn () => $terms->create(['taxonomy' => 'tag', 'slug' => 'taken-slug', 'translations' => ['en' => ['name' => 'Duplicate']]], $actor))
+    $connection->transaction(function () use ($terms, $actor, &$armed): void {
+        $armed = true;
+        expect(fn () => $terms->create(['taxonomy' => 'tag', 'slug' => 'contested-slug', 'translations' => ['en' => ['name' => 'Duplicate']]], $actor))
             ->toThrow(DuplicateSiblingSlugException::class);
 
         $survivor = $terms->create(['taxonomy' => 'tag', 'slug' => 'survivor-slug', 'translations' => ['en' => ['name' => 'Survivor']]], $actor);
         expect($survivor->exists)->toBeTrue();
     });
 
-    expect(Tag::query()->where('slug', 'survivor-slug')->exists())->toBeTrue();
+    // The competing row joined create()'s own transaction, so it rolled back with the refused write.
+    expect($injected)->toBeTrue()
+        ->and($contestedInserts)->toBe(2)
+        ->and(Tag::query()->where('slug', 'contested-slug')->exists())->toBeFalse()
+        ->and(Tag::query()->where('slug', 'survivor-slug')->exists())->toBeTrue();
 });

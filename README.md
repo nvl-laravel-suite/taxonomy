@@ -70,6 +70,32 @@ under the same owner lock and transaction, so use the canonical connection for
 durable observations. Reserve remote effects for post-commit processing.
 `TermMerged` gives listeners both term IDs after the source transaction commits.
 
+## Adoption guide: localized fields beyond name and description
+
+Terms translate only `name` and `description`. When existing host categories
+carry more localized fields, such as a short description and a permalink unique
+per locale, keep those fields in a host-owned companion table. The package needs
+no change for this mapping:
+
+| Existing localized field | Taxonomy storage |
+| --- | --- |
+| name | `translations.<locale>.name` |
+| description | `translations.<locale>.description` |
+| short description, permalink and other extra fields | companion table row keyed by term UUID and locale |
+| locale-independent slug | canonical term `slug` |
+
+- Key companion rows by `term_id` (the term UUID) and `locale`, unique together,
+  with a foreign key to the terms table that cascades on delete. Add the host's
+  permalink uniqueness, such as (`locale`, `permalink`), there; include the owner
+  scope column when permalinks are unique per owner.
+- Write the term and its companion rows in one transaction on the Taxonomy
+  connection: call `TaxonomyTerms::create` or `update` inside the host's
+  `transaction()` and write the companion rows before it commits. A failed
+  companion write then rolls back the term as well.
+- Merge deletes the source term, and the foreign key removes its companion rows.
+  Copy any source locales the destination lacks inside the same wrapping
+  transaction before calling `merge`.
+
 ## Ownership and maintenance
 
 - Ownable resources are declared by the configured term root and `TaxonomyResourceRegistrar`. Unscoped hosts remain unscoped. Native adoption uses explicit reviewed mappings; it is not automatic old NVL schema conversion.

@@ -71,6 +71,7 @@ final readonly class TaxonomyMembershipGuard
      * Lock and review every owner a structural write changes, in chunks ordered by morph type then id.
      *
      * Trashed owners are reviewed; owners whose rows are gone are skipped, as nothing is left to authorize.
+     * Each owner's current terms are read in the owner batch read order: position, then term id.
      * One denial throws and rolls back the caller's transaction, rejecting the whole operation.
      *
      * @param  Builder  $attachments  Attachment rows the structural write changes.
@@ -99,7 +100,7 @@ final readonly class TaxonomyMembershipGuard
                     $canonical = $this->owners->resolveForDeletion($owner);
                     $current = $canonical->getConnection()->table((new Termable)->getTable())
                         ->where('termable_type', $type)->where('termable_id', (string) $identifier)->where('taxonomy', $taxonomy)
-                        ->orderBy('position')->pluck('term_id')
+                        ->orderBy('position')->orderBy('term_id')->pluck('term_id')
                         ->filter(static fn (mixed $id): bool => is_string($id))->all();
                     $this->reviewManual($canonical, $taxonomy, $actor, $resulting(array_values($current)), $operation);
                 }
