@@ -5,6 +5,8 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [7.3.0] - 2026-11-17
+
 ### Fixed
 
 - Term delete and merge, and member reorder, pass the freshly resolved canonical actor to the membership policy instead of the caller's instance.
@@ -18,6 +20,12 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 - The README documents how to map localized category fields beyond name and description to a host-owned companion table.
 - PostgreSQL tests now prove the sibling-slug unique index path and real lock contention in the delete and sync race.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- implement the Final spec audit for one release
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.2.0] - 2026-11-16
 
