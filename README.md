@@ -30,10 +30,31 @@ Create policies receive the vocabulary name. Update, delete, and move policies r
 - Use `TaxonomyReader::resolve` for ordered references and creation of missing roots only in registered open vocabularies. UUID inputs identify existing terms; ambiguous slugs are rejected.
 - Resolution accepts a list bounded by `limits.bulk_terms` distinct normalized references (500 by default). Creating missing roots requires `taxonomy.create`, including when resolving references during assignment; assigning existing terms needs no create permission.
 - Use `TaxonomyReader::forOwners` with at most 100 owners and 20 vocabularies. It returns `['owners' => stdClass, 'order' => list]`; each requested owner and vocabulary has an explicit list of preloaded native `Term` models, including empty lists. The attached order is available as `pivot_position`.
+- The owner batch projects the term's declared `metadata_rules` paths without extra queries. A full array field declaration includes its children. Declare narrower paths for data with private siblings.
 - For tree reads use `TaxonomyReader::tree` with a bound up to 500 terms. The registered vocabulary and native model scopes apply before loading.
 - Preserve the correlated owner filter policy (`TaxonomyBatchAuthorization`) and native ownership predicates. Never read a private term or another owner's attachment through a loose OR or unscoped relation.
 
 Host filters also require an explicit actor: `withAnyTerms($taxonomy, $values, $actor, $policy = null)`, `withAllTerms(...)`, `withoutTerms(...)`, and `inCategory($category, $actor, $includeDescendants = true, $policy = null)`. They enforce `taxonomy.read` and pass the canonical actor into SQL policies. Assignment owners must use the same connection as Taxonomy so the owner lock and attachment changes share one transaction.
+
+### Term membership order and reconciliation
+
+Use [TaxonomyMemberOrder](src/Services/TaxonomyMemberOrder.php) to page through a term's attachments
+or reorder them by an attachment UUID to position map. Null clears a position.
+Unpositioned attachments follow positioned attachments, with ties ordered by
+UUID. This order is independent of `pivot_position`. Define
+`taxonomy.read-members` and `taxonomy.reorder-members` only for actors
+authorized for all members of the canonical admitted term. The service also
+uses `taxonomy.read` and vocabulary and term visibility checks.
+
+Bind [TaxonomyMembershipPolicy](src/Contracts/TaxonomyMembershipPolicy.php) and
+pass a [TaxonomyMembershipProvider](src/Contracts/TaxonomyMembershipProvider.php)
+to `TaxonomyAssignments::reconcile` for host-owned rule evaluation. An
+`Apply` proposal replaces the owner vocabulary membership and stamps each
+attachment with its source. A `Shadow` proposal records the observation without
+creating terms or changing assignments. The provider's `record` method runs
+under the same owner lock and transaction, so use the canonical connection for
+durable observations. Reserve remote effects for post-commit processing.
+`TermMerged` gives listeners both term IDs after the source transaction commits.
 
 ## Ownership and maintenance
 

@@ -93,6 +93,24 @@ function taxonomyBatchCapture(Closure $read): array
     }
 }
 
+it('projects only declared metadata in owner batches without extra queries', function (): void {
+    app(TaxonomyRegistry::class)->register(new TaxonomyDefinition(
+        'display-tags', Term::class, false, false, false, 1, 'position', [],
+        ['color' => ['string'], 'filterable' => ['boolean'], 'display.badge' => ['string']],
+    ));
+    $post = Post::create(['title' => 'Read metadata']);
+    $term = app(TaxonomyTerms::class)->create([
+        'taxonomy' => 'display-tags', 'slug' => 'visible', 'translations' => ['en' => ['name' => 'Visible']],
+        'meta' => ['color' => '#FF2200', 'filterable' => false, 'display' => ['badge' => 'new', 'private' => 'secret']],
+    ], SystemActor::Background);
+    app(TaxonomyAssignments::class)->attach($post, 'display-tags', [$term], SystemActor::Background);
+
+    [$result, $queries] = taxonomyBatchCapture(fn (): array => app(TaxonomyReader::class)->forOwners([$post], ['display-tags'], SystemActor::Background));
+    $attached = $result['owners']->{$post->getMorphClass()}->{(string) $post->getKey()}->{'display-tags'}[0];
+    expect($attached->meta)->toBe(['color' => '#FF2200', 'filterable' => false, 'display' => ['badge' => 'new']])
+        ->and(taxonomyBatchOwnedQueries($queries))->toHaveCount(3);
+});
+
 /**
  * Detect denied package SQL using actual model table names across identifier grammars.
  *

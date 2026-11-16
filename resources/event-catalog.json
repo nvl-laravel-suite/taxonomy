@@ -80,6 +80,68 @@
                 "Term/taxonomy identity, enum fact and revision only; no translated term copy or model."
             ],
             "no_op_semantics": "Existing revision/tree mutation guards govern publication. Multi-term operations can emit one fact for each qualifying term; this is not one event per action."
+        },
+        {
+            "class": "Nvl\\Taxonomy\\Events\\TermMerged",
+            "source": "packages/nvl/taxonomy/src/Events/TermMerged.php",
+            "constructor_fields": [
+                {
+                    "name": "sourceId",
+                    "type": "string",
+                    "visibility": "public",
+                    "required": true
+                },
+                {
+                    "name": "destinationId",
+                    "type": "string",
+                    "visibility": "public",
+                    "required": true
+                },
+                {
+                    "name": "taxonomy",
+                    "type": "string",
+                    "visibility": "public",
+                    "required": true
+                },
+                {
+                    "name": "destinationRevision",
+                    "type": "int",
+                    "visibility": "public",
+                    "required": true
+                }
+            ],
+            "public_fields": [
+                {
+                    "name": "sourceId",
+                    "type": "string"
+                },
+                {
+                    "name": "destinationId",
+                    "type": "string"
+                },
+                {
+                    "name": "taxonomy",
+                    "type": "string"
+                },
+                {
+                    "name": "destinationRevision",
+                    "type": "int"
+                }
+            ],
+            "kind": "value_object",
+            "schema_version": 1,
+            "trigger": "A source term is merged into its destination.",
+            "aliases": [],
+            "producers": [
+                {
+                    "path": "packages/nvl/taxonomy/src/Services/TaxonomyTerms.php",
+                    "trigger": "A source term is merged into its destination."
+                }
+            ],
+            "security_notes": [
+                "Canonical term IDs, vocabulary and resulting destination revision only."
+            ],
+            "no_op_semantics": "A rejected or rolled-back merge produces no event."
         }
     ],
     "value_types": [

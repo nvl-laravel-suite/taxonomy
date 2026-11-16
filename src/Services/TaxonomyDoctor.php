@@ -56,7 +56,7 @@ final readonly class TaxonomyDoctor
             ],
             TaxonomyConfiguration::table(TaxonomyTables::Termables) => [
                 'id', 'term_id', 'termable_type', 'termable_id', 'taxonomy', 'position',
-                'created_at', 'updated_at', ...$ownerScopeColumns,
+                'member_position', 'membership_source', 'created_at', 'updated_at', ...$ownerScopeColumns,
             ],
         ];
         $checks = [];

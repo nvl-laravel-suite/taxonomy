@@ -17,6 +17,7 @@ use Nvl\Support\Events\DomainEventDispatcher;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
+use Nvl\Taxonomy\Events\TermMerged;
 use Nvl\Taxonomy\Exceptions\CircularHierarchyException;
 use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
 use Nvl\Taxonomy\Exceptions\InvalidParentException;
@@ -373,6 +374,7 @@ final readonly class TaxonomyTerms
                 $source->revision,
             ), $source->getConnection());
             $source->delete();
+            $this->domainEvents->dispatch(new TermMerged($source->id, $destination->id, $destination->taxonomy, $destination->revision), $database);
 
             return $destination->refresh()->load('translations');
         }, TaxonomyConfiguration::transactionAttempts());

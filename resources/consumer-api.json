@@ -39,6 +39,25 @@
             "properties": [],
             "constants": []
         },
+        "Nvl\\Taxonomy\\Contracts\\TaxonomyMembershipPolicy": {
+            "kind": "interface",
+            "file": "src/Contracts/TaxonomyMembershipPolicy.php",
+            "methods": [
+                "mode"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Contracts\\TaxonomyMembershipProvider": {
+            "kind": "interface",
+            "file": "src/Contracts/TaxonomyMembershipProvider.php",
+            "methods": [
+                "propose",
+                "record"
+            ],
+            "properties": [],
+            "constants": []
+        },
         "Nvl\\Taxonomy\\Database\\Factories\\TermFactory": {
             "kind": "class",
             "file": "database/factories/TermFactory.php",
@@ -89,6 +108,23 @@
                 "Detach",
                 "Reparent",
                 "Restrict"
+            ]
+        },
+        "Nvl\\Taxonomy\\Enums\\TaxonomyMembershipMode": {
+            "kind": "enum",
+            "file": "src/Enums/TaxonomyMembershipMode.php",
+            "methods": [
+                "cases",
+                "from",
+                "tryFrom"
+            ],
+            "properties": [
+                "name",
+                "value"
+            ],
+            "constants": [
+                "Apply",
+                "Shadow"
             ]
         },
         "Nvl\\Taxonomy\\Enums\\TaxonomyResponseCode": {
@@ -155,6 +191,22 @@
                 "schemaVersion",
                 "taxonomy",
                 "termId"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Events\\TermMerged": {
+            "kind": "class",
+            "file": "src/Events/TermMerged.php",
+            "methods": [
+                "__construct",
+                "ownershipJobEnvelope",
+                "schemaVersion"
+            ],
+            "properties": [
+                "destinationId",
+                "destinationRevision",
+                "sourceId",
+                "taxonomy"
             ],
             "constants": []
         },
@@ -414,6 +466,7 @@
                 "scopeWhereTranslationNotNull",
                 "scopeWhereTranslationNull",
                 "scopeWithAllTranslations",
+                "scopeWithJoinedTranslation",
                 "scopeWithResolvedTranslations",
                 "setLocale",
                 "taxonomyName",
@@ -426,6 +479,7 @@
                 "whereTranslationNotNull",
                 "whereTranslationNull",
                 "withAllTranslations",
+                "withJoinedTranslation",
                 "withResolvedTranslations"
             ],
             "properties": [
@@ -494,6 +548,8 @@
             "properties": [
                 "created_at",
                 "id",
+                "member_position",
+                "membership_source",
                 "owner_scope_key",
                 "position",
                 "taxonomy",
@@ -513,7 +569,19 @@
                 "__construct",
                 "attach",
                 "detach",
+                "reconcile",
                 "sync"
+            ],
+            "properties": [],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Services\\TaxonomyMemberOrder": {
+            "kind": "class",
+            "file": "src/Services/TaxonomyMemberOrder.php",
+            "methods": [
+                "__construct",
+                "read",
+                "reorder"
             ],
             "properties": [],
             "constants": []
@@ -589,6 +657,18 @@
                 "open",
                 "sort",
                 "taxonomy"
+            ],
+            "constants": []
+        },
+        "Nvl\\Taxonomy\\Support\\TaxonomyMembershipProposal": {
+            "kind": "class",
+            "file": "src/Support/TaxonomyMembershipProposal.php",
+            "methods": [
+                "__construct"
+            ],
+            "properties": [
+                "source",
+                "terms"
             ],
             "constants": []
         },

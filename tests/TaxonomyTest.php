@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
@@ -11,10 +13,14 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Nvl\Support\Enums\SystemActor;
+use Nvl\Taxonomy\Contracts\TaxonomyMembershipPolicy;
+use Nvl\Taxonomy\Contracts\TaxonomyMembershipProvider;
 use Nvl\Taxonomy\Definitions\Tables\TaxonomyTables;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
+use Nvl\Taxonomy\Enums\TaxonomyMembershipMode;
 use Nvl\Taxonomy\Enums\TermChangeOperation;
 use Nvl\Taxonomy\Events\TermChanged;
+use Nvl\Taxonomy\Events\TermMerged;
 use Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException;
 use Nvl\Taxonomy\Exceptions\CircularHierarchyException;
 use Nvl\Taxonomy\Exceptions\ClosedVocabularyException;
@@ -25,15 +31,18 @@ use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Models\Term;
+use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Providers\TaxonomyServiceProvider;
 use Nvl\Taxonomy\Services\TaxonomyAssignments;
 use Nvl\Taxonomy\Services\TaxonomyDoctor;
+use Nvl\Taxonomy\Services\TaxonomyMemberOrder;
 use Nvl\Taxonomy\Services\TaxonomyOwnerRegistry;
 use Nvl\Taxonomy\Services\TaxonomyReader;
 use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TaxonomyTree;
 use Nvl\Taxonomy\Services\TermHierarchy;
 use Nvl\Taxonomy\Support\TaxonomyDefinition;
+use Nvl\Taxonomy\Support\TaxonomyMembershipProposal;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
 use Nvl\Taxonomy\Tests\Fixtures\BatchArchivedPost;
 use Nvl\Taxonomy\Tests\Fixtures\CustomKeyPost;
@@ -88,6 +97,107 @@ it('can sync open vocabularies like tags', function () {
 
     expect($post->tags)->toHaveCount(2)
         ->and($post->tags->pluck('slug')->toArray())->toContain('laravel', 'php');
+});
+
+it('orders memberships within a term without changing the owner term order', function (): void {
+    $first = Post::create(['title' => 'First']);
+    $second = Post::create(['title' => 'Second']);
+    $assignments = app(TaxonomyAssignments::class);
+    $actor = SystemActor::Background;
+    $assignments->sync($first, 'tag', ['other', 'ordered'], $actor);
+    $assignments->sync($second, 'tag', ['ordered'], $actor);
+    $term = Tag::query()->where('slug', 'ordered')->sole();
+    $members = Termable::query()->where('term_id', $term->id)->pluck('id', 'termable_id');
+    $service = app(TaxonomyMemberOrder::class);
+    expect(fn () => $service->read('tag', $term->id, $actor))->toThrow(AuthorizationException::class);
+    Gate::define('taxonomy.read-members', static fn (mixed $actor): bool => $actor === SystemActor::Background);
+    Gate::define('taxonomy.reorder-members', static fn (mixed $actor): bool => $actor === SystemActor::Background);
+
+    $service->reorder('tag', $term->id, [$members[$second->getKey()] => 0], $actor);
+    expect($service->read('tag', $term->id, $actor)->pluck('termable_id')->map(strval(...))->all())
+        ->toBe([(string) $second->getKey(), (string) $first->getKey()])
+        ->and($first->tags->pluck('slug')->all())->toBe(['other', 'ordered']);
+
+    expect(fn () => $service->reorder('tag', $term->id, [$members[$second->getKey()] => 20, (string) Str::uuid() => 40], $actor))
+        ->toThrow(InvalidArgumentException::class);
+    expect(Termable::query()->findOrFail($members[$second->getKey()])->member_position)->toBe(0);
+    $service->reorder('tag', $term->id, [$members[$second->getKey()] => null], $actor);
+    expect(Termable::query()->findOrFail($members[$second->getKey()])->member_position)->toBeNull();
+});
+
+it('adds membership columns to existing attachments without changing identity or dates', function (): void {
+    $post = Post::create(['title' => 'Historical']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['historical'], SystemActor::Background);
+    $attachment = Termable::query()->sole();
+    $migration = require __DIR__.'/../database/migrations/2026_11_16_013940_nvl_taxonomy_add_membership_order.php';
+    $migration->down();
+    expect(Schema::hasColumn($attachment->getTable(), 'member_position'))->toBeFalse();
+    $migration->up();
+    $fresh = $attachment->fresh();
+    expect($fresh->id)->toBe($attachment->id)
+        ->and($fresh->position)->toBe($attachment->position)
+        ->and($fresh->created_at->toISOString())->toBe($attachment->created_at->toISOString())
+        ->and($fresh->updated_at->toISOString())->toBe($attachment->updated_at->toISOString())
+        ->and($fresh->member_position)->toBeNull()
+        ->and($fresh->membership_source)->toBeNull();
+    $fresh->forceFill(['member_position' => 0])->save();
+    expect(fn () => $migration->down())->toThrow(LogicException::class);
+});
+
+it('reconciles provider memberships while external-authority proposals only record provenance', function (): void {
+    $owner = Post::create(['title' => 'Rule-managed']);
+    $actor = SystemActor::Background;
+    $service = app(TaxonomyAssignments::class);
+    $service->sync($owner, 'tag', ['existing'], $actor);
+    $provider = new class implements TaxonomyMembershipProvider
+    {
+        public ?TaxonomyMembershipMode $observed = null;
+
+        public bool $reject = false;
+
+        public function propose(Model $owner, TaxonomyDefinition $taxonomy, Authenticatable|SystemActor $actor): TaxonomyMembershipProposal
+        {
+            expect($owner->getConnection()->transactionLevel())->toBeGreaterThan(0);
+
+            return new TaxonomyMembershipProposal('shopify', ['matched']);
+        }
+
+        public function record(Model $owner, TaxonomyDefinition $taxonomy, Authenticatable|SystemActor $actor, TaxonomyMembershipProposal $proposal, TaxonomyMembershipMode $mode): void
+        {
+            expect($owner->getConnection()->transactionLevel())->toBeGreaterThan(0)
+                ->and($proposal->source)->toBe('shopify');
+            $this->observed = $mode;
+            if ($this->reject) {
+                throw new RuntimeException('Provider could not record the decision.');
+            }
+        }
+    };
+    $policy = new class implements TaxonomyMembershipPolicy
+    {
+        public TaxonomyMembershipMode $mode = TaxonomyMembershipMode::Shadow;
+
+        public function mode(Model $owner, TaxonomyDefinition $taxonomy, Authenticatable|SystemActor $actor, TaxonomyMembershipProposal $proposal): TaxonomyMembershipMode
+        {
+            return $this->mode;
+        }
+    };
+    app()->instance(TaxonomyMembershipPolicy::class, $policy);
+
+    expect($service->reconcile($owner, 'tag', $provider, $actor))->toBe(TaxonomyMembershipMode::Shadow)
+        ->and($provider->observed)->toBe(TaxonomyMembershipMode::Shadow)
+        ->and($owner->fresh()->tags->pluck('slug')->all())->toBe(['existing'])
+        ->and(Tag::query()->where('slug', 'matched')->exists())->toBeFalse();
+
+    $policy->mode = TaxonomyMembershipMode::Apply;
+    $provider->reject = true;
+    expect(fn () => $service->reconcile($owner, 'tag', $provider, $actor))
+        ->toThrow(RuntimeException::class, 'could not record');
+    expect($owner->fresh()->tags->pluck('slug')->all())->toBe(['existing']);
+
+    $provider->reject = false;
+    expect($service->reconcile($owner, 'tag', $provider, $actor))->toBe(TaxonomyMembershipMode::Apply)
+        ->and($owner->fresh()->tags->pluck('slug')->all())->toBe(['matched'])
+        ->and(Termable::query()->sole()->membership_source)->toBe('shopify');
 });
 
 it('matches all-term scopes when multiple references identify the same term', function () {
@@ -710,6 +820,29 @@ it('emits one committed event with the resulting term revision', function () {
             && $event->revision === $term->revision,
     );
     Event::assertDispatchedTimes(TermChanged::class, 1);
+});
+
+it('publishes both merge identities only after the source commits', function (): void {
+    Event::fake([TermMerged::class]);
+    $source = Tag::create(['slug' => 'merged-source']);
+    $destination = Tag::create(['slug' => 'merged-destination']);
+    $merge = fn (): Term => app(TaxonomyTerms::class)->merge(
+        $source, $destination, SystemActor::Background, $source->revision, $destination->revision,
+    );
+    $connection = $source->getConnection();
+    $connection->beginTransaction();
+    try {
+        $merge();
+        Event::assertNotDispatched(TermMerged::class);
+    } finally {
+        $connection->rollBack();
+    }
+    Event::assertNotDispatched(TermMerged::class);
+
+    $merged = $merge();
+    Event::assertDispatched(TermMerged::class, fn (TermMerged $event): bool => $event->sourceId === $source->id
+        && $event->destinationId === $merged->id && $event->destinationRevision === $merged->revision);
+    Event::assertDispatchedTimes(TermMerged::class, 1);
 });
 
 /** Commit a root tag the way a concurrent request would, bypassing this request's writer. */

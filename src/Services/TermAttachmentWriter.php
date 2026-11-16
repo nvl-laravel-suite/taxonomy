@@ -44,25 +44,30 @@ final readonly class TermAttachmentWriter
      *
      * @param  list<Term|string>  $references
      */
-    public function sync(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor): void
+    public function sync(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor, ?string $source = null): void
     {
         if (TaxonomyOwnership::declared()) {
             $canonical = $this->owners->resolve($owner, lock: true);
-            $this->persistence->save($canonical, function () use ($canonical, $taxonomy, $references, $actor): bool {
-                $this->syncRecords($canonical, $taxonomy, $references, $actor);
+            $this->persistence->save($canonical, function () use ($canonical, $taxonomy, $references, $actor, $source): bool {
+                $this->syncRecords($canonical, $taxonomy, $references, $actor, $source);
 
                 return true;
             });
 
             return;
         }
-        $this->syncRecords($owner, $taxonomy, $references, $actor);
+        $this->syncRecords($owner, $taxonomy, $references, $actor, $source);
+    }
+
+    public function assertOwnerCapability(Model $owner, string $taxonomy): void
+    {
+        $this->context($owner, $taxonomy, lock: true);
     }
 
     /** Persist the admitted attachment set under its actual host source lease.
      * @param  list<Term|string>  $references
      */
-    private function syncRecords(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor): void
+    private function syncRecords(Model $owner, string $taxonomy, array $references, Authenticatable|SystemActor $actor, ?string $source): void
     {
         [$definition, $ownerAlias, $ownerId] = $this->context($owner, $taxonomy, lock: true);
         $this->assertBulkLimit($references);
@@ -77,12 +82,13 @@ final readonly class TermAttachmentWriter
         $ids = array_map(static fn (Term $term): string => $term->id, $resolved);
         $query = $this->ownerQuery($ownerAlias, $ownerId, $taxonomy);
         $existing = [];
-        foreach ((clone $query)->lockForUpdate()->get(['id', 'term_id', 'position']) as $attachment) {
+        $columns = $source === null ? ['id', 'term_id', 'position'] : ['id', 'term_id', 'position', 'membership_source'];
+        foreach ((clone $query)->lockForUpdate()->get($columns) as $attachment) {
             $position = filter_var($attachment->position, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
             if (! is_string($attachment->id) || ! is_string($attachment->term_id) || ! is_int($position)) {
                 throw new InvalidTermOperationException('Stored taxonomy attachments must have canonical identifiers.');
             }
-            $existing[$attachment->term_id] = ['id' => $attachment->id, 'position' => $position];
+            $existing[$attachment->term_id] = ['id' => $attachment->id, 'position' => $position, 'membership_source' => $attachment->membership_source ?? null];
         }
 
         if ($ids === []) {
@@ -98,12 +104,13 @@ final readonly class TermAttachmentWriter
 
         $now = now();
         $rows = [];
+        $provenance = $source === null ? [] : ['membership_source' => $source];
 
         foreach ($ids as $position => $termId) {
             if (isset($existing[$termId])) {
-                if ($existing[$termId]['position'] !== $position) {
+                if ($existing[$termId]['position'] !== $position || ($source !== null && $existing[$termId]['membership_source'] !== $source)) {
                     (clone $query)->where('id', $existing[$termId]['id'])
-                        ->update(['position' => $position, 'updated_at' => $now]);
+                        ->update(['position' => $position, 'updated_at' => $now, ...$provenance]);
                 }
 
                 continue;
@@ -118,6 +125,7 @@ final readonly class TermAttachmentWriter
                 'position' => $position,
                 'created_at' => $now,
                 'updated_at' => $now,
+                ...$provenance,
             ];
         }
 

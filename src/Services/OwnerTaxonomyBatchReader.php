@@ -50,6 +50,7 @@ final readonly class OwnerTaxonomyBatchReader
         }
         $requested = [];
         $locales = [];
+        $metadataPaths = [];
         $locale ??= $this->locale->get();
         foreach ($vocabularies as $vocabulary) {
             if (! is_string($vocabulary)) {
@@ -62,6 +63,7 @@ final readonly class OwnerTaxonomyBatchReader
             }
             $translationDefinition = $prototype->translationDefinition();
             $locales[$vocabulary] = $translationDefinition->localeChain($locale);
+            $metadataPaths[$vocabulary] = array_keys($definition->metadataRules);
             $requested[$vocabulary] = true;
         }
         $vocabularies = array_keys($requested);
@@ -100,9 +102,18 @@ final readonly class OwnerTaxonomyBatchReader
             }
             $query = $this->queries->terms($vocabulary, $this->policy, $actor);
             $prototype = $query->getModel();
+            $paths = $metadataPaths[$vocabulary];
+            $columns = ['id', 'taxonomy', 'slug', 'parent_id', 'position', 'revision'];
+            if ($paths !== []) {
+                $columns[] = 'meta';
+            }
             $loaded = $query->whereIn($prototype->getQualifiedKeyName(), $vocabularyIds)
-                ->get(array_map($prototype->qualifyColumn(...), ['id', 'taxonomy', 'slug', 'parent_id', 'position', 'revision']));
+                ->get(array_map($prototype->qualifyColumn(...), $columns));
             foreach ($loaded as $term) {
+                if ($paths !== [] && $term->meta !== null) {
+                    $term->setAttribute('meta', $this->projectMetadata($term->meta, $paths));
+                    $term->syncOriginalAttribute('meta');
+                }
                 $terms[$vocabulary][$term->id] = $term;
             }
             $definition = $prototype->translationDefinition();
@@ -139,6 +150,42 @@ final readonly class OwnerTaxonomyBatchReader
         }
 
         return $this->result($admitted, $values);
+    }
+
+    /**
+     * @param  array<array-key,mixed>  $metadata
+     * @param  list<string>  $paths
+     * @return array<array-key,mixed>
+     */
+    private function projectMetadata(array $metadata, array $paths): array
+    {
+        if (in_array('*', $paths, true)) {
+            return $metadata;
+        }
+
+        $projection = [];
+        foreach ($metadata as $key => $value) {
+            if (in_array((string) $key, $paths, true)) {
+                $projection[$key] = $value;
+
+                continue;
+            }
+            if (! is_array($value)) {
+                continue;
+            }
+            $children = [];
+            foreach ($paths as $path) {
+                [$head, $tail] = array_pad(explode('.', $path, 2), 2, null);
+                if ($tail !== null && ($head === (string) $key || $head === '*')) {
+                    $children[] = $tail;
+                }
+            }
+            if ($children !== [] && ($nested = $this->projectMetadata($value, $children)) !== []) {
+                $projection[$key] = $nested;
+            }
+        }
+
+        return $projection;
     }
 
     /**

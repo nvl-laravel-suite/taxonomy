@@ -14,6 +14,11 @@ Structural update patches may omit translations. Explicit replacement still requ
 
 Replace direct `TaxonomyTree` and `TermResolver` calls with `TaxonomyReader`; those helpers are internal and rely on the native service authorization and transaction.
 
+Apply the additive membership-order migration before using term-centric ordering
+or provider reconciliation. Existing attachments retain their IDs, owner-side
+positions and timestamps. New positions and provenance start at null. Before
+rolling back the migration, back up and explicitly clear the new values.
+
 ## Historical upgrade notes
 
 The following sections describe pre-Light releases and their old APIs, compatibility windows and commands. They remain useful for understanding existing installations, but are not Light setup instructions. The old Tenancy bridge, DTO/Action contracts, package HTTP and type generation are retired in Light.

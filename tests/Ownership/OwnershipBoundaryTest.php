@@ -1,9 +1,11 @@
 <?php
 
 declare(strict_types=1);
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Nvl\Ownership\Services\OwnershipRunner;
 use Nvl\Ownership\Tests\Fixtures\OptsIntoAdoptedSchemaReuse;
@@ -18,6 +20,7 @@ use Nvl\Taxonomy\Exceptions\InvalidParentException;
 use Nvl\Taxonomy\Exceptions\TermNotFoundException;
 use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Services\TaxonomyAssignments;
+use Nvl\Taxonomy\Services\TaxonomyMemberOrder;
 use Nvl\Taxonomy\Services\TaxonomyReader;
 use Nvl\Taxonomy\Services\TaxonomyTerms;
 use Nvl\Taxonomy\Services\TermModelRegistry;
@@ -29,6 +32,30 @@ use Nvl\Taxonomy\Tests\Fixtures\OwnershipTerm;
 use Nvl\Taxonomy\Tests\OwnershipTestCase;
 
 uses(OwnershipTestCase::class, OptsIntoAdoptedSchemaReuse::class);
+
+it('reorders admitted term memberships and rejects foreign attachment IDs', function (): void {
+    Gate::define('taxonomy.read-members', static fn (mixed $actor): bool => $actor === SystemActor::Background);
+    Gate::define('taxonomy.reorder-members', static fn (mixed $actor): bool => $actor === SystemActor::Background);
+    $runner = app(OwnershipRunner::class);
+    $actor = OwnershipActor::firstOrFail();
+    [$foreignTerm, $foreignAttachment] = $runner->run(OwnershipCompany::findOrFail(8), $actor, function (): array {
+        $term = Scenario::term('foreign-order');
+        app(TaxonomyAssignments::class)->attach(Scenario::host(), 'category', [$term], SystemActor::Background);
+
+        return [$term->id, Termable::query()->sole()->id];
+    });
+    $runner->run(OwnershipCompany::findOrFail(7), $actor, function () use ($foreignTerm, $foreignAttachment): void {
+        $term = Scenario::term('member-order');
+        app(TaxonomyAssignments::class)->attach(Scenario::host(), 'category', [$term], SystemActor::Background);
+        $attachment = Termable::query()->sole();
+        $order = app(TaxonomyMemberOrder::class);
+        expect(fn () => $order->read('category', $foreignTerm, SystemActor::Background))->toThrow(ModelNotFoundException::class)
+            ->and(fn () => $order->reorder('category', $term->id, [$foreignAttachment => 0], SystemActor::Background))->toThrow(InvalidArgumentException::class);
+        $order->reorder('category', $term->id, [$attachment->id => 5], SystemActor::Background);
+        expect($order->read('category', $term->id, SystemActor::Background)->items()[0]->member_position)->toBe(5);
+    });
+});
+
 it('isolates catalogue projections inside the admitted native owner', function (): void {
     $runner = app(OwnershipRunner::class);
     $actor = OwnershipActor::firstOrFail();

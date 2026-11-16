@@ -31,6 +31,14 @@ Actor/owner identifiers do not grant access. Listeners must preserve the capture
 | Event | Schema version | Trigger |
 | --- | --- | --- |
 | [TermChanged](#termchanged) | 1 | Taxonomy term/tree mutation persisted. |
+| [TermMerged](#termmerged) | 1 | A source term is merged into its destination. |
+
+### TermMerged
+
+`Nvl\Taxonomy\Events\TermMerged` exposes the immutable `sourceId`,
+`destinationId`, `taxonomy`, and `destinationRevision`. It is published after
+the merge commits on the term source connection and carries the native Ownership
+envelope for listeners that cross a queue boundary.
 
 ### TermChanged
 

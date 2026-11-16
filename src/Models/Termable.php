@@ -30,6 +30,8 @@ use Nvl\Taxonomy\Support\TaxonomyConfiguration;
  * @property int|string $termable_id
  * @property string $taxonomy
  * @property int $position
+ * @property int|null $member_position
+ * @property string|null $membership_source
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Term $term
@@ -70,6 +72,7 @@ final class Termable extends Model implements Ownable
     {
         return [
             'position' => 'integer',
+            'member_position' => 'integer',
         ];
     }
 

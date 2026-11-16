@@ -9,13 +9,17 @@ Search for the relevant fully qualified service or contract and read only its ma
 - `Nvl\Taxonomy\Concerns\HasTaxonomies`
 - `Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization`
 - `Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization`
+- `Nvl\Taxonomy\Contracts\TaxonomyMembershipPolicy`
+- `Nvl\Taxonomy\Contracts\TaxonomyMembershipProvider`
 - `Nvl\Taxonomy\Database\Factories\TermFactory`
 - `Nvl\Taxonomy\Database\Factories\TermTranslationFactory`
 - `Nvl\Taxonomy\Database\Factories\TermableFactory`
 - `Nvl\Taxonomy\Enums\DeleteTermStrategy`
+- `Nvl\Taxonomy\Enums\TaxonomyMembershipMode`
 - `Nvl\Taxonomy\Enums\TaxonomyResponseCode`
 - `Nvl\Taxonomy\Enums\TermChangeOperation`
 - `Nvl\Taxonomy\Events\TermChanged`
+- `Nvl\Taxonomy\Events\TermMerged`
 - `Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException`
 - `Nvl\Taxonomy\Exceptions\CircularHierarchyException`
 - `Nvl\Taxonomy\Exceptions\ClosedVocabularyException`
@@ -34,11 +38,13 @@ Search for the relevant fully qualified service or contract and read only its ma
 - `Nvl\Taxonomy\Models\TermTranslation`
 - `Nvl\Taxonomy\Models\Termable`
 - `Nvl\Taxonomy\Services\TaxonomyAssignments`
+- `Nvl\Taxonomy\Services\TaxonomyMemberOrder`
 - `Nvl\Taxonomy\Services\TaxonomyOwnerRegistry`
 - `Nvl\Taxonomy\Services\TaxonomyReader`
 - `Nvl\Taxonomy\Services\TaxonomyTerms`
 - `Nvl\Taxonomy\Services\TermModelRegistry`
 - `Nvl\Taxonomy\Support\TaxonomyDefinition`
+- `Nvl\Taxonomy\Support\TaxonomyMembershipProposal`
 - `Nvl\Taxonomy\Support\TaxonomyRegistry`
 
 ## Nvl\Taxonomy\Concerns\HasTaxonomies
@@ -98,6 +104,21 @@ interface Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization
 public abstract function authorizeVocabulary(Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, string $taxonomy): void
 ```
 
+## Nvl\Taxonomy\Contracts\TaxonomyMembershipPolicy
+
+```text
+interface Nvl\Taxonomy\Contracts\TaxonomyMembershipPolicy
+public abstract function mode(Illuminate\Database\Eloquent\Model $owner, Nvl\Taxonomy\Support\TaxonomyDefinition $taxonomy, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Taxonomy\Support\TaxonomyMembershipProposal $proposal): Nvl\Taxonomy\Enums\TaxonomyMembershipMode
+```
+
+## Nvl\Taxonomy\Contracts\TaxonomyMembershipProvider
+
+```text
+interface Nvl\Taxonomy\Contracts\TaxonomyMembershipProvider
+public abstract function propose(Illuminate\Database\Eloquent\Model $owner, Nvl\Taxonomy\Support\TaxonomyDefinition $taxonomy, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor): Nvl\Taxonomy\Support\TaxonomyMembershipProposal
+public abstract function record(Illuminate\Database\Eloquent\Model $owner, Nvl\Taxonomy\Support\TaxonomyDefinition $taxonomy, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, Nvl\Taxonomy\Support\TaxonomyMembershipProposal $proposal, Nvl\Taxonomy\Enums\TaxonomyMembershipMode $mode): void
+```
+
 ## Nvl\Taxonomy\Database\Factories\TermFactory
 
 ```text
@@ -145,6 +166,19 @@ public const Nvl\Taxonomy\Enums\DeleteTermStrategy Cascade=Nvl\Taxonomy\Enums\De
 public const Nvl\Taxonomy\Enums\DeleteTermStrategy Detach=Nvl\Taxonomy\Enums\DeleteTermStrategy::Detach="detach"
 public const Nvl\Taxonomy\Enums\DeleteTermStrategy Reparent=Nvl\Taxonomy\Enums\DeleteTermStrategy::Reparent="reparent"
 public const Nvl\Taxonomy\Enums\DeleteTermStrategy Restrict=Nvl\Taxonomy\Enums\DeleteTermStrategy::Restrict="restrict"
+public readonly string $name
+public static function cases(): array
+public readonly string $value
+public static function from(string|int $value): static
+public static function tryFrom(string|int $value): ?static
+```
+
+## Nvl\Taxonomy\Enums\TaxonomyMembershipMode
+
+```text
+enum Nvl\Taxonomy\Enums\TaxonomyMembershipMode implements BackedEnum, UnitEnum: string
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipMode Apply=Nvl\Taxonomy\Enums\TaxonomyMembershipMode::Apply="apply"
+public const Nvl\Taxonomy\Enums\TaxonomyMembershipMode Shadow=Nvl\Taxonomy\Enums\TaxonomyMembershipMode::Shadow="shadow"
 public readonly string $name
 public static function cases(): array
 public readonly string $value
@@ -206,6 +240,19 @@ public readonly int $revision
 public readonly int $schemaVersion
 public readonly string $taxonomy
 public readonly string $termId
+```
+
+## Nvl\Taxonomy\Events\TermMerged
+
+```text
+final readonly class Nvl\Taxonomy\Events\TermMerged implements Nvl\Support\Contracts\DomainEvent, Nvl\Support\Ownership\Contracts\OwnershipQueuedJob
+public function __construct(string $sourceId, string $destinationId, string $taxonomy, int $destinationRevision): mixed
+public function ownershipJobEnvelope(): Nvl\Support\Ownership\ValueObjects\OwnershipJobEnvelope
+public function schemaVersion(): int
+public readonly string $destinationId
+public readonly int $destinationRevision
+public readonly string $sourceId
+public readonly string $taxonomy
 ```
 
 ## Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException
@@ -528,6 +575,11 @@ public function scopeWithAllTranslations(Illuminate\Database\Eloquent\Builder $q
 resolved @param Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term> $query
 @return Builder<static>
 resolved @return Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term>
+public function scopeWithJoinedTranslation(Illuminate\Database\Eloquent\Builder $query, ?string $locale=null, string $alias="nvl_translation"): Illuminate\Database\Eloquent\Builder
+@param Builder<static> $query
+resolved @param Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term> $query
+@return Builder<static>
+resolved @return Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term>
 public function scopeWithResolvedTranslations(Illuminate\Database\Eloquent\Builder $query, ?string $locale=null): Illuminate\Database\Eloquent\Builder
 @param Builder<static> $query
 resolved @param Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term> $query
@@ -554,6 +606,8 @@ resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models
 resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term> whereTranslationNull(string $field, ?string $locale = null)
 @method static Builder<static> withAllTranslations()
 resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term> withAllTranslations()
+@method static Builder<static> withJoinedTranslation(?string $locale = null, string $alias = 'nvl_translation')
+resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term> withJoinedTranslation(?string $locale = null, string $alias = 'nvl_translation')
 @method static Builder<static> withResolvedTranslations(?string $locale = null)
 resolved @method static Illuminate\Database\Eloquent\Builder<Nvl\Taxonomy\Models\Term> withResolvedTranslations(?string $locale = null)
 @property-read Collection<int, Termable> $attachments
@@ -645,6 +699,8 @@ resolved @return Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Datab
 @property (Carbon | null) $created_at
 resolved @property (Illuminate\Support\Carbon | null) $created_at
 @property string $id
+@property (int | null) $member_position
+@property (string | null) $membership_source
 @property (string | null) $owner_scope_key
 @property int $position
 @property string $taxonomy
@@ -670,9 +726,22 @@ resolved @param list<(Nvl\Taxonomy\Models\Term | string)> $terms
 public function detach(Illuminate\Database\Eloquent\Model $owner, string $taxonomy, array $terms, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor): int
 @param list<(Term | string)> $terms
 resolved @param list<(Nvl\Taxonomy\Models\Term | string)> $terms
+public function reconcile(Illuminate\Database\Eloquent\Model $owner, string $taxonomy, Nvl\Taxonomy\Contracts\TaxonomyMembershipProvider $provider, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor): Nvl\Taxonomy\Enums\TaxonomyMembershipMode
 public function sync(Illuminate\Database\Eloquent\Model $owner, string $taxonomy, array $terms, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor): void
 @param list<(Term | string)> $terms
 resolved @param list<(Nvl\Taxonomy\Models\Term | string)> $terms
+```
+
+## Nvl\Taxonomy\Services\TaxonomyMemberOrder
+
+```text
+final readonly class Nvl\Taxonomy\Services\TaxonomyMemberOrder
+public function __construct(Nvl\Taxonomy\Services\TaxonomyBatchQueryBuilder $queries, Nvl\Taxonomy\Contracts\TaxonomyCatalogAuthorization $catalog, Nvl\Taxonomy\Contracts\TaxonomyBatchAuthorization $policy, Nvl\Taxonomy\Services\TaxonomyActorPolicy $actors, Nvl\Support\Ownership\Contracts\OwnershipModelPersistence $persistence): mixed
+public function read(string $taxonomy, string $termId, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor, int $perPage=100, int $page=1): Illuminate\Contracts\Pagination\Paginator
+@return Paginator<int, Termable>
+resolved @return Illuminate\Contracts\Pagination\Paginator<int, Nvl\Taxonomy\Models\Termable>
+public function reorder(string $taxonomy, string $termId, array $positions, Illuminate\Contracts\Auth\Authenticatable|Nvl\Support\Enums\SystemActor $actor): void
+@param array<array-key, mixed> $positions
 ```
 
 ## Nvl\Taxonomy\Services\TaxonomyOwnerRegistry
@@ -767,6 +836,18 @@ resolved @param class-string<Nvl\Taxonomy\Models\Term> $model
 public readonly bool $open
 public readonly string $sort
 public readonly string $taxonomy
+```
+
+## Nvl\Taxonomy\Support\TaxonomyMembershipProposal
+
+```text
+final readonly class Nvl\Taxonomy\Support\TaxonomyMembershipProposal
+public function __construct(string $source, array $terms): mixed
+@param array<array-key, mixed> $terms
+public readonly string $source
+public readonly array $terms
+@var list<(Term | string)>
+resolved @var list<(Nvl\Taxonomy\Models\Term | string)>
 ```
 
 ## Nvl\Taxonomy\Support\TaxonomyRegistry
