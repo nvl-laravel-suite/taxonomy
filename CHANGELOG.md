@@ -5,6 +5,8 @@ All notable changes to `nvl/taxonomy` are documented here.
 
 ## [Unreleased]
 
+## [7.5.0] - 2026-11-17
+
 ### Fixed
 
 - The membership proposal reviewed for a term merge now lists an owner's terms in the order they are stored and read back (position, then term id), so tied positions no longer show the destination before terms it is read after.
@@ -12,6 +14,12 @@ All notable changes to `nvl/taxonomy` are documented here.
 - Term identities that are not UUIDs are reported as not found instead of failing in PostgreSQL with SQLSTATE 22P02: `update()`, `delete()` and a reparenting destination throw `ModelNotFoundException`, a `move()` or `create()` parent throws `InvalidParentException`, and `merge()`/`validateMerge()` throw `TermNotFoundException`.
 - Term positions above 2147483647 are rejected by `create()`, `update()` and `move()` with `InvalidArgumentException` instead of failing in PostgreSQL with SQLSTATE 22003. `Term::MAXIMUM_POSITION` names the bound.
 - A sync or reconciliation that its write would refuse now fails before the membership policy is consulted, so a Shadow decision is never recorded for a set that Apply would refuse: more than one distinct term in an exclusive taxonomy (`InvalidTermOperationException`), an unknown name in a closed taxonomy (`ClosedVocabularyException`) or an unknown term identifier (`InvalidArgumentException`). Unknown names count once by the slug they would become, and repeated references to one term count once.
+
+<!-- NVL GENERATED CHANGES START -->
+### Changed
+
+- consumer-audit fixes across the suite, UTC timestamps, core/forms release ordering
+<!-- NVL GENERATED CHANGES END -->
 
 ## [7.4.0] - 2026-11-17
 
