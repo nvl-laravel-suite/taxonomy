@@ -67,6 +67,9 @@ class Term extends Model implements Ownable, TranslatableModel
     use GuardsOwnerScope;
     use HasOwnership;
 
+    /** Largest sibling position the integer position column stores on every supported database. */
+    public const int MAXIMUM_POSITION = 2147483647;
+
     /**
      * Preserve V1 vocabulary subclasses until this storage explicitly selects a new root.
      *

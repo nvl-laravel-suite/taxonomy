@@ -17,7 +17,9 @@ use Nvl\Taxonomy\Contracts\TaxonomyMembershipProvider;
 use Nvl\Taxonomy\Enums\DeleteTermStrategy;
 use Nvl\Taxonomy\Enums\TaxonomyMembershipMode;
 use Nvl\Taxonomy\Enums\TaxonomyMembershipOperation;
+use Nvl\Taxonomy\Exceptions\ClosedVocabularyException;
 use Nvl\Taxonomy\Exceptions\InvalidTermOperationException;
+use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\MembershipMatch;
 use Nvl\Taxonomy\Models\Tag;
 use Nvl\Taxonomy\Models\Term;
@@ -203,8 +205,11 @@ it('stores empty shadow proposals, isolated by owner and source', function (): v
     }
     $assignments->reconcile($first, 'tag', membershipAuthorityProvider('shopify', []), $actor);
 
-    $matches = MembershipMatch::query()->orderBy('owner_id')->orderBy('source')->get()
-        ->map(static fn (MembershipMatch $match): array => [$match->owner_id, $match->source, $match->proposal])->all();
+    // Owner ids are text, so order them numerically in PHP: '10' sorts before '9' as text.
+    $matches = MembershipMatch::query()->get()
+        ->map(static fn (MembershipMatch $match): array => [$match->owner_id, $match->source, $match->proposal])
+        ->sortBy([static fn (array $left, array $right): int => (int) $left[0] <=> (int) $right[0], static fn (array $left, array $right): int => $left[1] <=> $right[1]])
+        ->values()->all();
     expect($matches)->toBe([
         [(string) $first->getKey(), 'erp', []],
         [(string) $first->getKey(), 'shopify', []],
@@ -492,4 +497,69 @@ it('proposes tied positions in the owner batch read order', function (Closure $o
     }, ['zulu', 'xray']],
     'detach' => [static fn (Post $post) => app(TaxonomyAssignments::class)->detach($post, 'tag', ['yankee'], SystemActor::Background), ['zulu', 'xray']],
     'attach' => [static fn (Post $post) => app(TaxonomyAssignments::class)->attach($post, 'tag', ['whiskey'], SystemActor::Background), ['zulu', 'yankee', 'xray', 'whiskey']],
+    // The destination is created last, so its id sorts after the tied rows the source preceded.
+    'merge' => [static function (): void {
+        $source = Tag::query()->where('slug', 'zulu')->sole();
+        $destination = app(TaxonomyTerms::class)->create(['taxonomy' => 'tag', 'slug' => 'whiskey', 'translations' => ['en' => ['name' => 'whiskey']]], SystemActor::Background);
+        app(TaxonomyTerms::class)->merge($source, $destination, SystemActor::Background, $source->revision, $destination->revision);
+    }, ['yankee', 'xray', 'whiskey']],
+]);
+
+it('rejects a merge preview that the membership policy would deny on write', function (): void {
+    $actor = SystemActor::Background;
+    $post = Post::create(['title' => 'Denied']);
+    app(TaxonomyAssignments::class)->sync($post, 'tag', ['alpha'], $actor);
+    $alpha = Tag::query()->where('slug', 'alpha')->sole();
+    $beta = Tag::query()->firstOrCreate(['taxonomy' => 'tag', 'slug' => 'beta'], ['name' => 'Beta']);
+    $policy = bindMembershipAuthorityPolicy(TaxonomyMembershipMode::Apply);
+    $policy->deny = (string) $post->getKey();
+
+    expect(fn () => app(TaxonomyTerms::class)->validateMerge($alpha, $beta, $actor, $alpha->revision, $beta->revision))
+        ->toThrow(InvalidTermOperationException::class)
+        ->and(fn () => app(TaxonomyTerms::class)->merge($alpha, $beta, $actor, $alpha->revision, $beta->revision))
+        ->toThrow(InvalidTermOperationException::class)
+        ->and($post->fresh()->tags->pluck('slug')->all())->toBe(['alpha']);
+
+    $policy->deny = null;
+    $policy->owners = [];
+    app(TaxonomyTerms::class)->validateMerge($alpha, $beta, $actor, $alpha->revision, $beta->revision);
+    expect($policy->owners)->toBe([(string) $post->getKey()])
+        ->and($post->fresh()->tags->pluck('slug')->all())->toBe(['alpha']);
+});
+
+it('rejects an exclusive proposal before review so shadow and apply decide alike', function (TaxonomyMembershipMode $mode): void {
+    $actor = SystemActor::Background;
+    $post = Post::create(['title' => 'Exclusive proposal']);
+    $first = Category::create(['slug' => 'first']);
+    $second = Category::create(['slug' => 'second']);
+    app(TaxonomyAssignments::class)->sync($post, 'category', [$first], $actor);
+    $policy = bindMembershipAuthorityPolicy($mode);
+
+    expect(fn () => app(TaxonomyAssignments::class)->reconcile($post, 'category', membershipAuthorityProvider('erp', ['first', 'second']), $actor))
+        ->toThrow(InvalidTermOperationException::class, 'allows only one term per owner')
+        ->and($policy->reviewed)->toBe([])
+        ->and(MembershipMatch::query()->exists())->toBeFalse()
+        ->and($post->fresh()?->categories()->pluck('slug')->all())->toBe(['first']);
+
+    expect(app(TaxonomyAssignments::class)->reconcile($post, 'category', membershipAuthorityProvider('erp', ['second', $second->id]), $actor))
+        ->toBe($mode);
+})->with([
+    'shadow' => [TaxonomyMembershipMode::Shadow],
+    'apply' => [TaxonomyMembershipMode::Apply],
+]);
+
+it('refuses unresolvable proposals before review so shadow and apply decide alike', function (TaxonomyMembershipMode $mode, string $taxonomy, string $reference, string $exception): void {
+    $actor = SystemActor::Background;
+    $post = Post::create(['title' => 'Unresolvable proposal']);
+    $policy = bindMembershipAuthorityPolicy($mode);
+
+    expect(fn () => app(TaxonomyAssignments::class)->reconcile($post, $taxonomy, membershipAuthorityProvider('erp', [$reference]), $actor))
+        ->toThrow($exception)
+        ->and($policy->reviewed)->toBe([])
+        ->and(MembershipMatch::query()->exists())->toBeFalse();
+})->with([
+    'shadow, unknown closed name' => [TaxonomyMembershipMode::Shadow, 'category', 'unknown', ClosedVocabularyException::class],
+    'apply, unknown closed name' => [TaxonomyMembershipMode::Apply, 'category', 'unknown', ClosedVocabularyException::class],
+    'shadow, unknown identifier' => [TaxonomyMembershipMode::Shadow, 'tag', '00000000-0000-4000-8000-000000000000', InvalidArgumentException::class],
+    'apply, unknown identifier' => [TaxonomyMembershipMode::Apply, 'tag', '00000000-0000-4000-8000-000000000000', InvalidArgumentException::class],
 ]);

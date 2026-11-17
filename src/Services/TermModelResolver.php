@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Models\Term;
 use Nvl\Taxonomy\Ownership\TaxonomyBoundary as OwnershipBoundary;
@@ -37,6 +39,9 @@ final readonly class TermModelResolver
             throw new InvalidArgumentException('A canonical taxonomy term identifier is required.');
         }
 
+        if (! Str::isUuid($id)) {
+            throw (new ModelNotFoundException)->setModel(Term::class, [$id]);
+        }
         $baseTerm = TermModelRegistry::query()->lockForUpdate()->findOrFail($id);
         $this->boundary->assertRecord($baseTerm, 'taxonomy.terms');
         $taxonomy = $baseTerm->taxonomy;

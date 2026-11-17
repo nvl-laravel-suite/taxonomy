@@ -6,6 +6,7 @@ namespace Nvl\Taxonomy\Services;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Collection as BaseCollection;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Nvl\Taxonomy\Exceptions\CircularHierarchyException;
 use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
@@ -52,10 +53,10 @@ final readonly class TermHierarchy
                 throw new CircularHierarchyException('A taxonomy hierarchy cannot contain a cycle.');
             }
 
-            $parent = $definition->model::query()
+            $parent = Str::isUuid($cursor) ? $definition->model::query()
                 ->where('taxonomy', $taxonomy)
                 ->lockForUpdate()
-                ->find($cursor);
+                ->find($cursor) : null;
 
             if (! $parent instanceof Term) {
                 throw InvalidParentException::forTerm($taxonomy, $cursor);

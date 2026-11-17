@@ -552,7 +552,9 @@
                 "translations",
                 "updated_at"
             ],
-            "constants": []
+            "constants": [
+                "MAXIMUM_POSITION"
+            ]
         },
         "Nvl\\Taxonomy\\Models\\TermTranslation": {
             "kind": "class",

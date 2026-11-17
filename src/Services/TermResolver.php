@@ -48,7 +48,9 @@ final readonly class TermResolver
      * Replace references to existing terms with their ids and drop repeats, without creating terms.
      *
      * Unknown references stay as given and are deduplicated by the slug they would become,
-     * so a policy sees each proposed term once.
+     * so a policy sees each proposed term once. References that resolution could never create
+     * (an unknown identifier, or an unknown name in a closed taxonomy) fail here exactly as they
+     * would on write, so a review never accepts a proposal the write refuses.
      *
      * @param  list<Term|string>  $references
      * @return list<Term|string>
@@ -61,6 +63,7 @@ final readonly class TermResolver
             $known[$term->slug] = $term->id;
         }
         $unique = [];
+        $missing = [];
         foreach ($references as $reference) {
             if ($reference instanceof Term) {
                 $key = $known[$reference->id] ?? $reference->id;
@@ -68,8 +71,17 @@ final readonly class TermResolver
                 $input = trim($reference);
                 $slug = Str::isUuid($input) ? $input : $this->slugs->generate($input);
                 $key = $known[$input] ?? $known[$slug] ?? $slug;
+                if (! isset($known[$key])) {
+                    if (Str::isUuid($input)) {
+                        throw new InvalidArgumentException("Unknown taxonomy term identifier [{$input}].");
+                    }
+                    $missing[$slug] = $input;
+                }
             }
             $unique[$key] ??= $known[$key] ?? $reference;
+        }
+        if ($missing !== [] && ! $this->taxonomies->get($taxonomy)->open) {
+            throw new ClosedVocabularyException($taxonomy, array_values($missing));
         }
 
         return array_values($unique);

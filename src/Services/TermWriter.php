@@ -142,9 +142,9 @@ final readonly class TermWriter
             );
         }
 
-        if ($data['position'] < 0) {
+        if ($data['position'] < 0 || $data['position'] > Term::MAXIMUM_POSITION) {
             throw new \InvalidArgumentException(
-                'Taxonomy term positions cannot be negative.',
+                'Taxonomy term positions must be between 0 and '.Term::MAXIMUM_POSITION.'.',
             );
         }
 

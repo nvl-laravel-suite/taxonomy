@@ -109,7 +109,12 @@ final readonly class TermAttachmentWriter
         [$definition, $ownerAlias, $ownerId, $canonical] = $this->context($owner, $taxonomy, lock: true);
         $this->assertBulkLimit($references);
         $manual = $operation->isManual();
-        $reviewed = $manual ? $this->terms->existingReferences($taxonomy, $references, $actor) : $references;
+        $distinct = $this->terms->existingReferences($taxonomy, $references, $actor);
+        // Reject before review so Shadow records never accept a set that Apply would refuse; unknown names count once by slug.
+        if ($definition->exclusive && count($distinct) > 1) {
+            throw new InvalidTermOperationException("Taxonomy [{$taxonomy}] allows only one term per owner.");
+        }
+        $reviewed = $manual ? $distinct : $references;
         $mode = $this->guard->review($canonical, $definition, $actor, new TaxonomyMembershipProposal($proposalSource, $reviewed, $operation));
         if ($mode !== TaxonomyMembershipMode::Apply) {
             return $mode;

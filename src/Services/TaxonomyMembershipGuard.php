@@ -75,7 +75,8 @@ final readonly class TaxonomyMembershipGuard
      * One denial throws and rolls back the caller's transaction, rejecting the whole operation.
      *
      * @param  Builder  $attachments  Attachment rows the structural write changes.
-     * @param  Closure(list<string>): list<string>  $resulting  Maps an owner's current term ids to its resulting ids.
+     * @param  Closure(list<string>, array<string, int>): list<string>  $resulting  Maps an owner's current term ids, and their
+     *                                                                              positions keyed by term id, to its resulting ids.
      */
     public function reviewAttachedOwners(string $taxonomy, Builder $attachments, Authenticatable|SystemActor $actor, TaxonomyMembershipOperation $operation, Closure $resulting): void
     {
@@ -98,11 +99,16 @@ final readonly class TaxonomyMembershipGuard
                         continue;
                     }
                     $canonical = $this->owners->resolveForDeletion($owner);
-                    $current = $canonical->getConnection()->table((new Termable)->getTable())
+                    $rows = $canonical->getConnection()->table((new Termable)->getTable())
                         ->where('termable_type', $type)->where('termable_id', (string) $identifier)->where('taxonomy', $taxonomy)
-                        ->orderBy('position')->orderBy('term_id')->pluck('term_id')
-                        ->filter(static fn (mixed $id): bool => is_string($id))->all();
-                    $this->reviewManual($canonical, $taxonomy, $actor, $resulting(array_values($current)), $operation);
+                        ->orderBy('position')->orderBy('term_id')->get(['term_id', 'position']);
+                    $positions = [];
+                    foreach ($rows as $row) {
+                        if (is_string($row->term_id) && is_numeric($row->position)) {
+                            $positions[$row->term_id] = (int) $row->position;
+                        }
+                    }
+                    $this->reviewManual($canonical, $taxonomy, $actor, $resulting(array_keys($positions), $positions), $operation);
                 }
             });
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
@@ -26,8 +27,10 @@ use Nvl\Taxonomy\Exceptions\AmbiguousTermReferenceException;
 use Nvl\Taxonomy\Exceptions\CircularHierarchyException;
 use Nvl\Taxonomy\Exceptions\ClosedVocabularyException;
 use Nvl\Taxonomy\Exceptions\DuplicateSiblingSlugException;
+use Nvl\Taxonomy\Exceptions\InvalidParentException;
 use Nvl\Taxonomy\Exceptions\MaximumDepthExceededException;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
+use Nvl\Taxonomy\Exceptions\TermNotFoundException;
 use Nvl\Taxonomy\Exceptions\UnsafeTermDeletionException;
 use Nvl\Taxonomy\Models\Category;
 use Nvl\Taxonomy\Models\Tag;
@@ -1108,7 +1111,7 @@ it('validates flat and hierarchical writes without hydrating unrelated vocabular
     $terms->update($tag, ['position' => 2, 'expected_revision' => $tag->revision], $actor);
     $terms->create(['taxonomy' => 'category', 'slug' => 'new-child', 'parent_id' => $category->id, 'translations' => ['en' => ['name' => 'Child']]], $actor);
 
-    expect($retrieved)->not->toContain($unrelated->id, $otherCategory->id);
+    expect($retrieved)->not->toContain($unrelated->id)->not->toContain($otherCategory->id);
 });
 
 it('preserves attachment identities and creation times when appending and reordering terms', function (): void {
@@ -1193,4 +1196,38 @@ it('isolates sibling slug unique constraint violations inside outer transactions
         ->and($contestedInserts)->toBe(2)
         ->and(Tag::query()->where('slug', 'contested-slug')->exists())->toBeFalse()
         ->and(Tag::query()->where('slug', 'survivor-slug')->exists())->toBeTrue();
+});
+
+it('treats a term identity that is not a UUID as not found instead of failing in the database', function (string $operation): void {
+    $actor = SystemActor::Background;
+    $category = app(TaxonomyTerms::class)->create(['taxonomy' => 'category', 'slug' => 'shoes', 'translations' => ['en' => ['name' => 'Shoes']]], $actor);
+    $calls = [
+        'update' => fn () => app(TaxonomyTerms::class)->update('not-a-uuid', ['translations' => ['en' => ['name' => 'X']]], $actor),
+        'delete' => fn () => app(TaxonomyTerms::class)->delete('not-a-uuid', 1, $actor),
+        'delete reparent' => fn () => app(TaxonomyTerms::class)->delete($category, $category->revision, $actor, DeleteTermStrategy::Reparent, 'not-a-uuid'),
+        'move parent' => fn () => app(TaxonomyTerms::class)->move($category, 'not-a-uuid', $actor, 0, $category->revision),
+        'create parent' => fn () => app(TaxonomyTerms::class)->create(['taxonomy' => 'category', 'slug' => 'boots', 'parent_id' => 'not-a-uuid', 'translations' => ['en' => ['name' => 'Boots']]], $actor),
+        'merge' => fn () => app(TaxonomyTerms::class)->merge($category, 'not-a-uuid', $actor, $category->revision, 1),
+        'validate merge' => fn () => app(TaxonomyTerms::class)->validateMerge('not-a-uuid', $category, $actor, 1, $category->revision),
+    ];
+
+    $expected = match ($operation) {
+        'update', 'delete', 'delete reparent' => ModelNotFoundException::class,
+        'move parent', 'create parent' => InvalidParentException::class,
+        default => TermNotFoundException::class,
+    };
+
+    expect($calls[$operation])->toThrow($expected)
+        ->and($category->fresh()?->revision)->toBe($category->revision);
+})->with(['update', 'delete', 'delete reparent', 'move parent', 'create parent', 'merge', 'validate merge']);
+
+it('rejects term positions wider than their integer column', function (): void {
+    $actor = SystemActor::Background;
+    $term = app(TaxonomyTerms::class)->create(['taxonomy' => 'category', 'slug' => 'shoes', 'position' => 2147483647, 'translations' => ['en' => ['name' => 'Shoes']]], $actor);
+
+    expect(fn () => app(TaxonomyTerms::class)->create(['taxonomy' => 'category', 'slug' => 'boots', 'position' => 2147483648, 'translations' => ['en' => ['name' => 'Boots']]], $actor))
+        ->toThrow(InvalidArgumentException::class)
+        ->and(fn () => app(TaxonomyTerms::class)->move($term, null, $actor, 2147483648, $term->revision))
+        ->toThrow(InvalidArgumentException::class)
+        ->and($term->fresh()?->position)->toBe(2147483647);
 });

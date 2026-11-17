@@ -552,6 +552,7 @@ resolved @property-read Illuminate\Database\Eloquent\Model $owner
 
 ```text
 class Nvl\Taxonomy\Models\Term extends Illuminate\Database\Eloquent\Model implements Nvl\Support\Ownership\Contracts\Ownable, Nvl\Translatable\Contracts\TranslatableModel
+public const int MAXIMUM_POSITION=2147483647
 public function ancestors(): Illuminate\Database\Eloquent\Collection
 @return Collection<int, static>
 resolved @return Illuminate\Database\Eloquent\Collection<int, Nvl\Taxonomy\Models\Term>

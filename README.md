@@ -11,7 +11,7 @@ The native service PHPDoc is the signature reference: [TaxonomyTerms](src/Servic
 
 Call these services with an explicit persisted `Authenticatable` or `SystemActor::Background`. A model actor is reloaded and authorized through the `taxonomy.<ability>` Gate policy. The background actor is an explicit maintenance principal; never turn `null` into it.
 
-Create policies receive the vocabulary name. Update, delete, and move policies receive the locked canonical term, its vocabulary, and the related destination when applicable. Merge policies receive the locked source, vocabulary, and destination; `validateMerge` uses the same authorization. Assignment policies receive the locked canonical owner and vocabulary. Rebuild policies receive the requested vocabulary when supplied. Undefined abilities deny both human and system actors.
+Create policies receive the vocabulary name. Update, delete, and move policies receive the locked canonical term, its vocabulary, and the related destination when applicable. Merge policies receive the locked source, vocabulary, and destination; `validateMerge` runs the same authorization, owner-scope guard and membership policy review without writing. Assignment policies receive the locked canonical owner and vocabulary. Rebuild policies receive the requested vocabulary when supplied. Undefined abilities deny both human and system actors.
 
 `TaxonomyCatalogAuthorization` and every `TaxonomyBatchAuthorization` callback receive the freshly resolved explicit actor as their first argument. The default adapters admit registered capabilities and retain native model scopes; bind SQL visibility policies for private vocabularies and attachments. Policies must not borrow an ambient authenticated user.
 
@@ -52,7 +52,9 @@ to `TaxonomyAssignments::reconcile` for host-owned rule evaluation. An
 `Apply` proposal replaces the owner vocabulary membership and stamps each
 attachment with its source. A `Shadow` proposal records the observation without
 creating terms or changing assignments. Both are stored as the latest
-`MembershipMatch` per owner, taxonomy and source. A bound policy also reviews
+`MembershipMatch` per owner, taxonomy and source. A proposal its write would
+refuse (several terms in an exclusive taxonomy, an unknown name in a closed one,
+or an unknown term identifier) fails before review, in both modes. A bound policy also reviews
 attach, detach, sync, merge, delete and reorder (source `manual`); it must
 return `Apply` or the write is rejected. Sync clears the source on every row;
 attach clears it on the incoming terms. While a policy is bound, the

@@ -29,6 +29,7 @@ use Nvl\Taxonomy\Models\Termable;
 use Nvl\Taxonomy\Ownership\TaxonomyOwnership;
 use Nvl\Taxonomy\Support\TaxonomyConfiguration;
 use Nvl\Taxonomy\Support\TaxonomyRegistry;
+use Nvl\Taxonomy\Support\TermMergeContext;
 use Nvl\Translatable\Enums\TranslationSyncMode;
 
 /**
@@ -223,8 +224,8 @@ final readonly class TaxonomyTerms
         if ($parentId !== null && ! is_string($parentId)) {
             throw new InvalidArgumentException('A canonical parent identifier is required.');
         }
-        if ($position < 0) {
-            throw new InvalidArgumentException('Taxonomy term positions cannot be negative.');
+        if ($position < 0 || $position > Term::MAXIMUM_POSITION) {
+            throw new InvalidArgumentException('Taxonomy term positions must be between 0 and '.Term::MAXIMUM_POSITION.'.');
         }
 
         $connection = TermModelRegistry::newInstance()->getConnectionName();
@@ -291,30 +292,11 @@ final readonly class TaxonomyTerms
             $connection,
             $actor,
         ): Term {
-            $context = $this->validator->validate(
-                $sourceId,
-                $destinationId,
-                $expectedSourceRevision,
-                $expectedDestinationRevision,
-            );
+            [$context, $actor, $ownerScope] = $this->prepareMerge($connection, $sourceId, $destinationId, $expectedSourceRevision, $expectedDestinationRevision, $actor);
             $source = $context->source;
             $destination = $context->destination;
-            $actor = $this->actors->authorize($actor, 'merge', $source, $source->taxonomy, $destination);
-            $ownerScope = TaxonomyOwnership::declared() ? $source->getRawOriginal('owner_scope_key') : null;
-            if (TaxonomyOwnership::declared() && ! is_string($ownerScope)) {
-                throw TaxonomyOwnership::violation('A merged Taxonomy term lacks owner scope.');
-            }
-
             $table = (new Termable)->getTable();
             $database = DB::connection($connection);
-            $this->guard->reviewAttachedOwners(
-                $source->taxonomy,
-                $database->table($table)->where('taxonomy', $source->taxonomy)->where('term_id', $source->id)
-                    ->when(is_string($ownerScope), static fn ($query) => $query->where('owner_scope_key', $ownerScope)),
-                $actor,
-                TaxonomyMembershipOperation::Merge,
-                static fn (array $current): array => self::mergedMembership($current, $source->id, $destination->id),
-            );
             $destinationAttachments = $database
                 ->table($table)
                 ->where('term_id', $destination->id)
@@ -459,30 +441,67 @@ final readonly class TaxonomyTerms
         $connection = $this->connectionFor();
 
         DB::connection($connection)->transaction(
-            function () use ($sourceId, $destinationId, $expectedSourceRevision, $expectedDestinationRevision, $actor): void {
-                $context = $this->validator->validate($sourceId, $destinationId, $expectedSourceRevision, $expectedDestinationRevision);
-                $this->actors->authorize($actor, 'merge', $context->source, $context->source->taxonomy, $context->destination);
-            },
+            fn () => $this->prepareMerge($connection, $sourceId, $destinationId, $expectedSourceRevision, $expectedDestinationRevision, $actor),
             TaxonomyConfiguration::transactionAttempts(),
         );
     }
 
     /**
-     * Return one owner's ordered term ids after a merge, exactly as the attachment rows are written.
+     * Run every merge check that precedes mutation, so a preview and the write accept and reject the same merges.
+     *
+     * @return array{0: TermMergeContext, 1: Authenticatable|SystemActor, 2: string|null}
+     */
+    private function prepareMerge(
+        ?string $connection,
+        string $sourceId,
+        string $destinationId,
+        int $expectedSourceRevision,
+        int $expectedDestinationRevision,
+        Authenticatable|SystemActor $actor,
+    ): array {
+        $context = $this->validator->validate($sourceId, $destinationId, $expectedSourceRevision, $expectedDestinationRevision);
+        $source = $context->source;
+        $destination = $context->destination;
+        $actor = $this->actors->authorize($actor, 'merge', $source, $source->taxonomy, $destination);
+        $ownerScope = null;
+        if (TaxonomyOwnership::declared()) {
+            $ownerScope = $source->getRawOriginal('owner_scope_key');
+            if (! is_string($ownerScope)) {
+                throw TaxonomyOwnership::violation('A merged Taxonomy term lacks owner scope.');
+            }
+        }
+        $this->guard->reviewAttachedOwners(
+            $source->taxonomy,
+            DB::connection($connection)->table((new Termable)->getTable())->where('taxonomy', $source->taxonomy)->where('term_id', $source->id)
+                ->when(is_string($ownerScope), static fn ($query) => $query->where('owner_scope_key', $ownerScope)),
+            $actor,
+            TaxonomyMembershipOperation::Merge,
+            static fn (array $current, array $positions): array => self::mergedMembership($current, $positions, $source->id, $destination->id),
+        );
+
+        return [$context, $actor, $ownerScope];
+    }
+
+    /**
+     * Return one owner's ordered term ids after a merge, exactly as the attachment rows are written and read back.
      *
      * An owner already attached to the destination loses the source row and keeps the destination where it is;
-     * otherwise the source row becomes the destination in place.
+     * otherwise the source row becomes the destination at the source's position, re-read by position then term id.
      *
      * @param  list<string>  $current
+     * @param  array<string, int>  $positions
      * @return list<string>
      */
-    private static function mergedMembership(array $current, string $source, string $destination): array
+    private static function mergedMembership(array $current, array $positions, string $source, string $destination): array
     {
         if (in_array($destination, $current, true)) {
             return array_values(array_filter($current, static fn (string $id): bool => $id !== $source));
         }
+        $positions[$destination] = $positions[$source];
+        $merged = array_map(static fn (string $id): string => $id === $source ? $destination : $id, $current);
+        usort($merged, static fn (string $left, string $right): int => $positions[$left] <=> $positions[$right] ?: strcmp($left, $right));
 
-        return array_map(static fn (string $id): string => $id === $source ? $destination : $id, $current);
+        return $merged;
     }
 
     private function attachmentKey(object $attachment): string

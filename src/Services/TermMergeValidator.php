@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nvl\Taxonomy\Services;
 
+use Illuminate\Support\Str;
 use Nvl\Taxonomy\Exceptions\InvalidTermOperationException;
 use Nvl\Taxonomy\Exceptions\StaleTermVersionException;
 use Nvl\Taxonomy\Exceptions\TermNotFoundException;
@@ -35,6 +36,9 @@ final readonly class TermMergeValidator
         int $expectedSourceRevision,
         int $expectedDestinationRevision,
     ): TermMergeContext {
+        if (! Str::isUuid($sourceId) || ! Str::isUuid($destinationId)) {
+            throw new TermNotFoundException('Both merge terms must exist.');
+        }
         $terms = TermModelRegistry::query()
             ->whereKey([$sourceId, $destinationId])
             ->orderBy('id')
